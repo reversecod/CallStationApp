@@ -12,4 +12,10 @@
       <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Data\" />
+      <Folder Include="Dtos\" />
+      <Folder Include="Procedures\" />
+    </ItemGroup>
+
 </Project>

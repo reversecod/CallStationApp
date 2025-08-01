@@ -1,6 +1,4 @@
-using API.Data;
-using API.Interfaces;
-using API.Repository;
+using CallStationApp.Data;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,9 +9,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Add services to the container.
 builder.Services.AddRazorPages();
-
-builder.Services.AddScoped<IChamadoRepository, ChamadoRepository>();
-builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 
 var cultureInfo = new CultureInfo("pt-BR");
 CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
