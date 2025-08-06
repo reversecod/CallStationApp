@@ -11,17 +11,17 @@ namespace CallStationApp.Models
         
         [Required]
         [Column("chamado_id")]
-        public int ChamadoId { get; set; }
+        public required int ChamadoId { get; set; }
         [ForeignKey("ChamadoId")]
-        public required Chamado? Chamado { get; set; }
+        public required Chamado Chamado { get; set; }
         
         [Required]
         [Column("usuario_id")]
-        public int UsuarioId { get; set; }
+        public required int UsuarioId { get; set; }
         [ForeignKey("UsuarioId")]
-        public required Usuario? Usuario { get; set; }
+        public required Usuario Usuario { get; set; }
         
-        [Required]
+        [Required(ErrorMessage = "O campo mensagem é obrigatório.")]
         [Column("mensagem", TypeName = "text")]
         public required string Mensagem { get; set; }
         

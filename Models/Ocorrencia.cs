@@ -9,17 +9,18 @@ namespace CallStationApp.Models
         [Column("id")] 
         public int Id { get; set; }
 
-        [Required]
+        [Required(ErrorMessage = "O campo do tipo de ocorrência é obrigatório.")]
         [Column("tipo_ocorrencia", TypeName = "varchar(50)")]
         public required string TipoOcorrencia { get; set; }
-
+    
+        [Required]
         [Column("usuario_id")] 
-        public int UsuarioId { get; set; }
+        public required int UsuarioId { get; set; }
         [ForeignKey("EmpresaId")] 
-        public required Usuario? Usuario { get; set; }
+        public required Usuario Usuario { get; set; }
 
         [Column("grupo_id")] 
-        public int GrupoId { get; set; }
+        public int? GrupoId { get; set; }
         [ForeignKey("GrupoId")] 
         public Grupo? Grupo { get; set; }
     }
@@ -31,11 +32,11 @@ namespace CallStationApp.Models
 
         [Required]
         [Column("tipo_id")] 
-        public int TipoId { get; set; }
+        public required int TipoId { get; set; }
         [ForeignKey("TipoId")] 
-        public required OcorrenciaTipo? OcorrenciaTipo { get; set; }
+        public required OcorrenciaTipo OcorrenciaTipo { get; set; }
         
-        [Required]
+        [Required(ErrorMessage = "O campo da categoria de ocorrência é obrigatório.")]
         [Column("categoria_ocorrencia", TypeName = "varchar(50)")]
         public required string CategoriaOcorrencia { get; set; }
     }
@@ -47,11 +48,11 @@ namespace CallStationApp.Models
 
         [Required]
         [Column("categoria_id")] 
-        public int CategoriaId { get; set; }
+        public required int CategoriaId { get; set; }
         [ForeignKey("CategoriaId")] 
-        public required OcorrenciaCategoria? OcorrenciaCategoria { get; set; }
+        public required OcorrenciaCategoria OcorrenciaCategoria { get; set; }
         
-        [Required]
+        [Required(ErrorMessage = "O campo da subcategoria de ocorrência é obrigatório.")]
         [Column("subcategoria_ocorrencia", TypeName = "varchar(100)")]
         public required string SubcategoriaOcorrencia { get; set; }
     }

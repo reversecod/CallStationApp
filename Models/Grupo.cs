@@ -9,7 +9,7 @@ namespace CallStationApp.Models
         [Column("id")]
         public int Id { get; set; } 
         
-        [Required]
+        [Required(ErrorMessage = "O campo nome é obrigatório.")]
         [Column("nome", TypeName = "varchar(100)")]
         public required string Nome { get; set; }
         
@@ -21,9 +21,9 @@ namespace CallStationApp.Models
         
         [Required]
         [Column("criador_id")]
-        public int CriadorId { get; set; }
+        public required int CriadorId { get; set; }
         [ForeignKey("CriadorId")]
-        public Usuario? Usuario { get; set; }
+        public required Usuario Usuario { get; set; }
         
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; }

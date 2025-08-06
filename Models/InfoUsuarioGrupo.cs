@@ -11,25 +11,26 @@ namespace CallStationApp.Models
         
         [Required]
         [Column("usuario_id")]
-        public required string UsuarioId { get; set; }
+        public required int UsuarioId { get; set; }
         [ForeignKey("UsuarioId")]
-        public Usuario? Usuario { get; set; }
+        public required Usuario Usuario { get; set; }
         
+        [Required]
         [Column("grupo_id")]
-        public string GrupoId { get; set; }
+        public required int GrupoId { get; set; }
         [ForeignKey("GrupoId")]
-        public Grupo? Grupo { get; set; }
+        public required Grupo Grupo { get; set; }
 
         [Column("apelido", TypeName = "varchar(100)")]
         public string? Apelido { get; set; }
         
-        [Column("descricao_ativo")]
+        [Column("descricao_ativo", TypeName = "text")]
         public string? DescricaoAtivo { get; set; }
         
         [Column("identificador_interno", TypeName = "varchar(50)")]
         public string? IdentificadorInterno { get; set; }
         
-        [Column("observacao")]
+        [Column("observacao", TypeName = "text")]
         public string? Observacao { get; set; }
         
         [Column("data_atualizacao_ativo")]

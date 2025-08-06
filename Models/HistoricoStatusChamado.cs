@@ -12,21 +12,22 @@ namespace CallStationApp.Models
         
         [Required]
         [Column("chamado_id")]
-        public int ChamadoId { get; set; }
+        public required int ChamadoId { get; set; }
         [ForeignKey("ChamadoId")]
         public required Chamado? Chamado { get; set; }
         
+        [Required]
         [Column("status_anterior")]
         [EnumDataType(typeof(StatusAnteriorChamado))]
-        public StatusAnteriorChamado StatusAnterior { get; set; }
-        
-        [Column("status_novo")]
-        [EnumDataType(typeof(StatusNovoChamado))]
-        public StatusNovoChamado StatusNovo { get; set; }
+        public required StatusAnteriorChamado StatusAnterior { get; set; }
         
         [Required]
+        [Column("status_novo")]
+        [EnumDataType(typeof(StatusNovoChamado))]
+        public required StatusNovoChamado StatusNovo { get; set; }
+        
         [Column("data_transicao", TypeName = "datetime")]
-        public DateTime DataTransicao { get; set; }
+        public DateTime DataTransicao { get; set; } = DateTime.Now;
     }
     
     public enum StatusAnteriorChamado

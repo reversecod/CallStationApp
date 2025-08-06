@@ -1,4 +1,3 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -11,6 +10,7 @@ namespace CallStationApp.Models
         public int Id { get; set; } 
         
         [Column("titulo", TypeName = "varchar(50)")]
+        [StringLength(50, ErrorMessage = "O título não pode exceder 50 caracteres.")]
         public string? Titulo { get; set; }
         
         [Column("descricao", TypeName = "text")]
@@ -25,48 +25,50 @@ namespace CallStationApp.Models
         public Grupo? Grupo { get; set; }
         
         [Column("ocorrencia_tipo_id")]
-        public int OcorrenciaTipoId { get; set; }
+        public int? OcorrenciaTipoId { get; set; }
         [ForeignKey("OcorrenciaTipoId")]
         public OcorrenciaTipo? OcorrenciaTipo { get; set; }
         
         [Column("ocorrencia_categoria_id")]
-        public int OcorrenciaCategoriaId { get; set; }
+        public int? OcorrenciaCategoriaId { get; set; }
         [ForeignKey("OcorrenciaCategoriaId")]
         public OcorrenciaCategoria? OcorrenciaCategoria { get; set; }
         
         [Column("ocorrencia_subcategoria_id")]
-        public int OcorrenciaSubcategoriaId { get; set; }
+        public int? OcorrenciaSubcategoriaId { get; set; }
         [ForeignKey("OcorrenciaSubcategoriaId")]
         public OcorrenciaSubcategoria? OcorrenciaSubcategoria { get; set; }
         
         [Column("setor_id")]
-        public int SetorId { get; set; }
+        public int? SetorId { get; set; }
         [ForeignKey("SetorId")]
         public Setor? Setor { get; set; }
         
         [Column("anexo_chamado", TypeName = "varchar(255)")]
+        [StringLength(255, ErrorMessage = "O nome do arquivo não pode exceder 255 caracteres.")]
         public string? AnexoChamado { get; set; }
         
         [Column("criador_solicitacao", TypeName = "varchar(100)")]
+        [StringLength(100, ErrorMessage = "O nome do solicitante não pode exceder 100 caracteres.")]
         public string? CriadorSolicitacao { get; set; }
         
         [Required]
         [Column("criador_chamado")]
-        public required string CriadorChamado { get; set; }
+        public required int CriadorChamado { get; set; }
         [ForeignKey("CriadorChamado")]
-        public Usuario? Usuario { get; set; }
+        public required Usuario Usuario { get; set; }
         
         [Column("criticidade")]
         [EnumDataType(typeof(CriticidadeChamado))]
-        public CriticidadeChamado Criticidade { get; set; } 
+        public CriticidadeChamado? Criticidade { get; set; } 
         
         [Column("urgencia")]
         [EnumDataType(typeof(UrgenciaChamado))]
-        public UrgenciaChamado Urgencia { get; set; } 
+        public UrgenciaChamado? Urgencia { get; set; } 
         
         [Column("status")]
         [EnumDataType(typeof(StatusChamado))]
-        public StatusChamado StatusAtual { get; set; } 
+        public StatusChamado? StatusAtual { get; set; } 
         
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; } = DateTime.Now;
@@ -81,7 +83,7 @@ namespace CallStationApp.Models
         public DateTime? PrazoConclusao { get; set; }
         
         [Column("publico")]
-        public bool Observacoes { get; set; } = false;
+        public bool Publico { get; set; } = false;
         
     }
     public enum StatusChamado

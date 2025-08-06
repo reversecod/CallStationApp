@@ -9,7 +9,7 @@ namespace CallStationApp.Models
         [Column("id")]
         public int Id { get; set; }
         
-        [Required]
+        [Required(ErrorMessage = "O nome do setor é obrigatório.")]
         [Column("nome_setor", TypeName = "varchar(50)")]
         public required string NomeSetor { get; set; }
         
@@ -20,7 +20,7 @@ namespace CallStationApp.Models
         public required Usuario Usuario { get; set; }
         
         [Column("grupo_id")]
-        public int GrupoId { get; set; }
+        public int? GrupoId { get; set; }
         [ForeignKey("GrupoId")]
         public Grupo? Grupo { get; set; }
     }

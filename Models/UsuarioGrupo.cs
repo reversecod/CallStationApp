@@ -13,20 +13,21 @@ namespace CallStationApp.Models
         [Column("usuario_id")]
         public required int UsuarioId { get; set; }
         [ForeignKey("usuario_id")]
-        public Usuario? Usuario { get; set; }
+        public required Usuario Usuario { get; set; }
             
         [Required] 
         [Column("grupo_id")]
         public required int GrupoId { get; set; }
         [ForeignKey("grupo_id")]
-        public Grupo? Grupo { get; set; }
+        public required Grupo Grupo { get; set; }
         
+        [Required(ErrorMessage = "Defina uma permissão para o usuário.")]
         [Column("permissao")]
         [EnumDataType(typeof(PermissaoUsuario))]
-        public PermissaoUsuario Permissao { get; set; }
-            
+        public required PermissaoUsuario Permissao { get; set; }
+        
         [Column("data_adicao")]
-        public DateTime DataAdicao { get; set; }
+        public DateTime DataAdicao { get; set; } = DateTime.Now;
     }
     public enum PermissaoUsuario
     {

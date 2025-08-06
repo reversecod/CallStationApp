@@ -9,11 +9,11 @@ namespace CallStationApp.Models
         [Column("id")]
         public int Id { get; set; }
         
-        [Required]
+        [Required(ErrorMessage = "O título é obrigatório.")]
         [Column("titulo", TypeName = "varchar(50)")]
         public required string Titulo { get; set; } 
         
-        [Required]
+        [Required(ErrorMessage = "A descrição é obrigatória.")]
         [Column("descricao", TypeName = "text")]
         public required string Descricao { get; set; }
         
@@ -24,24 +24,24 @@ namespace CallStationApp.Models
         public required Usuario Usuario{ get; set; }
         
         [Column("grupo_id")]
-        public int GrupoId { get; set; }
+        public int? GrupoId { get; set; }
         [ForeignKey("GrupoId")]
         public Grupo? Grupo { get; set; }
         
         [Column("criticidade")]
         [EnumDataType(typeof(CriticidadeTarefa))]
-        public CriticidadeTarefa Criticidade { get; set; } 
+        public CriticidadeTarefa? Criticidade { get; set; } 
         
         [Column("urgencia")]
         [EnumDataType(typeof(UrgenciaTarefa))]
-        public UrgenciaTarefa Urgencia { get; set; } 
+        public UrgenciaTarefa? Urgencia { get; set; } 
         
         [Column("status")]
         [EnumDataType(typeof(StatusTarefa))]
-        public StatusTarefa StatusAtual { get; set; } 
+        public StatusTarefa? StatusAtual { get; set; } 
         
         [Column("data_criacao")]
-        public DateTime DataCriacao  { get; set; }
+        public DateTime DataCriacao  { get; set; } = DateTime.Now;
         
         [Column("data_conclusao")]
         public DateTime? DataConclusao { get; set; }
