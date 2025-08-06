@@ -21,25 +21,10 @@ namespace CallStationApp.Models
         public string? Email { get; set; }
         
         [Required]
-        [Column("senha", TypeName = "varchar(100)")]
+        [Column("senha", TypeName = "varchar(255)")]
         public required string Senha { get; set; }
-        
-        [EnumDataType(typeof(PerfilUsuario))]
-        public PerfilUsuario Perfil { get; set; }
         
         [Column("foto_usuario", TypeName = "varchar(255)")]
         public string? FotoUsuario { get; set; }
-        
-        [Column("empresa_id")]
-        public int EmpresaId { get; set; }
-        [Required]
-        [ForeignKey("EmpresaId")]
-        public required Empresa Empresa { get; set; }
-    }
-    public enum PerfilUsuario
-    {
-        Administrador,
-        Ti,
-        Funcionario
     }
 }

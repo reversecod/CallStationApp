@@ -9,28 +9,32 @@ namespace CallStationApp.Models
         [Column("id")]
         public int Id { get; set; }
         
+        [Required]
         [Column("titulo", TypeName = "varchar(50)")]
-        public string Titulo { get; set; } = "Nova Tarefa";
+        public required string Titulo { get; set; } 
         
         [Required]
         [Column("descricao", TypeName = "text")]
         public required string Descricao { get; set; }
         
-        [Column("empresa_id")]
-        public int EmpresaId { get; set; }
         [Required]
-        [ForeignKey("EmpresaId")]
-        public required Empresa Empresa { get; set; }
-        
-        public int CriadorId { get; set; }
+        [Column("criador_id")]
+        public required int CriadorId { get; set; }
         [ForeignKey("CriadorId")]
-        [Required]
-        public required Usuario Usuario { get; set; }
+        public required Usuario Usuario{ get; set; }
         
-        [Column("urgencia_id")]
-        public int UrgenciaId { get; set; }
-        [ForeignKey("UrgenciaId")]
-        public Urgencia? Urgencia { get; set; }
+        [Column("grupo_id")]
+        public int GrupoId { get; set; }
+        [ForeignKey("GrupoId")]
+        public Grupo? Grupo { get; set; }
+        
+        [Column("criticidade")]
+        [EnumDataType(typeof(CriticidadeTarefa))]
+        public CriticidadeTarefa Criticidade { get; set; } 
+        
+        [Column("urgencia")]
+        [EnumDataType(typeof(UrgenciaTarefa))]
+        public UrgenciaTarefa Urgencia { get; set; } 
         
         [Column("status")]
         [EnumDataType(typeof(StatusTarefa))]
@@ -45,9 +49,38 @@ namespace CallStationApp.Models
     
     public enum StatusTarefa
     {
-        Pendente,
+        [Display(Name = "Aberto")]
+        Aberto,
+        [Display(Name = "Em Andamento")]
         EmAndamento,
-        Concluida,
-        Cancelada
+        [Display(Name = "Concluído")]
+        Concluido,
+        [Display(Name = "Cancelado")]
+        Cancelado,
+        [Display(Name = "Excluído")]
+        Excluido
+    }
+    
+    public enum UrgenciaTarefa
+    {
+        [Display(Name = "Não Urgente")]
+        NaoUrgente,
+        [Display(Name = "Pouco Urgente")]
+        PoucaUrgencia,
+        [Display(Name = "Urgente")]
+        Urgente,
+        [Display(Name = "Emergência")]
+        Emergencia
+    }
+    public enum CriticidadeTarefa
+    {  
+        [Display(Name = "Baixa Criticidade")]
+        Baixa,
+        [Display(Name = "Média Criticidade")]
+        Media,
+        [Display(Name = "Alta Criticidade")]
+        Alta,
+        [Display(Name = "Crítico")]
+        Critico
     }
 }

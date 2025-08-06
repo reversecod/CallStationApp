@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CallStationApp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3451aa35052391576d8240baa684b8054c1cf0df")]
 [assembly: System.Reflection.AssemblyProductAttribute("CallStationApp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CallStationApp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

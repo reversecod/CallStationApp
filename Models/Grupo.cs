@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CallStationApp.Models
 {
-    public class Empresa
+    public class Grupo
     {
         [Key]
         [Column("id")]
@@ -13,9 +13,17 @@ namespace CallStationApp.Models
         [Column("nome", TypeName = "varchar(100)")]
         public required string Nome { get; set; }
         
+        [Column("descricao_grupo", TypeName = "varchar(200)")]
+        public string? DescricaoGrupo { get; set; }
+        
+        [Column("foto_grupo", TypeName = "varchar(255)")]
+        public string? FotoGrupo { get; set; }
+        
         [Required]
-        [Column("cnpj", TypeName = "varchar(20)")]
-        public required string CNPJ { get; set; }
+        [Column("criador_id")]
+        public int CriadorId { get; set; }
+        [ForeignKey("CriadorId")]
+        public Usuario? Usuario { get; set; }
         
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; }

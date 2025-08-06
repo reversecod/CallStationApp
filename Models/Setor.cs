@@ -14,10 +14,14 @@ namespace CallStationApp.Models
         public required string NomeSetor { get; set; }
         
         [Required]
-        [Column("empresa_id")]
-        public required int EmpresaId { get; set; }
-        [Required]
-        [ForeignKey("EmpresaId")]
-        public required Empresa Empresa { get; set; }
+        [Column("usuario_id")]
+        public required int UsuarioId { get; set; }
+        [ForeignKey("UsuarioId")]
+        public required Usuario Usuario { get; set; }
+        
+        [Column("grupo_id")]
+        public int GrupoId { get; set; }
+        [ForeignKey("GrupoId")]
+        public Grupo? Grupo { get; set; }
     }
 }
