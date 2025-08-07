@@ -1,3 +1,4 @@
 # Ignorar appsettings de produção
 appsettings.Production.json
 appsettings.Development.json
+.idea/
