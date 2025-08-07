@@ -22,12 +22,14 @@ namespace CallStationApp.Models
         public required Grupo Grupo { get; set; }
 
         [Column("apelido", TypeName = "varchar(100)")]
+        [StringLength(100, ErrorMessage = "O apelido não pode exceder 100 caracteres.")]
         public string? Apelido { get; set; }
         
         [Column("descricao_ativo", TypeName = "text")]
         public string? DescricaoAtivo { get; set; }
         
         [Column("identificador_interno", TypeName = "varchar(50)")]
+        [StringLength(50, ErrorMessage = "O identificador interno não pode exceder 50 caracteres.")]
         public string? IdentificadorInterno { get; set; }
         
         [Column("observacao", TypeName = "text")]

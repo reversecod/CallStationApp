@@ -11,6 +11,7 @@ namespace CallStationApp.Models
         
         [Required(ErrorMessage = "O título é obrigatório.")]
         [Column("titulo", TypeName = "varchar(50)")]
+        [StringLength(50, ErrorMessage = "O título não pode exceder 50 caracteres.")]
         public required string Titulo { get; set; } 
         
         [Required(ErrorMessage = "A descrição é obrigatória.")]
@@ -49,16 +50,14 @@ namespace CallStationApp.Models
     
     public enum StatusTarefa
     {
-        [Display(Name = "Aberto")]
-        Aberto,
+        [Display(Name = "Pendente")]
+        Pendente,
         [Display(Name = "Em Andamento")]
         EmAndamento,
-        [Display(Name = "Concluído")]
-        Concluido,
-        [Display(Name = "Cancelado")]
-        Cancelado,
-        [Display(Name = "Excluído")]
-        Excluido
+        [Display(Name = "Concluída")]
+        Concluida,
+        [Display(Name = "Cancelada")]
+        Cancelada
     }
     
     public enum UrgenciaTarefa

@@ -11,12 +11,15 @@ namespace CallStationApp.Models
         
         [Required(ErrorMessage = "O campo nome é obrigatório.")]
         [Column("nome", TypeName = "varchar(100)")]
+        [StringLength(100, ErrorMessage = "O nome do grupo não pode exceder 100 caracteres.")]
         public required string Nome { get; set; }
         
         [Column("descricao_grupo", TypeName = "varchar(200)")]
+        [StringLength(200, ErrorMessage = "A descrição do grupo não pode exceder 200 caracteres.")]
         public string? DescricaoGrupo { get; set; }
         
         [Column("foto_grupo", TypeName = "varchar(255)")]
+        [StringLength(255, ErrorMessage = "A URL da foto do grupo não pode exceder 255 caracteres.")]
         public string? FotoGrupo { get; set; }
         
         [Required]

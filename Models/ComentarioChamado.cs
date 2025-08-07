@@ -26,6 +26,7 @@ namespace CallStationApp.Models
         public required string Mensagem { get; set; }
         
         [Column("anexo_comentario", TypeName = "varchar(255)")]
+        [StringLength(255, ErrorMessage = "O anexo do comentário não pode exceder 255 caracteres.")]
         public string? AnexoComentario { get; set; }
         
         [Column("data_comentario")]

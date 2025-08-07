@@ -11,6 +11,7 @@ namespace CallStationApp.Models
         
         [Required(ErrorMessage = "O nome do setor é obrigatório.")]
         [Column("nome_setor", TypeName = "varchar(50)")]
+        [StringLength(50, ErrorMessage = "O nome do setor não pode exceder 50 caracteres.")]
         public required string NomeSetor { get; set; }
         
         [Required]

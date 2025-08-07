@@ -11,6 +11,7 @@ namespace CallStationApp.Models
 
         [Required(ErrorMessage = "O campo do tipo de ocorrência é obrigatório.")]
         [Column("tipo_ocorrencia", TypeName = "varchar(50)")]
+        [StringLength(50, ErrorMessage = "O tipo de ocorrência não pode exceder 50 caracteres.")]
         public required string TipoOcorrencia { get; set; }
     
         [Required]
@@ -38,6 +39,7 @@ namespace CallStationApp.Models
         
         [Required(ErrorMessage = "O campo da categoria de ocorrência é obrigatório.")]
         [Column("categoria_ocorrencia", TypeName = "varchar(50)")]
+        [StringLength(50, ErrorMessage = "A categoria de ocorrência não pode exceder 50 caracteres.")]
         public required string CategoriaOcorrencia { get; set; }
     }
     public class OcorrenciaSubcategoria
@@ -54,6 +56,7 @@ namespace CallStationApp.Models
         
         [Required(ErrorMessage = "O campo da subcategoria de ocorrência é obrigatório.")]
         [Column("subcategoria_ocorrencia", TypeName = "varchar(100)")]
+        [StringLength(100, ErrorMessage = "A subcategoria de ocorrência não pode exceder 100 caracteres.")]
         public required string SubcategoriaOcorrencia { get; set; }
     }
 }
