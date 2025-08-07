@@ -15,7 +15,8 @@ namespace CallStationApp.Models
         public required string Titulo { get; set; } 
         
         [Required(ErrorMessage = "A descrição é obrigatória.")]
-        [Column("descricao", TypeName = "text")]
+        [Column("descricao", TypeName = "varchar(500)")]
+        [StringLength(500, ErrorMessage = "A descrição não pode exceder 500 caracteres.")]
         public required string Descricao { get; set; }
         
         [Required]
@@ -39,7 +40,7 @@ namespace CallStationApp.Models
         
         [Column("status")]
         [EnumDataType(typeof(StatusTarefa))]
-        public StatusTarefa? StatusAtual { get; set; } 
+        public StatusTarefa? Status { get; set; } 
         
         [Column("data_criacao")]
         public DateTime DataCriacao  { get; set; } = DateTime.Now;

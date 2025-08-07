@@ -13,10 +13,12 @@ namespace CallStationApp.Models
         [StringLength(50, ErrorMessage = "O título não pode exceder 50 caracteres.")]
         public string? Titulo { get; set; }
         
-        [Column("descricao", TypeName = "text")]
+        [Column("descricao", TypeName = "varchar(1000)")]
+        [StringLength(1000, ErrorMessage = "A descrição não pode exceder 500 caracteres.")]
         public string? Descricao { get; set; }
         
-        [Column("solucao", TypeName = "text")]
+        [Column("solucao", TypeName = "varchar(1000)")]
+        [StringLength(1000, ErrorMessage = "A solução não pode exceder 500 caracteres.")]
         public string? Solucao { get; set; }
         
         [Column("grupo_id")]
@@ -53,9 +55,9 @@ namespace CallStationApp.Models
         public string? CriadorSolicitacao { get; set; }
         
         [Required]
-        [Column("criador_chamado")]
-        public required int CriadorChamado { get; set; }
-        [ForeignKey("CriadorChamado")]
+        [Column("criador_chamado_id")]
+        public required int CriadorChamadoId { get; set; }
+        [ForeignKey("CriadorChamadoId")]
         public required Usuario Usuario { get; set; }
         
         [Column("criticidade")]
@@ -68,7 +70,7 @@ namespace CallStationApp.Models
         
         [Column("status")]
         [EnumDataType(typeof(StatusChamado))]
-        public StatusChamado? StatusAtual { get; set; } 
+        public StatusChamado? Status { get; set; } 
         
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; } = DateTime.Now;
@@ -94,6 +96,10 @@ namespace CallStationApp.Models
         EmAndamento,
         [Display(Name = "Concluído")]
         Concluido,
+        [Display(Name = "Fechado")]
+        Fechado,
+        [Display(Name = "Reaberto")]
+        Reaberto,
         [Display(Name = "Cancelado")]
         Cancelado,
         [Display(Name = "Excluído")]

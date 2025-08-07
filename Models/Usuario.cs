@@ -16,7 +16,7 @@ namespace CallStationApp.Models
 
         [Required(ErrorMessage = "O nome de usuário é obrigatório.")]
         [StringLength(100, ErrorMessage = "O nome de usuário não pode exceder 100 caracteres.")]
-        [Column("usuario", TypeName = "varchar(100)")]
+        [Column("nome_usuario", TypeName = "varchar(100)")]
         public required string NomeUsuario { get; set; }
 
         [EmailAddress(ErrorMessage = "O e-mail informado não é válido.")]
@@ -32,5 +32,9 @@ namespace CallStationApp.Models
         [StringLength(255, ErrorMessage = "A URL da foto não pode exceder 255 caracteres.")]
         [Column("foto_usuario", TypeName = "varchar(255)")]
         public string? FotoUsuario { get; set; }
+        
+        [Required(ErrorMessage = "O campo de data de criação é obrigatório.")]
+        [Column("data_criacao")]
+        public DateTime DataCriacao { get; set; } = DateTime.Now;
     }
 }

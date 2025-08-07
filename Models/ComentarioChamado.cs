@@ -22,7 +22,8 @@ namespace CallStationApp.Models
         public required Usuario Usuario { get; set; }
         
         [Required(ErrorMessage = "O campo mensagem é obrigatório.")]
-        [Column("mensagem", TypeName = "text")]
+        [Column("mensagem", TypeName = "varchar(500)")]
+        [StringLength(500, ErrorMessage = "A mensagem do comentário não pode exceder 500 caracteres.")]
         public required string Mensagem { get; set; }
         
         [Column("anexo_comentario", TypeName = "varchar(255)")]

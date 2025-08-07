@@ -22,10 +22,12 @@ namespace CallStationApp.Models
         public required Usuario Usuario { get; set; }
         
         [Required(ErrorMessage = "O campo avaliação é obrigatório.")]
-        [Column("avaliacao")]
+        [Range(1, 5, ErrorMessage = "A avaliação deve ser um valor entre 1 e 5.")]
+        [Column("avaliacao", TypeName = "int")]
         public required int Avaliacao { get; set; } 
         
-        [Column("comentario", TypeName = "text")]
+        [Column("comentario", TypeName = "varchar(500)")]
+        [StringLength(500, ErrorMessage = "O comentário não pode exceder 500 caracteres.")]
         public string? Comentario { get; set; }
         
         [Column("tempo_resposta")]
