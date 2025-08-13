@@ -33,6 +33,9 @@ namespace CallStationApp.Models
         [Column("foto_usuario", TypeName = "varchar(255)")]
         public string? FotoUsuario { get; set; }
         
+        [Column("modo_escuro")]
+        public bool ModoEscuro { get; set; } = false;
+        
         [Required(ErrorMessage = "O campo de data de criação é obrigatório.")]
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; } = DateTime.Now;

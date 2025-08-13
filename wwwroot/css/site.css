@@ -20,3 +20,8 @@ html {
 body {
   margin-bottom: 60px;
 }
+
+@media (min-width:768px){
+  .flex-md-equal > * { flex: 1; }              /* iguala as larguras */
+  .flex-md-equal > *:last-child { margin-right: 0 !important; } /* sem buraco à direita */
+}
