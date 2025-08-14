@@ -1,5 +1,6 @@
 # Ignorar appsettings de produção
-obj
+obj/
+bin/
 appsettings.Production.json
 appsettings.Development.json
 .idea/
