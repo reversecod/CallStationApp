@@ -1,5 +1,6 @@
 # Ignorar arquivos
-obj
+obj/
+bin/
 appsettings.Production.json
 appsettings.Development.json
 .idea/
