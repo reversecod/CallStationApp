@@ -1,19 +1,165 @@
 @page
 @model CallStationApp.Pages.Auth.Cadastro
-
 @{
-    Layout = null;
+    ViewData["Title"] = "Cadastro";
 }
-
 <!DOCTYPE html>
-
-<html>
+<html lang="pt-br" data-bs-theme="dark">
 <head>
-    <title></title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crie sua conta · CallStation</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    html {
+      height: 100%;
+      min-height: 100vh;
+      margin: 0;
+      position: relative;
+    }
+
+    body {
+      position: relative;
+      min-height: 100vh;
+      background: url('@Url.Content("~/images/backgroundloginCS.png")') center/cover no-repeat fixed;
+      z-index: 0;
+    }
+    
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .55);
+      backdrop-filter: blur(2px);
+      z-index: 1;
+    }
+    
+    .auth-wrap {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      z-index: 3;
+    }
+
+  .auth-card {
+    width: 100%;
+    max-width: 480px;
+    background: rgba(25, 25, 28, .92);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    backdrop-filter: blur(6px);
+  }
+
+  .brand {
+    height: 56px;
+    width: auto;
+  }
+
+  .form-label { font-weight: 600; }
+  .form-text { color: #9aa0a6; }
+
+  .btn-primary {
+    font-weight: 600;
+    border-radius: 12px;
+    padding-block: .8rem;
+  }
+
+  /* botão olho dentro do input senha */
+    .password-toggle {
+      position: absolute;
+      top: 0;
+      right: 0.75rem;
+      height: 148%;
+      display: flex;
+      align-items: center;
+      border: 0;
+      background: transparent;
+      color: #adb5bd;
+      padding: 0;
+      cursor: pointer;
+    }
+    
+  @@media (min-width:768px) {
+    .auth-card { padding: 34px; }
+  }
+</style>
 </head>
 <body>
-<div>
-    
-</div>
+  <main class="auth-wrap">
+    <form method="post" class="auth-card">
+      @Html.AntiForgeryToken()
+
+      <div class="text-center mb-3">
+        <a href="/index">
+        <img class="brand mb-2" src="~/images/logocompletobranco.png" alt="CallStation" width="240" height="30"/>
+        </a>
+        <h1 class="h4 fw-bold mb-1">Crie uma conta</h1>
+      </div>
+
+      <!-- Nome completo -->
+      <div class="mb-3">
+        <label for="nome_completo" class="form-label">Nome completo</label>
+        <input type="text" class="form-control form-control-lg" id="nome_completo" name="nome_completo" placeholder="Insira seu nome" required>
+      </div>
+
+      <!-- Nome de usuário (único) -->
+      <div class="mb-3">
+        <label for="nome_usuario" class="form-label">Nome de usuário</label>
+        <input type="text" class="form-control form-control-lg" id="nome_usuario" name="nome_usuario" placeholder="Crie um nome de usuário" minlength="3" maxlength="30" required>
+        <div class="form-text">Precisa ser único.</div>
+      </div>
+
+      <!-- Email (opcional) -->
+      <div class="mb-3">
+        <label for="email" class="form-label">E‑mail <span class="text-secondary">(opcional)</span></label>
+        <input type="email" class="form-control form-control-lg" id="email" name="email" placeholder="seunome@exemplo.com">
+      </div>
+
+      <!-- Senha -->
+      <div class="mb-4 position-relative">
+        <label for="senha" class="form-label">Senha</label>
+        <input type="password" class="form-control form-control-lg" id="senha" name="senha"
+               placeholder="Mínimo 8 caracteres" minlength="8" required>
+        <button type="button" class="password-toggle" tabindex="-1" aria-label="Mostrar/ocultar senha">
+          <i class="bi bi-eye"></i>
+        </button>
+      </div>
+
+      <!-- Termos / CTA -->
+      <button type="submit" class="btn btn-primary w-100 mb-3">Criar conta</button>
+      <p class="small text-center text-secondary mb-0">
+        Ao prosseguir, você concorda com nossos <a href="#" class="link-light link-underline-opacity-0">Termos de uso</a> e
+        <a href="#" class="link-light link-underline-opacity-0">Política de privacidade</a>.
+      </p>
+
+      <hr class="my-4" />
+      <p class="text-center mb-0">
+        Já tem uma conta?
+        <a class="link-light fw-semibold" href="/Auth/Login">Entrar</a>
+      </p>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+  <script>
+    // Toggle olho da senha
+    const toggleBtn = document.querySelector('.password-toggle');
+    const senhaInput = document.getElementById('senha');
+    if (toggleBtn && senhaInput) {
+      toggleBtn.addEventListener('click', () => {
+        const isPwd = senhaInput.type === 'password';
+        senhaInput.type = isPwd ? 'text' : 'password';
+        toggleBtn.innerHTML = isPwd ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+      });
+    }
+  </script>
 </body>
 </html>
