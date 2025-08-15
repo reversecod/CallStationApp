@@ -26,6 +26,7 @@ namespace CallStationApp.Models
 
         [Required(ErrorMessage = "Defina uma senha para o usuário.")]
         [StringLength(255, ErrorMessage = "A senha não pode exceder 255 caracteres.")]
+        [MinLength(8, ErrorMessage = "A senha deve ter no mínimo 8 caracteres.")]
         [Column("senha", TypeName = "varchar(255)")]
         public required string Senha { get; set; }
 
