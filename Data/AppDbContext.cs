@@ -57,6 +57,7 @@ namespace CallStationApp.Data
                     .HasColumnType("varchar(255)")
                     .HasMaxLength(255); // tamanho máximo para hash de senha
                 
+                
                 entity.Property(u => u.FotoUsuario)
                     .HasColumnName("foto_usuario")
                     .HasColumnType("varchar(255)")
