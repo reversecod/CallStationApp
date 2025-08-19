@@ -54,11 +54,19 @@ namespace CallStationApp.Models
         [StringLength(100, ErrorMessage = "O nome do solicitante não pode exceder 100 caracteres.")]
         public string? CriadorSolicitacao { get; set; }
         
+        [Column("responsavel_solucao", TypeName = "varchar(100)")]
+        [StringLength(100, ErrorMessage = "O nome do responsável pela solução não pode exceder 100 caracteres.")]
+        public string? ResponsavelSolucao { get; set; }
+        
         [Required]
         [Column("criador_chamado_id")]
         public required int CriadorChamadoId { get; set; }
         [ForeignKey("CriadorChamadoId")]
         public required Usuario Usuario { get; set; }
+        
+        [Column("prioridade")]
+        [EnumDataType(typeof(PrioridadeChamado))]
+        public PrioridadeChamado? Prioridade { get; set; } 
         
         [Column("criticidade")]
         [EnumDataType(typeof(CriticidadeChamado))]
@@ -66,11 +74,14 @@ namespace CallStationApp.Models
         
         [Column("urgencia")]
         [EnumDataType(typeof(UrgenciaChamado))]
-        public UrgenciaChamado? Urgencia { get; set; } 
-        
+        public UrgenciaChamado? Urgencia { get; set; }
+
         [Column("status")]
         [EnumDataType(typeof(StatusChamado))]
-        public StatusChamado? Status { get; set; } 
+        public StatusChamado? Status { get; set; } = StatusChamado.Aberto;
+        
+        [Column("data_inicio_atendimento")]
+        public DateTime? DataInicioAtendimento { get; set; }
         
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; } = DateTime.Now;
@@ -126,5 +137,17 @@ namespace CallStationApp.Models
         Alta,
         [Display(Name = "Crítico")]
         Critico
+    }
+
+    public enum PrioridadeChamado
+    {
+        [Display(Name = "Prioridade Baixa")]
+        Baixa,
+        [Display(Name = "Prioridade Média")]
+        Media,
+        [Display(Name = "Prioridade Alta")]
+        Alta,
+        [Display(Name = "Prioridade Crítica")]
+        Critica
     }
 }

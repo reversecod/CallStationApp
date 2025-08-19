@@ -20,6 +20,16 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Serviços da aplicação
 builder.Services.AddRazorPages();
 
+builder.Services.AddAuthentication("Cookies")
+    .AddCookie("Cookies", options =>
+    {
+        options.LoginPath = "/Auth/Login";
+        options.LogoutPath = "/Auth/Logout";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    });
+
+builder.Services.AddAuthorization();
+
 // Cultura padrão
 var cultureInfo = new CultureInfo("pt-BR");
 CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
@@ -53,7 +63,8 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
-app.UseAuthorization(); // ou app.UseAuthentication(); se usar login
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapRazorPages();
 

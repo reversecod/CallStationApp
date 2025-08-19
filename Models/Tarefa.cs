@@ -40,7 +40,7 @@ namespace CallStationApp.Models
         
         [Column("status")]
         [EnumDataType(typeof(StatusTarefa))]
-        public StatusTarefa? Status { get; set; } 
+        public StatusTarefa? Status { get; set; } = StatusTarefa.Pendente;
         
         [Column("data_criacao")]
         public DateTime DataCriacao  { get; set; } = DateTime.Now;

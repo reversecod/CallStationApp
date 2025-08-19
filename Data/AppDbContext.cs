@@ -13,13 +13,13 @@ namespace CallStationApp.Data
         
         // DbSets para as entidades do seu modelo de dados onde "Dbset <Tabela no C#> Tabela no banco de dados"
         public DbSet<Usuario> Usuarios { get; set; }
-        public DbSet<UsuarioGrupo> UsuariosGrupos  { get; set; }
         public DbSet<Grupo> Grupos { get; set; }
+        public DbSet<UsuarioGrupo> UsuariosGrupos  { get; set; }
         public DbSet<InfoUsuarioGrupo> InfoUsuariosGrupos { get; set; }
         public DbSet<OcorrenciaTipo> OcorrenciasTipo { get; set; }
+        public DbSet<Setor> Setores { get; set; }
         public DbSet<OcorrenciaCategoria> OcorrenciasCategoria { get; set; }
         public DbSet<OcorrenciaSubcategoria> OcorrenciasSubcategoria { get; set; }
-        public DbSet<Setor> Setores { get; set; }
         public DbSet<Chamado> Chamados { get; set; }
         public DbSet<HistoricoStatusChamado> HistoricoStatusChamados { get; set; }
         public DbSet<ComentarioChamado> ComentariosChamados { get; set; }
@@ -74,25 +74,6 @@ namespace CallStationApp.Data
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
             });
             
-            modelBuilder.Entity<UsuarioGrupo>(entity =>
-                {
-                entity.ToTable("Usuarios_grupos");
-                
-                entity.Property(ug => ug.Permissao)
-                    .IsRequired()
-                    .HasConversion<string>()
-                    .HasColumnType("ENUM('Nenhuma','Colaborador','Tecnico','Administracao')")
-                    .HasDefaultValue("Nenhuma");
-                
-                entity.Property(ug => ug.DataAdicao)
-                    .HasColumnName("data_adicao")
-                    .HasColumnType("datetime")
-                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                entity.HasIndex(ug => new { ug.UsuarioId, ug.GrupoId })
-                    .HasDatabaseName("idx_usuario_grupo");
-                });
-            
             modelBuilder.Entity<Grupo>(entity =>
             {
                 entity.ToTable("Grupos");
@@ -120,6 +101,25 @@ namespace CallStationApp.Data
                 entity.HasIndex(g => new { g.Nome, g.CriadorId })
                     .IsUnique(); // corresponde à UNIQUE(nome, criador_id)
             });
+            
+            modelBuilder.Entity<UsuarioGrupo>(entity =>
+                {
+                entity.ToTable("Usuarios_grupos");
+                
+                entity.Property(ug => ug.Permissao)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('Nenhuma','Colaborador','Tecnico','Administracao')")
+                    .HasDefaultValue(PermissaoUsuario.Nenhuma);
+                
+                entity.Property(ug => ug.DataAdicao)
+                    .HasColumnName("data_adicao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(ug => new { ug.UsuarioId, ug.GrupoId })
+                    .HasDatabaseName("idx_usuario_grupo");
+                });
             
             modelBuilder.Entity<InfoUsuarioGrupo>(entity => 
             {
@@ -170,6 +170,21 @@ namespace CallStationApp.Data
                     .IsUnique();
                 
             });
+            
+            modelBuilder.Entity<Setor>().ToTable("Setores");
+            
+            modelBuilder.Entity<Setor>(entity =>
+            {
+                entity.Property(s => s.NomeSetor)
+                    .IsRequired()
+                    .HasColumnName("nome_setor")
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
+                
+                entity.HasIndex(s => new { s.NomeSetor, s.UsuarioId, s.GrupoId })
+                    .IsUnique(); // garante que não haja setores duplicados para o mesmo usuário
+            });
+            
             modelBuilder.Entity<OcorrenciaCategoria>(entity =>
             {
                 entity.ToTable("Ocorrencia_categorias");
@@ -198,20 +213,6 @@ namespace CallStationApp.Data
                     .IsUnique();
                 
             });
-            
-            modelBuilder.Entity<Setor>().ToTable("Setores");
-            
-            modelBuilder.Entity<Setor>(entity =>
-            {
-                entity.Property(s => s.NomeSetor)
-                    .IsRequired()
-                    .HasColumnName("nome_setor")
-                    .HasColumnType("varchar(50)")
-                    .HasMaxLength(50);
-                
-                entity.HasIndex(s => new { s.NomeSetor, s.UsuarioId, s.GrupoId })
-                    .IsUnique(); // garante que não haja setores duplicados para o mesmo usuário
-            });
 
             modelBuilder.Entity<Chamado>(entity =>
             {
@@ -236,7 +237,16 @@ namespace CallStationApp.Data
                     .HasColumnName("criador_solicitacao")
                     .HasColumnType("varchar(100)")
                     .HasMaxLength(100);
+                
+                entity.Property(c => c.ResponsavelSolucao)
+                    .HasColumnName("responsavel_solucao")
+                    .HasColumnType("varchar(100)")
+                    .HasMaxLength(100);
 
+                entity.Property(c => c.Prioridade)
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('Baixa','Media','Alta','Critica')");
+                
                 entity.Property(c => c.Criticidade)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
@@ -244,7 +254,7 @@ namespace CallStationApp.Data
                 entity.Property(c => c.Status)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluído')")
-                    .HasDefaultValue("Aberto");
+                    .HasDefaultValue(StatusChamado.Aberto);
 
                 entity.Property(c => c.DataCriacao)
                     .HasColumnName("data_criacao")
@@ -334,7 +344,7 @@ namespace CallStationApp.Data
                 entity.Property(t => t.Status)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Pendente','EmAndamento','Concluida','Cancelada')")
-                    .HasDefaultValue("Pendente");
+                    .HasDefaultValue(StatusTarefa.Pendente);
                 
                 entity.Property(t => t.Criticidade)
                     .HasConversion<string>()
@@ -343,6 +353,7 @@ namespace CallStationApp.Data
                 entity.Property(t => t.Urgencia)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
+                
 
                 entity.Property(t => t.DataCriacao)
                     .HasColumnName("data_criacao")
