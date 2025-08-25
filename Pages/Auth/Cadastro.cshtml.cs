@@ -97,8 +97,10 @@ public class CadastroModel : PageModel
         //Sucesso
         SuccessMessage = "Cadastro realizado com sucesso!";
         
-        // Redireciona após 3 segundos
-        Response.Headers.Append("Refresh", "3;url=/Auth/Login");
+        
+        // Limpa os campos preenchidos
+        ModelState.Clear();
+        NomeCompleto = NomeUsuario = Email = Senha = ConfirmarSenha = null;
 
         return Page();
     }

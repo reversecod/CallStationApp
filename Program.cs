@@ -1,43 +1,66 @@
 using CallStationApp.Data;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.IO.Compression; //necessário para definir nível de compressão
 
 var builder = WebApplication.CreateBuilder(args);
 
+// CONFIGURAÇÕES INICIAIS
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
-// Configuração do banco de dados
+// BANCO DE DADOS
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         new MySqlServerVersion(new Version(8, 0, 36))
     ));
 
-// Serviços da aplicação
-builder.Services.AddRazorPages();
-
+// AUTENTICAÇÃO & AUTORIZAÇÃO
 builder.Services.AddAuthentication("Cookies")
     .AddCookie("Cookies", options =>
     {
         options.LoginPath = "/Auth/Login";
         options.LogoutPath = "/Auth/Logout";
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
     });
 
 builder.Services.AddAuthorization();
 
-// Cultura padrão
+// CULTURA PADRÃO (pt-BR)
 var cultureInfo = new CultureInfo("pt-BR");
 CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
 CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 
+// SERVIÇOS
+builder.Services.AddRazorPages();
+
+// HABILITA COMPRESSION GZIP/BROTLI COM NÍVEL DEFINIDO
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest; // pode ser Optimal se quiser mais compressão
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
 var app = builder.Build();
 
-// Configuração do pipeline HTTP
+// PIPELINE HTTP
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
@@ -48,7 +71,7 @@ else
     app.UseHsts();
 }
 
-// Headers de segurança (opcional)
+// HEADERS DE SEGURANÇA
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
@@ -58,14 +81,23 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// ORDEM IMPORTANTE
 app.UseHttpsRedirection();
-app.UseStaticFiles();
+app.UseResponseCompression(); // ANTES de static files
+
+// CACHE DE ESTÁTICOS (7 dias)
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        const int durationInSeconds = 60 * 60 * 24 * 7;
+        ctx.Context.Response.Headers.Append("Cache-Control", $"public,max-age={durationInSeconds}");
+    }
+});
 
 app.UseRouting();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
-
 app.Run();

@@ -102,6 +102,18 @@
           <img class="brand mb-2" src="~/images/logocompletobranco.png" alt="CallStation" width="240" height="30"/>
         </a>
         <h1 class="h4 fw-bold mb-1">Crie uma conta</h1>
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+          <div class="alert alert-danger" role="alert">
+            @Model.ErrorMessage
+          </div>
+        }
+        @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+        {
+          <div class="alert alert-success" role="alert">
+            @Model.SuccessMessage
+          </div>
+        }
       </div>
 
       <!-- Nome completo -->
