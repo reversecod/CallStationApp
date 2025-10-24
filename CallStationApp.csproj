@@ -11,26 +11,11 @@
       <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.7" />
       <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
     </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="Dtos\**" />
-    <Compile Remove="Procedures\**" />
-    <Content Remove="Dtos\**" />
-    <Content Remove="Procedures\**" />
-    <EmbeddedResource Remove="Dtos\**" />
-    <EmbeddedResource Remove="Procedures\**" />
-    <None Remove="Dtos\**" />
-    <None Remove="Procedures\**" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.7" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.7" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Dtos\" />
-    <Folder Include="Procedures\" />
   </ItemGroup>
 
 </Project>
