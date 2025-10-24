@@ -4,3 +4,5 @@ bin/
 appsettings.Production.json
 appsettings.Development.json
 .idea/
+.vs/
+*.csproj.user
