@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using CallStationApp.Data;
 using CallStationApp.Models;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace CallStationApp.Pages;
 
@@ -18,63 +17,116 @@ public class HomeModel : PageModel
         _context = context;
     }
 
+    // =========================
+    // CONTEXTO ATIVO
+    // =========================
+    [BindProperty(SupportsGet = true)]
+    public int GrupoId { get; set; }
+
+    // =========================
+    // DADOS DA TELA
+    // =========================
     public List<Chamado> Chamados { get; set; } = new();
+    public List<Setor> SetoresDisponiveis { get; set; } = new();
+    public List<OcorrenciaTipo> TiposOcorrenciaDisponiveis { get; set; } = new();
 
-    public async Task OnGetAsync()
+    // =========================
+    // GET
+    // =========================
+    public async Task<IActionResult> OnGetAsync()
     {
-        // Tenta recuperar o ID do usuário autenticado via Claims
-        var idUsuarioLogadoClaim = User.FindFirst("Id")?.Value;
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
 
-        if (string.IsNullOrEmpty(idUsuarioLogadoClaim) || !int.TryParse(idUsuarioLogadoClaim, out var idUsuarioLogado))
-        {
-            // Protege contra execução sem usuário autenticado
-            Chamados = new(); // Retorna lista vazia se não autenticado
-            return;
-        }
+        // 🔒 Valida se o usuário pertence ao grupo
+        var pertenceAoGrupo = await _context.UsuariosGrupos
+            .AnyAsync(ug => ug.UsuarioId == idUsuario && ug.GrupoId == GrupoId);
 
-        //Busca apenas os chamados abertos do usuário autenticado
+        if (!pertenceAoGrupo)
+            return Forbid();
+
+        // ===== CHAMADOS DO GRUPO =====
         Chamados = await _context.Chamados
-            .Where(c => c.Status == StatusChamado.Aberto && c.CriadorChamadoId == idUsuarioLogado)
+            .Where(c => c.GrupoId == GrupoId && c.Status != StatusChamado.Cancelado)
             .OrderBy(c => c.DataCriacao)
             .ToListAsync();
+
+        // ===== LISTAS DO GRUPO =====
+        SetoresDisponiveis = await _context.Setores
+            .Where(s => s.GrupoId == GrupoId)
+            .OrderBy(s => s.NomeSetor)
+            .ToListAsync();
+
+        TiposOcorrenciaDisponiveis = await _context.OcorrenciasTipo
+            .Where(t => t.GrupoId == GrupoId)
+            .OrderBy(t => t.TipoOcorrencia)
+            .ToListAsync();
+
+        return Page();
     }
 
+    // =========================
+    // NOVO CHAMADO
+    // =========================
     public async Task<IActionResult> OnPostNovoChamadoAsync()
     {
-        var idUsuarioLogadoClaim = User.FindFirst("Id")?.Value;
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
 
-        if (string.IsNullOrEmpty(idUsuarioLogadoClaim) || !int.TryParse(idUsuarioLogadoClaim, out var idUsuarioLogado))
-        {
-            return new JsonResult(new { success = false, message = "Usuário não autenticado." }) 
-            {
-                StatusCode = StatusCodes.Status401Unauthorized
-            };
-        }
+        // 🔒 valida vínculo
+        var pertenceAoGrupo = await _context.UsuariosGrupos
+            .AnyAsync(ug => ug.UsuarioId == idUsuario && ug.GrupoId == GrupoId);
 
-        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == idUsuarioLogado);
-        if (usuario is null)
-        {
-            return NotFound("Usuário logado não encontrado.");
-        }
+        if (!pertenceAoGrupo)
+            return Forbid();
+
+        // ===== NUMERAÇÃO =====
+        var numeroGrupo = await _context.Chamados
+            .Where(c => c.GrupoId == GrupoId)
+            .CountAsync() + 1;
+
+        var numeroUsuario = await _context.Chamados
+            .Where(c => c.CriadorChamadoId == idUsuario)
+            .CountAsync() + 1;
+
+        var numeroUsuarioGrupo = await _context.Chamados
+            .Where(c => c.CriadorChamadoId == idUsuario && c.GrupoId == GrupoId)
+            .CountAsync() + 1;
 
         var chamado = new Chamado
         {
             Titulo = "Novo chamado",
+            GrupoId = GrupoId,
+            CriadorChamadoId = idUsuario.Value,
+
+            NumeroChamadoGrupo = numeroGrupo,
+            NumeroChamadoUsuario = numeroUsuario,
+            NumeroChamadoUsuarioGrupo = numeroUsuarioGrupo,
+
             Status = StatusChamado.Aberto,
-            DataCriacao = DateTime.Now,
-            CriadorChamadoId = usuario.Id,
-            Usuario = usuario
+            DataCriacao = DateTime.Now
         };
 
         _context.Chamados.Add(chamado);
         await _context.SaveChangesAsync();
 
-        return new JsonResult(new 
-        { 
-            success = true, 
-            chamadoId = chamado.Id, 
-            criadoEm = chamado.DataCriacao,
-            status = chamado.Status.ToString()  // Adicione isso!
+        return new JsonResult(new
+        {
+            success = true,
+            id = chamado.Id,
+            numeroGrupo = chamado.NumeroChamadoGrupo,
+            criadoEm = chamado.DataCriacao
         });
+    }
+
+    // =========================
+    // HELPERS
+    // =========================
+    private int? GetUsuarioLogadoId()
+    {
+        var claim = User.FindFirst("Id")?.Value;
+        return int.TryParse(claim, out var id) ? id : null;
     }
 }

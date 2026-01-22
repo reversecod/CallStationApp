@@ -84,7 +84,7 @@ namespace CallStationApp.Pages.Auth
                 }
             );
 
-            return RedirectToPage("/Home");
+            return RedirectToPage("/Main");
         }
     }
 }
