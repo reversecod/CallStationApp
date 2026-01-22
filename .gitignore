@@ -1,8 +1,9 @@
 # Ignorar arquivos
 obj/
 bin/
+.vs/
 appsettings.Production.json
 appsettings.Development.json
 .idea/
 .vs/
-*.csproj.user
+*.user

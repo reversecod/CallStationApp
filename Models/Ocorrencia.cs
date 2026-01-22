@@ -17,8 +17,6 @@ namespace CallStationApp.Models
         [Required]
         [Column("usuario_id")] 
         public required int UsuarioId { get; set; }
-        [ForeignKey("EmpresaId")] 
-        public required Usuario Usuario { get; set; }
 
         [Column("grupo_id")] 
         public int? GrupoId { get; set; }

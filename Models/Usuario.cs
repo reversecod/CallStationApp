@@ -28,14 +28,14 @@ namespace CallStationApp.Models
         [StringLength(255, ErrorMessage = "A senha não pode exceder 255 caracteres.")]
         [MinLength(8, ErrorMessage = "A senha deve ter no mínimo 8 caracteres.")]
         [Column("senha", TypeName = "varchar(255)")]
-        public required string Senha { get; set; }
+        public string Senha { get; set; } = string.Empty;
 
         [StringLength(255, ErrorMessage = "A URL da foto não pode exceder 255 caracteres.")]
         [Column("foto_usuario", TypeName = "varchar(255)")]
         public string? FotoUsuario { get; set; }
         
         [Column("modo_escuro")]
-        public bool ModoEscuro { get; set; } = false;
+        public bool ModoEscuro { get; set; } 
         
         [Required(ErrorMessage = "O campo de data de criação é obrigatório.")]
         [Column("data_criacao")]

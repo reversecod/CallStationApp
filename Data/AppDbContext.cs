@@ -3,39 +3,40 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CallStationApp.Data
 {
-
     public class AppDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) 
+        public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
         {
         }
-        
-        // DbSets para as entidades do seu modelo de dados onde "Dbset <Tabela no C#> Tabela no banco de dados"
+
+        // DbSets
         public DbSet<Usuario> Usuarios { get; set; }
-        public DbSet<UsuarioGrupo> UsuariosGrupos  { get; set; }
         public DbSet<Grupo> Grupos { get; set; }
+        public DbSet<UsuarioGrupo> UsuariosGrupos { get; set; }
         public DbSet<InfoUsuarioGrupo> InfoUsuariosGrupos { get; set; }
         public DbSet<OcorrenciaTipo> OcorrenciasTipo { get; set; }
+        public DbSet<Setor> Setores { get; set; }
         public DbSet<OcorrenciaCategoria> OcorrenciasCategoria { get; set; }
         public DbSet<OcorrenciaSubcategoria> OcorrenciasSubcategoria { get; set; }
-        public DbSet<Setor> Setores { get; set; }
         public DbSet<Chamado> Chamados { get; set; }
         public DbSet<HistoricoStatusChamado> HistoricoStatusChamados { get; set; }
         public DbSet<ComentarioChamado> ComentariosChamados { get; set; }
         public DbSet<Tarefa> Tarefas { get; set; }
         public DbSet<FeedbackChamado> FeedbacksChamados { get; set; }
-        
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            // Configurações adicionais de mapeamento, se necessário
+
+            // ===== Usuário =====
             modelBuilder.Entity<Usuario>(entity =>
             {
                 entity.ToTable("Usuarios");
-                
+
                 entity.HasIndex(u => u.NomeUsuario).IsUnique();
-                entity.HasIndex(u => u.Email).IsUnique(); // corresponde à UNIQUE(email)
+                entity.HasIndex(u => u.Email).IsUnique();
+
                 entity.Property(u => u.NomeCompleto)
                     .IsRequired()
                     .HasColumnName("nome_completo")
@@ -55,14 +56,13 @@ namespace CallStationApp.Data
                 entity.Property(u => u.Senha)
                     .IsRequired()
                     .HasColumnType("varchar(255)")
-                    .HasMaxLength(255); // tamanho máximo para hash de senha
-                
-                
+                    .HasMaxLength(255);
+
                 entity.Property(u => u.FotoUsuario)
                     .HasColumnName("foto_usuario")
                     .HasColumnType("varchar(255)")
                     .HasMaxLength(255);
-                
+
                 entity.Property(u => u.ModoEscuro)
                     .HasColumnName("modo_escuro")
                     .HasColumnType("boolean")
@@ -73,26 +73,8 @@ namespace CallStationApp.Data
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
             });
-            
-            modelBuilder.Entity<UsuarioGrupo>(entity =>
-                {
-                entity.ToTable("Usuarios_grupos");
-                
-                entity.Property(ug => ug.Permissao)
-                    .IsRequired()
-                    .HasConversion<string>()
-                    .HasColumnType("ENUM('Nenhuma','Colaborador','Tecnico','Administracao')")
-                    .HasDefaultValue("Nenhuma");
-                
-                entity.Property(ug => ug.DataAdicao)
-                    .HasColumnName("data_adicao")
-                    .HasColumnType("datetime")
-                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.HasIndex(ug => new { ug.UsuarioId, ug.GrupoId })
-                    .HasDatabaseName("idx_usuario_grupo");
-                });
-            
+            // ===== Grupo =====
             modelBuilder.Entity<Grupo>(entity =>
             {
                 entity.ToTable("Grupos");
@@ -112,19 +94,53 @@ namespace CallStationApp.Data
                     .HasColumnType("varchar(255)")
                     .HasMaxLength(255);
 
+                // ✅ ENUM mapeado corretamente
+                entity.Property(g => g.EtiquetaCor)
+                    .HasColumnName("etiqueta_cor")
+                    .HasConversion<string>()
+                    .HasColumnType(
+                        "ENUM('branco','vermelho','laranja','amarelo','verde','azul','roxo','rosa','preto')"
+                    );
+
                 entity.Property(g => g.DataCriacao)
                     .HasColumnName("data_criacao")
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
-                
+
                 entity.HasIndex(g => new { g.Nome, g.CriadorId })
-                    .IsUnique(); // corresponde à UNIQUE(nome, criador_id)
+                    .IsUnique();
             });
-            
-            modelBuilder.Entity<InfoUsuarioGrupo>(entity => 
+
+            // ===== UsuarioGrupo =====
+            modelBuilder.Entity<UsuarioGrupo>(entity =>
+            {
+                entity.ToTable("Usuarios_grupos");
+
+                entity.HasKey(ug => new { ug.UsuarioId, ug.GrupoId });
+
+                entity.Property(ug => ug.Permissao)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('Nenhuma','Colaborador','Tecnico','Administracao')")
+                    .HasDefaultValue(PermissaoUsuario.Nenhuma);
+
+                entity.Property(ug => ug.DataAdicao)
+                    .HasColumnName("data_adicao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+            });
+
+            // ===== InfoUsuarioGrupo =====
+            modelBuilder.Entity<InfoUsuarioGrupo>(entity =>
             {
                 entity.ToTable("Info_usuarios_grupos");
-                
+
+                entity.HasKey(iu => new { iu.UsuarioId, iu.GrupoId });
+
+                entity.HasOne<UsuarioGrupo>()
+                    .WithMany()
+                    .HasForeignKey(iu => new { iu.UsuarioId, iu.GrupoId });
+
                 entity.Property(iu => iu.Apelido)
                     .HasColumnType("varchar(100)")
                     .HasMaxLength(100);
@@ -132,7 +148,7 @@ namespace CallStationApp.Data
                 entity.Property(iu => iu.DescricaoAtivo)
                     .HasColumnName("descricao_ativo")
                     .HasColumnType("text");
-                
+
                 entity.Property(iu => iu.IdentificadorInterno)
                     .HasColumnName("identificador_interno")
                     .HasColumnType("varchar(50)")
@@ -145,62 +161,42 @@ namespace CallStationApp.Data
                 entity.Property(iu => iu.DataAtualizacaoAtivo)
                     .HasColumnName("data_atualizacao_ativo")
                     .HasColumnType("datetime");
-                
+
                 entity.Property(iu => iu.DataAtualizacaoRegistro)
                     .IsRequired()
                     .HasColumnName("data_atualizacao_registro")
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
-                
-                entity.HasIndex(iu => new { iu.UsuarioId,iu.GrupoId })
-                    .IsUnique(); // garante que não haja duplicatas de usuário/grupo
+
+                entity.HasIndex(iu => new { iu.UsuarioId, iu.GrupoId })
+                    .IsUnique();
             });
 
+            // ===== OcorrenciaTipo =====
             modelBuilder.Entity<OcorrenciaTipo>(entity =>
             {
-                entity.ToTable("Ocorrencia_Tipos");
-                
+                entity.ToTable("Ocorrencias_Tipo");
+
                 entity.Property(ot => ot.TipoOcorrencia)
                     .IsRequired()
                     .HasColumnName("tipo_ocorrencia")
                     .HasColumnType("varchar(100)")
                     .HasMaxLength(100);
-                
-                entity.HasIndex(ot => new { ot.TipoOcorrencia, ot.UsuarioId, ot.GrupoId })
+
+                entity.Property(ot => ot.GrupoId)
+                    .IsRequired();
+
+                entity.HasOne<UsuarioGrupo>()
+                    .WithMany()
+                    .HasForeignKey(ot => new { ot.UsuarioId, ot.GrupoId });
+
+                entity.HasIndex(ot => new { ot.TipoOcorrencia, ot.GrupoId })
                     .IsUnique();
-                
             });
-            modelBuilder.Entity<OcorrenciaCategoria>(entity =>
-            {
-                entity.ToTable("Ocorrencia_categorias");
-                
-                entity.Property(ot => ot.CategoriaOcorrencia)
-                    .IsRequired()
-                    .HasColumnName("categoria_ocorrencia")
-                    .HasColumnType("varchar(50)")
-                    .HasMaxLength(50);
-                
-                entity.HasIndex(ot => new { ot.TipoId, ot.CategoriaOcorrencia})
-                    .IsUnique();
-                
-            });
-            modelBuilder.Entity<OcorrenciaSubcategoria>(entity =>
-            {
-                entity.ToTable("Ocorrencia_subcategorias");
-                
-                entity.Property(ot => ot.SubcategoriaOcorrencia)
-                    .IsRequired()
-                    .HasColumnName("subcategoria_ocorrencia")
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
-                
-                entity.HasIndex(ot => new { ot.CategoriaId, ot.SubcategoriaOcorrencia })
-                    .IsUnique();
-                
-            });
-            
+
+            // ===== Setor =====
             modelBuilder.Entity<Setor>().ToTable("Setores");
-            
+
             modelBuilder.Entity<Setor>(entity =>
             {
                 entity.Property(s => s.NomeSetor)
@@ -208,15 +204,54 @@ namespace CallStationApp.Data
                     .HasColumnName("nome_setor")
                     .HasColumnType("varchar(50)")
                     .HasMaxLength(50);
-                
-                entity.HasIndex(s => new { s.NomeSetor, s.UsuarioId, s.GrupoId })
-                    .IsUnique(); // garante que não haja setores duplicados para o mesmo usuário
+
+                entity.Property(s => s.GrupoId)
+                    .IsRequired();
+
+                entity.HasOne<UsuarioGrupo>()
+                    .WithMany()
+                    .HasForeignKey(s => new { s.UsuarioId, s.GrupoId });
+
+                entity.HasIndex(s => new { s.NomeSetor, s.GrupoId })
+                    .IsUnique();
             });
 
+            // ===== OcorrenciaCategoria =====
+            modelBuilder.Entity<OcorrenciaCategoria>(entity =>
+            {
+                entity.ToTable("Ocorrencias_categoria");
+
+                entity.Property(ot => ot.CategoriaOcorrencia)
+                    .IsRequired()
+                    .HasColumnName("categoria_ocorrencia")
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
+
+                entity.HasIndex(ot => new { ot.TipoId, ot.CategoriaOcorrencia })
+                    .IsUnique();
+            });
+
+            // ===== OcorrenciaSubcategoria =====
+            modelBuilder.Entity<OcorrenciaSubcategoria>(entity =>
+            {
+                entity.ToTable("Ocorrencias_subcategoria");
+
+                entity.Property(ot => ot.SubcategoriaOcorrencia)
+                    .IsRequired()
+                    .HasColumnName("subcategoria_ocorrencia")
+                    .HasColumnType("varchar(100)")
+                    .HasMaxLength(100);
+
+                entity.HasIndex(ot => new { ot.CategoriaId, ot.SubcategoriaOcorrencia })
+                    .IsUnique();
+            });
+
+            // ===== Chamado =====
             modelBuilder.Entity<Chamado>(entity =>
             {
                 entity.ToTable("Chamados");
-                
+
+                // ===== CAMPOS BÁSICOS =====
                 entity.Property(c => c.Titulo)
                     .HasColumnType("varchar(50)")
                     .HasMaxLength(50);
@@ -237,15 +272,30 @@ namespace CallStationApp.Data
                     .HasColumnType("varchar(100)")
                     .HasMaxLength(100);
 
+                entity.Property(c => c.ResponsavelSolucao)
+                    .HasColumnName("responsavel_solucao")
+                    .HasColumnType("varchar(100)")
+                    .HasMaxLength(100);
+
+                // ===== ENUMS =====
+                entity.Property(c => c.Prioridade)
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('Baixa','Media','Alta','Critica')");
+
                 entity.Property(c => c.Criticidade)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
 
+                entity.Property(c => c.Urgencia)
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
+
                 entity.Property(c => c.Status)
                     .HasConversion<string>()
-                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluído')")
-                    .HasDefaultValue("Aberto");
+                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluido')")
+                    .HasDefaultValue(StatusChamado.Aberto);
 
+                // ===== DATAS =====
                 entity.Property(c => c.DataCriacao)
                     .HasColumnName("data_criacao")
                     .HasColumnType("datetime")
@@ -253,53 +303,92 @@ namespace CallStationApp.Data
 
                 entity.Property(c => c.DataFinalizacao)
                     .HasColumnName("data_finalizacao")
-                    .HasColumnType("datetime")
-                    .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
-                
+                    .HasColumnType("datetime");
+
                 entity.Property(c => c.PrazoResposta)
                     .HasColumnName("prazo_resposta")
                     .HasColumnType("datetime");
-                
+
                 entity.Property(c => c.PrazoConclusao)
                     .HasColumnName("prazo_conclusao")
                     .HasColumnType("datetime");
-                
+
                 entity.Property(c => c.Publico)
                     .HasColumnType("boolean")
                     .HasDefaultValue(false);
-                
+
+                // ===== CAMPOS OBRIGATÓRIOS DO FLUXO =====
+                entity.Property(c => c.GrupoId)
+                    .IsRequired();
+
+                entity.Property(c => c.CriadorChamadoId)
+                    .IsRequired();
+
+                // ===== IDENTIFICADORES DE NEGÓCIO =====
+                entity.Property(c => c.NumeroChamadoGrupo)
+                    .IsRequired()
+                    .HasColumnName("numero_chamado_grupo");
+
+                entity.Property(c => c.NumeroChamadoUsuario)
+                    .IsRequired()
+                    .HasColumnName("numero_chamado_usuario");
+
+                entity.Property(c => c.NumeroChamadoUsuarioGrupo)
+                    .IsRequired()
+                    .HasColumnName("numero_chamado_usuario_grupo");
+
+                // ===== FK COMPOSTA (REGRA DO SISTEMA) =====
+                entity.HasOne<UsuarioGrupo>()
+                    .WithMany()
+                    .HasForeignKey(c => new { c.CriadorChamadoId, c.GrupoId });
+
+                // ===== ÍNDICES =====
                 entity.HasIndex(c => c.GrupoId).HasDatabaseName("idx_chamados_grupo");
                 entity.HasIndex(c => c.Status).HasDatabaseName("idx_chamados_status");
                 entity.HasIndex(c => c.CriadorChamadoId).HasDatabaseName("idx_chamados_criador");
                 entity.HasIndex(c => c.DataCriacao).HasDatabaseName("idx_chamados_data_criacao");
+
+                entity.HasIndex(c => new { c.GrupoId, c.NumeroChamadoGrupo })
+                    .IsUnique()
+                    .HasDatabaseName("ux_chamado_grupo_numero");
+
+                entity.HasIndex(c => new { c.CriadorChamadoId, c.NumeroChamadoUsuario })
+                    .IsUnique()
+                    .HasDatabaseName("ux_chamado_usuario_numero");
+
+                entity.HasIndex(c => new { c.CriadorChamadoId, c.GrupoId, c.NumeroChamadoUsuarioGrupo })
+                    .IsUnique()
+                    .HasDatabaseName("ux_chamado_usuario_grupo_numero");
             });
 
+            // ===== HistoricoStatusChamado =====
             modelBuilder.Entity<HistoricoStatusChamado>(entity =>
             {
                 entity.ToTable("Historico_Status_Chamados");
-                
+
                 entity.Property(h => h.StatusAnterior)
                     .IsRequired()
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluido')");
-                
+
                 entity.Property(h => h.StatusNovo)
                     .IsRequired()
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluido')");
-                
+
                 entity.Property(h => h.DataTransicao)
                     .HasColumnName("data_transicao")
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
-                
-                entity.HasIndex(h => new { h.ChamadoId}).HasDatabaseName("idx_historico_chamado");
+
+                entity.HasIndex(h => new { h.ChamadoId }).HasDatabaseName("idx_historico_chamado");
             });
-            
+
+            // ===== ComentarioChamado =====
             modelBuilder.Entity<ComentarioChamado>(entity =>
             {
                 entity.ToTable("Comentarios_chamados");
-                
+
                 entity.Property(cc => cc.Mensagem)
                     .IsRequired()
                     .HasColumnType("text");
@@ -308,20 +397,22 @@ namespace CallStationApp.Data
                     .HasColumnName("anexo_comentario")
                     .HasColumnType("varchar(255)")
                     .HasMaxLength(255);
-                
+
                 entity.Property(cc => cc.DataComentario)
                     .HasColumnName("data_comentario")
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.HasIndex(c => new { c.ChamadoId}).HasDatabaseName("idx_comentario_chamado"); // garante que não haja comentários duplicados para o mesmo chamado e usuário
-                entity.HasIndex(c => new { c.UsuarioId}).HasDatabaseName("idx_comentario_usuario_chamado");
+                entity.HasIndex(c => new { c.ChamadoId }).HasDatabaseName("idx_comentario_chamado");
+                entity.HasIndex(c => new { c.UsuarioId }).HasDatabaseName("idx_comentario_usuario_chamado");
             });
-            
+
+            // ===== Tarefa =====
             modelBuilder.Entity<Tarefa>(entity =>
             {
                 entity.ToTable("Tarefas");
-                
+
+                // ===== CAMPOS BÁSICOS =====
                 entity.Property(t => t.Titulo)
                     .IsRequired()
                     .HasColumnType("varchar(50)")
@@ -330,12 +421,13 @@ namespace CallStationApp.Data
                 entity.Property(t => t.Descricao)
                     .IsRequired()
                     .HasColumnType("text");
-                
+
+                // ===== ENUMS =====
                 entity.Property(t => t.Status)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Pendente','EmAndamento','Concluida','Cancelada')")
-                    .HasDefaultValue("Pendente");
-                
+                    .HasDefaultValue(StatusTarefa.Pendente);
+
                 entity.Property(t => t.Criticidade)
                     .HasConversion<string>()
                     .HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
@@ -344,6 +436,7 @@ namespace CallStationApp.Data
                     .HasConversion<string>()
                     .HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
 
+                // ===== DATAS =====
                 entity.Property(t => t.DataCriacao)
                     .HasColumnName("data_criacao")
                     .HasColumnType("datetime")
@@ -353,11 +446,25 @@ namespace CallStationApp.Data
                     .HasColumnName("data_conclusao")
                     .HasColumnType("datetime");
 
-                entity.HasIndex(t => new {t.GrupoId }).HasDatabaseName("idx_tarefas_grupo");
-                entity.HasIndex(t => new { t.CriadorId}).HasDatabaseName("idx_tarefas_criador");
-                entity.HasIndex(t => new { t.Status }).HasDatabaseName("idx_tarefas_status");
+                // ===== CAMPOS OBRIGATÓRIOS DO FLUXO =====
+                entity.Property(t => t.GrupoId)
+                    .IsRequired();
+
+                entity.Property(t => t.CriadorId)
+                    .IsRequired();
+
+                // ===== FK COMPOSTA (REGRA DO SISTEMA) =====
+                entity.HasOne<UsuarioGrupo>()
+                    .WithMany()
+                    .HasForeignKey(t => new { t.CriadorId, t.GrupoId });
+
+                // ===== ÍNDICES =====
+                entity.HasIndex(t => t.GrupoId).HasDatabaseName("idx_tarefas_grupo");
+                entity.HasIndex(t => t.CriadorId).HasDatabaseName("idx_tarefas_criador");
+                entity.HasIndex(t => t.Status).HasDatabaseName("idx_tarefas_status");
             });
-            
+
+            // ===== FeedbackChamado =====
             modelBuilder.Entity<FeedbackChamado>(entity =>
             {
                 entity.ToTable("Feedbacks_chamados");
@@ -365,17 +472,17 @@ namespace CallStationApp.Data
                 entity.Property(f => f.Avaliacao)
                     .IsRequired()
                     .HasColumnType("int");
-                
+
                 entity.Property(f => f.Comentario)
                     .HasColumnType("text");
-                
+
                 entity.Property(f => f.TempoResposta)
                     .HasColumnName("tempo_resposta")
                     .HasColumnType("int");
-                
+
                 entity.Property(f => f.TempoResolucao)
                     .HasColumnName("tempo_resolucao")
-                    .HasColumnType("int");  
+                    .HasColumnType("int");
 
                 entity.Property(f => f.DataAvaliacao)
                     .HasColumnName("data_avaliacao")

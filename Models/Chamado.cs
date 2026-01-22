@@ -5,88 +5,122 @@ namespace CallStationApp.Models
 {
     public class Chamado
     {
+        // =====================
+        // ID TÉCNICO
+        // =====================
         [Key]
         [Column("id")]
-        public int Id { get; set; } 
-        
+        public int Id { get; set; }
+
+        // =====================
+        // IDS DE NEGÓCIO
+        // =====================
+        [Required]
+        [Column("numero_chamado_grupo")]
+        public int NumeroChamadoGrupo { get; set; }
+
+        [Required]
+        [Column("numero_chamado_usuario")]
+        public int NumeroChamadoUsuario { get; set; }
+
+        [Required]
+        [Column("numero_chamado_usuario_grupo")]
+        public int NumeroChamadoUsuarioGrupo { get; set; }
+
+        // =====================
+        // CONTEÚDO
+        // =====================
         [Column("titulo", TypeName = "varchar(50)")]
-        [StringLength(50, ErrorMessage = "O título não pode exceder 50 caracteres.")]
+        [StringLength(50)]
         public string? Titulo { get; set; }
-        
+
         [Column("descricao", TypeName = "varchar(1000)")]
-        [StringLength(1000, ErrorMessage = "A descrição não pode exceder 500 caracteres.")]
+        [StringLength(1000)]
         public string? Descricao { get; set; }
-        
+
         [Column("solucao", TypeName = "varchar(1000)")]
-        [StringLength(1000, ErrorMessage = "A solução não pode exceder 500 caracteres.")]
+        [StringLength(1000)]
         public string? Solucao { get; set; }
-        
+
+        // =====================
+        // RELAÇÃO COM GRUPO / USUÁRIO
+        // =====================
+        [Required]
         [Column("grupo_id")]
-        public int? GrupoId { get; set; }
-        [ForeignKey("GrupoId")]
-        public Grupo? Grupo { get; set; }
-        
-        [Column("ocorrencia_tipo_id")]
-        public int? OcorrenciaTipoId { get; set; }
-        [ForeignKey("OcorrenciaTipoId")]
-        public OcorrenciaTipo? OcorrenciaTipo { get; set; }
-        
-        [Column("ocorrencia_categoria_id")]
-        public int? OcorrenciaCategoriaId { get; set; }
-        [ForeignKey("OcorrenciaCategoriaId")]
-        public OcorrenciaCategoria? OcorrenciaCategoria { get; set; }
-        
-        [Column("ocorrencia_subcategoria_id")]
-        public int? OcorrenciaSubcategoriaId { get; set; }
-        [ForeignKey("OcorrenciaSubcategoriaId")]
-        public OcorrenciaSubcategoria? OcorrenciaSubcategoria { get; set; }
-        
-        [Column("setor_id")]
-        public int? SetorId { get; set; }
-        [ForeignKey("SetorId")]
-        public Setor? Setor { get; set; }
-        
-        [Column("anexo_chamado", TypeName = "varchar(255)")]
-        [StringLength(255, ErrorMessage = "O nome do arquivo não pode exceder 255 caracteres.")]
-        public string? AnexoChamado { get; set; }
-        
-        [Column("criador_solicitacao", TypeName = "varchar(100)")]
-        [StringLength(100, ErrorMessage = "O nome do solicitante não pode exceder 100 caracteres.")]
-        public string? CriadorSolicitacao { get; set; }
-        
+        public int GrupoId { get; set; }
+
         [Required]
         [Column("criador_chamado_id")]
-        public required int CriadorChamadoId { get; set; }
-        [ForeignKey("CriadorChamadoId")]
-        public required Usuario Usuario { get; set; }
-        
+        public int CriadorChamadoId { get; set; }
+
+        // =====================
+        // CLASSIFICAÇÕES
+        // =====================
+        [Column("ocorrencia_tipo_id")]
+        public int? OcorrenciaTipoId { get; set; }
+
+        [Column("ocorrencia_categoria_id")]
+        public int? OcorrenciaCategoriaId { get; set; }
+
+        [Column("ocorrencia_subcategoria_id")]
+        public int? OcorrenciaSubcategoriaId { get; set; }
+
+        [Column("setor_id")]
+        public int? SetorId { get; set; }
+
+        // =====================
+        // OUTROS CAMPOS
+        // =====================
+        [Column("anexo_chamado", TypeName = "varchar(255)")]
+        [StringLength(255)]
+        public string? AnexoChamado { get; set; }
+
+        [Column("criador_solicitacao", TypeName = "varchar(100)")]
+        [StringLength(100)]
+        public string? CriadorSolicitacao { get; set; }
+
+        [Column("responsavel_solucao", TypeName = "varchar(100)")]
+        [StringLength(100)]
+        public string? ResponsavelSolucao { get; set; }
+
+        // =====================
+        // ENUMS
+        // =====================
+        [Column("prioridade")]
+        public PrioridadeChamado? Prioridade { get; set; }
+
         [Column("criticidade")]
-        [EnumDataType(typeof(CriticidadeChamado))]
-        public CriticidadeChamado? Criticidade { get; set; } 
-        
+        public CriticidadeChamado? Criticidade { get; set; }
+
         [Column("urgencia")]
-        [EnumDataType(typeof(UrgenciaChamado))]
-        public UrgenciaChamado? Urgencia { get; set; } 
-        
+        public UrgenciaChamado? Urgencia { get; set; }
+
         [Column("status")]
-        [EnumDataType(typeof(StatusChamado))]
-        public StatusChamado? Status { get; set; } 
-        
+        public StatusChamado Status { get; set; } = StatusChamado.Aberto;
+
+        // =====================
+        // DATAS
+        // =====================
+        [Column("data_inicio_atendimento")]
+        public DateTime? DataInicioAtendimento { get; set; }
+
         [Column("data_criacao")]
-        public DateTime DataCriacao { get; set; } = DateTime.Now;
-        
+        public DateTime DataCriacao { get; set; }
+
         [Column("data_finalizacao")]
         public DateTime? DataFinalizacao { get; set; }
-        
+
         [Column("prazo_resposta")]
-        public DateTime? PrazoResposta { get; set; } 
-        
+        public DateTime? PrazoResposta { get; set; }
+
         [Column("prazo_conclusao")]
         public DateTime? PrazoConclusao { get; set; }
-        
+
+        // =====================
+        // VISIBILIDADE
+        // =====================
         [Column("publico")]
         public bool Publico { get; set; } = false;
-        
     }
     public enum StatusChamado
     {
@@ -126,5 +160,17 @@ namespace CallStationApp.Models
         Alta,
         [Display(Name = "Crítico")]
         Critico
+    }
+
+    public enum PrioridadeChamado
+    {
+        [Display(Name = "Prioridade Baixa")]
+        Baixa,
+        [Display(Name = "Prioridade Média")]
+        Media,
+        [Display(Name = "Prioridade Alta")]
+        Alta,
+        [Display(Name = "Prioridade Crítica")]
+        Critica
     }
 }

@@ -24,7 +24,7 @@ namespace CallStationApp.Models
         [Required(ErrorMessage = "Defina uma permissão para o usuário.")]
         [Column("permissao")]
         [EnumDataType(typeof(PermissaoUsuario))]
-        public required PermissaoUsuario Permissao { get; set; }
+        public required PermissaoUsuario Permissao { get; set; } = PermissaoUsuario.Nenhuma;
         
         [Column("data_adicao")]
         public DateTime DataAdicao { get; set; } = DateTime.Now;
