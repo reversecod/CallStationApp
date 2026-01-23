@@ -212,13 +212,10 @@
     </svg>
     <nav class="navbar navbar-expand-md bg-dark sticky-top border-bottom"
          data-bs-theme="dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">Fixed navbar</a> <button class="navbar-toggler"
-                type="button" data-bs-toggle="collapse"
-                data-bs-target="#navbarCollapse" aria-controls="navbarCollapse"
-                aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
+        <div class="container-fluid ps-4 pe-4">
+                <a class="navbar-brand d-flex align-items-center" href="/index" aria-label="Home">
+                    <img src="~/images/CallStationLogo.png" alt="Logo" width="70" height="50">
+                </a>
             <button class="navbar-toggler"
                     type="button"
                     data-bs-toggle="offcanvas"
@@ -239,6 +236,39 @@
                 </div>
                 <div class="collapse navbar-collapse" id="navbarCollapse">
                     <ul class="navbar-nav me-auto mb-2 mb-md-0">
+                        <li class="nav-item dropdown me-2">
+                            <a class="nav-link d-flex align-items-center"
+                               href="#"
+                               role="button"
+                               data-bs-toggle="dropdown"
+                               aria-expanded="false">
+                                <img src="https://github.com/mdo.png"
+                                     alt="Perfil"
+                                     width="32"
+                                     height="32"
+                                     class="rounded-circle object-fit-cover me-2">
+                            </a>
+
+                            <ul class="dropdown-menu p-2">
+                                <li class="dropdown-header">
+                                    <strong>Otávio</strong><br />
+                                    <small class="text-muted">Administrador</small>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalPerfil">
+                                        Meu perfil
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="#">Configurações</a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item text-danger" href="#">Sair</a>
+                                </li>
+                            </ul>
+                        </li>
                         <li class="nav-item"> <a class="nav-link active" aria-current="page" href="#">Home</a> </li>
                         <li class="nav-item"> <a class="nav-link" href="#">Link</a> </li>
                         <li class="nav-item"> <a class="nav-link disabled" aria-disabled="true">Disabled</a> </li>
