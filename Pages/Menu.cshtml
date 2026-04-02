@@ -1,0 +1,406 @@
+﻿@page
+@model CallStationApp.Pages.MenuModel
+@{
+    ViewData["Title"] = "Menu";
+    var fotoUsuario = !string.IsNullOrWhiteSpace(Model.UsuarioLogado?.FotoUsuario)
+        ? Model.UsuarioLogado!.FotoUsuario
+        : "/images/default-user.png";
+}
+
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CallStation - Menu</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+            body {
+                background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+                min-height: 100vh;
+            }
+
+            .navbar-brand img {
+                object-fit: contain;
+            }
+
+            .hero-box {
+                background: #ffffff;
+                border: 1px solid #e9ecef;
+                border-radius: 1.25rem;
+                box-shadow: 0 10px 30px rgba(0,0,0,.05);
+            }
+
+            .grupo-card,
+            .novo-grupo-card {
+                border: 1px solid #e9ecef;
+                border-radius: 1.2rem;
+                background: #fff;
+                transition: .2s ease;
+                height: 100%;
+                position: relative;
+                overflow: hidden;
+            }
+
+                .grupo-card:hover,
+                .novo-grupo-card:hover {
+                    transform: translateY(-4px);
+                    box-shadow: 0 12px 28px rgba(0,0,0,.08);
+                    border-color: #d0d7de;
+                }
+
+            .grupo-link {
+                color: inherit;
+                text-decoration: none;
+                display: block;
+                height: 100%;
+            }
+
+            .grupo-topbar {
+                height: 8px;
+                width: 100%;
+            }
+
+            .grupo-avatar {
+                width: 56px;
+                height: 56px;
+                border-radius: 1rem;
+                object-fit: cover;
+                background: #f1f5f9;
+                border: 1px solid #e5e7eb;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.25rem;
+                font-weight: 700;
+                color: #334155;
+            }
+
+            .grupo-stat {
+                background: #f8fafc;
+                border: 1px solid #eef2f7;
+                border-radius: .9rem;
+                padding: .75rem;
+            }
+
+            .grupo-descricao {
+                min-height: 48px;
+                color: #6b7280;
+            }
+
+            .perfil-img {
+                width: 38px;
+                height: 38px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 2px solid rgba(255,255,255,.15);
+            }
+
+            .btn-create {
+                border-radius: .9rem;
+            }
+
+            .empty-state {
+                border: 2px dashed #cbd5e1;
+                background: rgba(255,255,255,.7);
+                border-radius: 1.2rem;
+            }
+
+            .novo-grupo-card {
+                border-style: dashed;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 280px;
+                cursor: pointer;
+            }
+
+            .plus-circle {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                background: #eff6ff;
+                color: #2563eb;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.8rem;
+                margin-bottom: 1rem;
+            }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-dark border-bottom" data-bs-theme="dark">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center" asp-page="/Menu">
+                <img src="~/images/CallStationLogo.png" alt="CallStation" width="76" height="52" />
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMenu">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarMenu">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" asp-page="/Menu">Meus quadros</a>
+                    </li>
+                </ul>
+
+                <div class="dropdown">
+                    <a class="nav-link text-white d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
+                        <img src="@fotoUsuario" alt="Perfil" class="perfil-img" />
+                        <span>@(Model.UsuarioLogado?.NomeUsuario ?? "Usuário")</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li class="dropdown-header">
+                            <strong>@(Model.UsuarioLogado?.NomeCompleto ?? "Usuário")</strong><br />
+                            <small class="text-muted">Sua conta</small>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#">Meu perfil</a></li>
+                        <li><a class="dropdown-item" href="#">Configurações</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container py-5">
+        <div class="hero-box p-4 p-md-5 mb-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <h1 class="h3 mb-2">Escolha um quadro para continuar</h1>
+                    <p class="text-muted mb-0">
+                        Aqui ficam suas equipes, organizações ou quadros de trabalho.
+                    </p>
+                </div>
+
+                <button class="btn btn-primary btn-create px-4"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalCriarGrupo">
+                    <i class="bi bi-plus-lg me-2"></i>
+                    Novo grupo
+                </button>
+            </div>
+        </div>
+
+        @if (Model.Grupos.Any())
+        {
+            <div class="row g-4">
+                @foreach (var grupo in Model.Grupos)
+                {
+                    var iniciais = string.IsNullOrWhiteSpace(grupo.Nome)
+                        ? "G"
+                        : new string(grupo.Nome
+                            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                            .Take(2)
+                            .Select(x => char.ToUpperInvariant(x[0]))
+                            .ToArray());
+
+                    <div class="col-12 col-sm-6 col-lg-4">
+                        <a asp-page="/Home"
+                               asp-route-grupoId="@grupo.GrupoId"
+                               class="grupo-link">
+                            <div class="grupo-card">
+                                <div class="grupo-topbar" style="background-color:@grupo.CorCss;"></div>
+
+                                <div class="p-4">
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        @if (!string.IsNullOrWhiteSpace(grupo.FotoGrupo))
+                                        {
+                                            <img src="@grupo.FotoGrupo" alt="@grupo.Nome" class="grupo-avatar" />
+                                        }
+                                        else
+                                        {
+                                            <div class="grupo-avatar">@iniciais</div>
+                                        }
+
+                                        <span class="badge text-bg-light border">
+                                            <i class="bi @grupo.PermissaoIcone me-1"></i>
+                                            @grupo.PermissaoLabel
+                                        </span>
+                                    </div>
+
+                                    <h2 class="h5 mb-1">@grupo.Nome</h2>
+
+                                    @if (!string.IsNullOrWhiteSpace(grupo.ApelidoNoGrupo))
+                                    {
+                                        <div class="small text-primary mb-2">
+                                            Você neste grupo: @grupo.ApelidoNoGrupo
+                                        </div>
+                                    }
+
+                                    <p class="grupo-descricao small mb-3">
+                                        @(string.IsNullOrWhiteSpace(grupo.Descricao)
+                                            ? "Sem descrição cadastrada."
+                                            : grupo.Descricao)
+                                    </p>
+
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-4">
+                                            <div class="grupo-stat text-center">
+                                                <div class="fw-semibold">@grupo.TotalChamados</div>
+                                                <div class="small text-muted">Chamados</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="grupo-stat text-center">
+                                                <div class="fw-semibold">@grupo.ChamadosAbertos</div>
+                                                <div class="small text-muted">Abertos</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="grupo-stat text-center">
+                                                <div class="fw-semibold">@grupo.TotalMembros</div>
+                                                <div class="small text-muted">Membros</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-center small text-muted">
+                                        <span>
+                                            Entrou em @grupo.DataEntrada.ToString("dd/MM/yyyy")
+                                        </span>
+                                        <span>
+                                            Abrir <i class="bi bi-arrow-right-short"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                }
+
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="novo-grupo-card p-4 text-center"
+                         data-bs-toggle="modal"
+                         data-bs-target="#modalCriarGrupo">
+                        <div>
+                            <div class="plus-circle mx-auto">
+                                <i class="bi bi-plus-lg"></i>
+                            </div>
+                            <h3 class="h5">Criar novo grupo</h3>
+                            <p class="text-muted small mb-0">
+                                Monte um novo espaço para chamados e tarefas.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="empty-state text-center p-5">
+                <div class="mb-3">
+                    <i class="bi bi-collection fs-1 text-secondary"></i>
+                </div>
+                <h2 class="h4">Você ainda não participa de nenhum grupo</h2>
+                <p class="text-muted mb-4">
+                    Crie seu primeiro quadro para começar a organizar seus chamados e tarefas.
+                </p>
+                <button class="btn btn-primary px-4"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalCriarGrupo">
+                    <i class="bi bi-plus-lg me-2"></i>
+                    Criar primeiro grupo
+                </button>
+            </div>
+        }
+    </main>
+
+    <div class="modal fade" id="modalCriarGrupo" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title">Novo grupo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <form id="formCriarGrupo" method="post" asp-page-handler="CriarGrupo">
+                    @Html.AntiForgeryToken()
+
+                    <div class="modal-body">
+                        <div id="mensagemGrupo" class="alert d-none" role="alert"></div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Nome</label>
+                            <input type="text" name="nome" class="form-control" maxlength="100" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea name="descricao" class="form-control" rows="3" maxlength="200"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Etiqueta de cor</label>
+                            <select name="etiquetaCor" class="form-select">
+                                <option value="">Sem cor</option>
+                                <option value="Branco">Branco</option>
+                                <option value="Vermelho">Vermelho</option>
+                                <option value="Laranja">Laranja</option>
+                                <option value="Amarelo">Amarelo</option>
+                                <option value="Verde">Verde</option>
+                                <option value="Azul">Azul</option>
+                                <option value="Roxo">Roxo</option>
+                                <option value="Rosa">Rosa</option>
+                                <option value="Preto">Preto</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            Criar grupo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const formCriarGrupo = document.getElementById('formCriarGrupo');
+        const mensagemGrupo = document.getElementById('mensagemGrupo');
+
+        formCriarGrupo.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        mensagemGrupo.className = 'alert d-none';
+        mensagemGrupo.textContent = '';
+
+        const formData = new FormData(formCriarGrupo);
+
+        try {
+        const response = await fetch('?handler=CriarGrupo', {
+        method: 'POST',
+        body: formData
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+        mensagemGrupo.className = 'alert alert-danger';
+        mensagemGrupo.textContent = data.message ?? 'Não foi possível criar o grupo.';
+        return;
+        }
+
+        window.location.href = data.redirectUrl;
+        } catch {
+        mensagemGrupo.className = 'alert alert-danger';
+        mensagemGrupo.textContent = 'Ocorreu um erro ao criar o grupo.';
+        }
+        });
+    </script>
+</body>
+</html>

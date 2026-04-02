@@ -1,5 +1,5 @@
 @page
-@model HomeModel
+@model CallStationApp.Pages.HomeModel
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 
 @{
@@ -289,61 +289,66 @@
       </symbol>
     </svg>
     <main>
-      <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-        <a class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
-          <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
-        </a> 
-        <hr />
-        <ul class="nav nav-pills flex-column mb-auto">
-          <li class="nav-item">
-            <a href="#" class="nav-link active" aria-current="page">
-              <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#home"></use></svg>
-              Home
+        <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
+            <a class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
+                <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
             </a>
-          </li>
-          <li>
-            <a href="#" class="nav-link link-body-emphasis">
-              <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#speedometer2"></use></svg>
-              Dashboard
-            </a>
-          </li>
-          <li>
-            <a href="#" class="nav-link link-body-emphasis">
-              <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#table"></use></svg>
-              Orders
-            </a>
-          </li>
-          <li>
-            <a href="#" class="nav-link link-body-emphasis">
-              <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
-              Products
-            </a>
-          </li>
-          <li>
-            <a href="#" class="nav-link link-body-emphasis">
-              <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#people-circle"></use></svg>
-              Customers
-            </a>
-          </li>
-        </ul>
-        <hr />
-        <div class="dropdown">
-          <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-            <img src="https://github.com/mdo.png" alt="" class="user-img rounded-circle me-2" loading="lazy">
-            <strong>mdo</strong>
-          </a>
-          <ul class="dropdown-menu text-small shadow">
-            <li><a class="dropdown-item" href="#">Nova organização...</a></li>
-            <li><a class="dropdown-item" href="#">Configurações</a></li>
-            <li><a class="dropdown-item" href="#">Perfil</a></li>
-            <li><hr class="dropdown-divider" /></li>
-            <li><a class="dropdown-item" href="#">Sair</a></li>
-          </ul>
+
+            <hr />
+
+            <ul class="nav nav-pills flex-column mb-auto">
+                <li class="nav-item">
+                    <a href="\home" class="nav-link active" aria-current="page">
+                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#home"></use></svg>
+                        Chamados
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-link link-body-emphasis">
+                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#table"></use></svg>
+                        Tarefas
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-link link-body-emphasis">
+                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#speedometer2"></use></svg>
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="nav-link link-body-emphasis">
+                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
+                        Products
+                    </a>
+                </li>
+                <li>
+                    <a asp-page="/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#people-circle"></use></svg>
+                        Membros
+                    </a>
+                </li>
+            </ul>
+
+            <hr />
+
+            <div class="dropdown">
+                <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle"
+                   data-bs-toggle="dropdown" aria-expanded="false">
+                    <img src="https://github.com/mdo.png" alt="" class="user-img rounded-circle me-2" loading="lazy">
+                    <strong>mdo</strong>
+                </a>
+                <ul class="dropdown-menu text-small shadow">
+                    <li><a class="dropdown-item" href="#">Nova organização...</a></li>
+                    <li><a class="dropdown-item" href="#">Configurações</a></li>
+                    <li><a class="dropdown-item" href="#">Perfil</a></li>
+                    <li><hr class="dropdown-divider" /></li>
+                    <li><a class="dropdown-item" href="#">Sair</a></li>
+                </ul>
+            </div>
         </div>
-      </div>
+
         <div class="content-wrapper">
             <div class="row mt-3">
-                <!-- COLUNA ESQUERDA: LISTA DE CHAMADOS -->
                 <div class="col-12 col-md-6 mb-3">
                     <div id="chamados-container">
                         @{
@@ -356,17 +361,16 @@
                             var numeroLocal = numeroSequencial;
 
                             var tituloOuNumero =
-                            !string.IsNullOrWhiteSpace(chamado.Titulo) &&
-                            !string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
-                            ? chamado.Titulo
-                            : $"Chamado {numeroLocal}";
+                                !string.IsNullOrWhiteSpace(chamado.Titulo) &&
+                                !string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
+                                    ? chamado.Titulo
+                                    : $"Chamado {numeroLocal}";
 
                             <div class="ticket-card" data-id="@chamado.Id" role="button">
                                 <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="eager" />
                                 <span class="ticket-text">
                                     @chamado.Status - @tituloOuNumero -
-                                    <span class="cronometro"
-                                          data-criado-em="@chamado.DataCriacao.ToString("o")"></span>
+                                    <span class="cronometro" data-criado-em="@chamado.DataCriacao.ToString("o")"></span>
                                 </span>
                             </div>
                         }
@@ -377,20 +381,20 @@
                                 <img src="~/images/logoticket.png" alt="Novo Ticket"
                                      class="img-fluid rounded-circle" loading="lazy">
                             </button>
+
+                            <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
                             <input type="hidden" id="requestVerificationToken"
                                    value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
                         </div>
                     </div>
                 </div>
 
-                <!-- COLUNA DIREITA: PAINEL DE EDIÇÃO -->
                 <div class="col-12 col-md-6 mb-3">
                     <div class="card">
                         <div class="card-body">
                             <h5 class="card-title d-flex justify-content-between align-items-center">
                                 <span>Detalhes do chamado</span>
-                                <span id="chamadoSelecionadoLabel"
-                                      class="badge text-bg-secondary d-none">
+                                <span id="chamadoSelecionadoLabel" class="badge text-bg-secondary d-none">
                                     Chamado -
                                 </span>
                             </h5>
@@ -401,6 +405,8 @@
 
                             <form id="formEdicaoChamado" class="mt-3 d-none">
                                 <input type="hidden" id="editId" />
+                                <input type="hidden" id="editGrupoId" />
+                                <input type="hidden" id="editSetorId" />
 
                                 <div class="mb-2">
                                     <label for="editTitulo" class="form-label">Título</label>
@@ -418,41 +424,38 @@
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-md-6 mb-2">
-                                        <label>Tipo de Ocorrência</label>
-                                        <select id="tipoOcorrencia">
+                                    <div class="col-md-12 mb-2">
+                                        <label for="editOcorrenciaTipoId" class="form-label">Tipo de Ocorrência</label>
+                                        <select id="editOcorrenciaTipoId" class="form-select">
+                                            <option value="">Selecione</option>
                                             @foreach (var t in Model.TiposOcorrenciaDisponiveis)
                                             {
                                                 <option value="@t.Id">@t.TipoOcorrencia</option>
                                             }
                                         </select>
+                                    </div>
 
-                                        <label>Categoria</label>
-                                        <select id="categoriaOcorrencia">
+                                    <div class="col-md-12 mb-2">
+                                        <label for="editOcorrenciaCategoriaId" class="form-label">Categoria</label>
+                                        <select id="editOcorrenciaCategoriaId" class="form-select">
                                             <option value="">Selecione o tipo primeiro</option>
                                         </select>
+                                    </div>
 
-                                        <label>Subcategoria</label>
-                                        <select id="subcategoriaOcorrencia">
+                                    <div class="col-md-12 mb-2">
+                                        <label for="editOcorrenciaSubcategoriaId" class="form-label">Subcategoria</label>
+                                        <select id="editOcorrenciaSubcategoriaId" class="form-select">
                                             <option value="">Selecione a categoria primeiro</option>
                                         </select>
+                                    </div>
                                 </div>
+
                                 <div class="mb-2">
                                     <label for="editAnexoArquivo" class="form-label">Anexo (imagem)</label>
                                     <input type="file" class="form-control form-control-sm" id="editAnexoArquivo" accept="image/*">
                                     <div class="form-text">
                                         Arquivo atual: <span id="anexoAtualTexto">Nenhum</span>
                                     </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label for="editCriadorSolicitacao" class="form-label">Criador da solicitação</label>
-                                    <input type="text" class="form-control" id="editCriadorSolicitacao" maxlength="100">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label for="editResponsavelSolucao" class="form-label">Responsável pela solução</label>
-                                    <input type="text" class="form-control" id="editResponsavelSolucao" maxlength="100">
                                 </div>
 
                                 <div class="row">
@@ -466,6 +469,7 @@
                                             <option value="Critica">Crítica</option>
                                         </select>
                                     </div>
+
                                     <div class="col-6 mb-2">
                                         <label for="editCriticidade" class="form-label">Criticidade</label>
                                         <select id="editCriticidade" class="form-select">
@@ -489,6 +493,7 @@
                                             <option value="Emergencia">Emergência</option>
                                         </select>
                                     </div>
+
                                     <div class="col-6 mb-2">
                                         <label for="editStatus" class="form-label">Status</label>
                                         <select id="editStatus" class="form-select">
@@ -509,6 +514,7 @@
                                         <label for="editDataInicioAtendimento" class="form-label">Início atendimento</label>
                                         <input type="datetime-local" class="form-control" id="editDataInicioAtendimento">
                                     </div>
+
                                     <div class="col-6 mb-2">
                                         <label for="editDataCriacao" class="form-label">Criação</label>
                                         <input type="datetime-local" class="form-control" id="editDataCriacao" readonly>
@@ -520,6 +526,7 @@
                                         <label for="editDataFinalizacao" class="form-label">Finalização</label>
                                         <input type="datetime-local" class="form-control" id="editDataFinalizacao">
                                     </div>
+
                                     <div class="col-6 mb-2">
                                         <label for="editPrazoResposta" class="form-label">Prazo resposta</label>
                                         <input type="datetime-local" class="form-control" id="editPrazoResposta">
@@ -553,10 +560,13 @@
             </div>
         </div>
     </main>
-  <script src="~/js/home.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q" crossorigin="anonymous" defer></script>
-  <script src="sidebars.js" class="astro-vvvwv3sm"></script>
-  </body>
+
+    <script src="~/js/home.js" asp-append-version="true" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q"
+            crossorigin="anonymous"
+            defer></script>
+</body>
 </html>
 
 

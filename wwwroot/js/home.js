@@ -1,58 +1,57 @@
 const cronometrosAtivos = [];
-let proximoNumeroChamado = 1;
 let chamadoSelecionadoId = null;
 
-// =============== CRIAÇÃO DE NOVO CHAMADO ===============
 document.addEventListener("DOMContentLoaded", () => {
     const botaoNovo = document.getElementById("btnNovoChamado");
     if (botaoNovo) {
         botaoNovo.addEventListener("click", criarNovoChamado);
     }
 
-    // Adiciona chamados existentes ao array de cronômetros
     document.querySelectorAll(".cronometro").forEach(span => {
         cronometrosAtivos.push(span);
     });
 
-    const chamadosExistentes = document.querySelectorAll(".chamado-numero");
-    if (chamadosExistentes.length > 0) {
-        const maiorNumero = Math.max(
-            ...Array.from(chamadosExistentes).map(el => parseInt(el.textContent.replace("Chamado ", "")) || 0)
-        );
-        proximoNumeroChamado = maiorNumero + 1;
-    }
-
-    // Delegação de clique nos tickets (resolve problema dos novos cards)
     const containerChamados = document.getElementById("chamados-container");
     if (containerChamados) {
         containerChamados.addEventListener("click", e => {
             const card = e.target.closest(".ticket-card");
             if (!card) return;
-            const id = card.dataset.id;
+
+            const id = Number(card.dataset.id);
             if (!id) return;
-            carregarChamado(parseInt(id));
+
+            carregarChamado(id);
         });
     }
 
-    // Botões de salvar / cancelar no painel de edição
     inicializarBotoesEdicao();
-
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
 });
 
 async function criarNovoChamado() {
     const tokenInput = document.getElementById("requestVerificationToken");
+    const grupoIdInput = document.getElementById("grupoIdAtual");
+    const container = document.getElementById("chamados-container");
+
     if (!tokenInput) {
         alert("Token de verificação não encontrado.");
         return;
     }
+
+    if (!grupoIdInput || !grupoIdInput.value) {
+        alert("Grupo atual não encontrado.");
+        return;
+    }
+
+    if (!container) {
+        alert("Container de chamados não encontrado.");
+        return;
+    }
+
     const token = tokenInput.value;
+    const grupoId = grupoIdInput.value;
 
-    const container = document.getElementById("chamados-container");
-    if (!container) return;
-
-    // ---- Card otimista "Criando..." enquanto espera o backend ----
     const chamadoDiv = document.createElement("div");
     chamadoDiv.className = "ticket-card";
 
@@ -63,12 +62,12 @@ async function criarNovoChamado() {
     img.loading = "eager";
 
     const spanOuter = document.createElement("span");
+    spanOuter.className = "ticket-text";
     spanOuter.append("Criando... - ");
 
     const spanCronometro = document.createElement("span");
     spanCronometro.className = "cronometro";
-    const agoraLocal = new Date();
-    spanCronometro.dataset.criadoEm = agoraLocal.toISOString();
+    spanCronometro.dataset.criadoEm = new Date().toISOString();
     spanCronometro.textContent = "00:00";
 
     spanOuter.appendChild(spanCronometro);
@@ -76,43 +75,50 @@ async function criarNovoChamado() {
     chamadoDiv.appendChild(spanOuter);
 
     const buttonDiv = container.querySelector(".d-flex.align-items-center");
-    container.insertBefore(chamadoDiv, buttonDiv);
+    if (buttonDiv) {
+        container.insertBefore(chamadoDiv, buttonDiv);
+    } else {
+        container.appendChild(chamadoDiv);
+    }
 
     cronometrosAtivos.push(spanCronometro);
     atualizarCronometros();
 
     try {
-        const response = await fetch("?handler=NovoChamado", {
+        const response = await fetch(`?handler=NovoChamado&grupoId=${encodeURIComponent(grupoId)}`, {
             method: "POST",
             headers: {
                 "RequestVerificationToken": token
             }
         });
 
-        if (!response.ok) {
-            throw new Error(`Erro HTTP: ${response.status}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || `Erro HTTP: ${response.status}`);
         }
 
-        // ✅ Se chegou aqui, o chamado foi criado no backend.
-        // Não precisamos nem ler o JSON: apenas recarrega a página.
         location.reload();
     } catch (error) {
-        // Se der erro, remove o card "Criando..."
         chamadoDiv.remove();
-        const index = cronometrosAtivos.indexOf(spanCronometro);
-        if (index > -1) cronometrosAtivos.splice(index, 1);
 
-        console.error("Erro na requisição:", error);
+        const index = cronometrosAtivos.indexOf(spanCronometro);
+        if (index > -1) {
+            cronometrosAtivos.splice(index, 1);
+        }
+
+        console.error("Erro na requisição de criação:", error);
         alert("Falha ao criar chamado: " + error.message);
     }
 }
 
-// =============== CRONÔMETROS ===============
 function atualizarCronometros() {
     const agora = new Date();
 
     cronometrosAtivos.forEach(span => {
-        const criadoEm = new Date(span.dataset.criadoEm);
+        const criadoEmTexto = span.dataset.criadoEm;
+        const criadoEm = new Date(criadoEmTexto);
+
         if (isNaN(criadoEm.getTime())) {
             span.textContent = "00:00";
             return;
@@ -127,16 +133,24 @@ function atualizarCronometros() {
         const segundos = totalSegundos % 60;
 
         if (dias > 0) {
-            span.textContent = `${String(dias).padStart(2, "0")}:${String(horas).padStart(2, "0")}:${String(minutos).padStart(2, "0")}:${String(segundos).padStart(2, "0")}`;
+            span.textContent =
+                `${String(dias).padStart(2, "0")}:` +
+                `${String(horas).padStart(2, "0")}:` +
+                `${String(minutos).padStart(2, "0")}:` +
+                `${String(segundos).padStart(2, "0")}`;
         } else if (horas > 0) {
-            span.textContent = `${String(horas).padStart(2, "0")}:${String(minutos).padStart(2, "0")}:${String(segundos).padStart(2, "0")}`;
+            span.textContent =
+                `${String(horas).padStart(2, "0")}:` +
+                `${String(minutos).padStart(2, "0")}:` +
+                `${String(segundos).padStart(2, "0")}`;
         } else {
-            span.textContent = `${String(minutos).padStart(2, "0")}:${String(segundos).padStart(2, "0")}`;
+            span.textContent =
+                `${String(minutos).padStart(2, "0")}:` +
+                `${String(segundos).padStart(2, "0")}`;
         }
     });
 }
 
-// =============== CARREGAR CHAMADO P/ EDIÇÃO ===============
 async function carregarChamado(id) {
     chamadoSelecionadoId = id;
     console.log("Carregando chamado", id);
@@ -167,11 +181,27 @@ async function carregarChamado(id) {
 
 function formatDateTimeLocal(value) {
     if (!value) return "";
+
     const dt = new Date(value);
     if (isNaN(dt.getTime())) return "";
+
     const tzoffset = dt.getTimezoneOffset() * 60000;
     const localISO = new Date(dt.getTime() - tzoffset).toISOString();
     return localISO.slice(0, 16);
+}
+
+function setValueIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.value = value ?? "";
+    }
+}
+
+function setCheckedIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.checked = !!value;
+    }
 }
 
 function preencherFormularioEdicao(data) {
@@ -179,56 +209,48 @@ function preencherFormularioEdicao(data) {
 
     const msg = document.getElementById("mensagemSelecioneChamado");
     const form = document.getElementById("formEdicaoChamado");
+    const label = document.getElementById("chamadoSelecionadoLabel");
+    const anexoTexto = document.getElementById("anexoAtualTexto");
+
     if (!form) return;
 
-    // Mostra o formulário e esconde a mensagem inicial
     if (msg) msg.classList.add("d-none");
     form.classList.remove("d-none");
 
-    // === LABEL COM O NÚMERO DO CHAMADO ===
-    const label = document.getElementById("chamadoSelecionadoLabel");
     if (label) {
-        if (data.id) {
-            label.textContent = `Chamado ${data.id}`;
-        } else {
-            label.textContent = "Chamado";
-        }
+        label.textContent = data.id ? `Chamado ${data.id}` : "Chamado";
         label.classList.remove("d-none");
     }
 
-    // === CAMPOS DE TEXTO / IDS / ENUMS / DATAS ===
-    document.getElementById("editId").value = data.id ?? "";
-    document.getElementById("editTitulo").value = data.titulo ?? "";
-    document.getElementById("editDescricao").value = data.descricao ?? "";
-    document.getElementById("editSolucao").value = data.solucao ?? "";
+    setValueIfExists("editId", data.id);
+    setValueIfExists("editTitulo", data.titulo);
+    setValueIfExists("editDescricao", data.descricao);
+    setValueIfExists("editSolucao", data.solucao);
 
-    document.getElementById("editGrupoId").value = data.grupoId ?? "";
-    document.getElementById("editSetorId").value = data.setorId ?? "";
-    document.getElementById("editOcorrenciaTipoId").value = data.ocorrenciaTipoId ?? "";
-    document.getElementById("editOcorrenciaCategoriaId").value = data.ocorrenciaCategoriaId ?? "";
-    document.getElementById("editOcorrenciaSubcategoriaId").value = data.ocorrenciaSubcategoriaId ?? "";
+    setValueIfExists("editGrupoId", data.grupoId);
+    setValueIfExists("editSetorId", data.setorId);
+    setValueIfExists("editOcorrenciaTipoId", data.ocorrenciaTipoId);
+    setValueIfExists("editOcorrenciaCategoriaId", data.ocorrenciaCategoriaId);
+    setValueIfExists("editOcorrenciaSubcategoriaId", data.ocorrenciaSubcategoriaId);
 
-    const anexoTexto = document.getElementById("anexoAtualTexto");
     if (anexoTexto) {
         anexoTexto.textContent = data.anexoChamado ? data.anexoChamado : "Nenhum";
     }
-    document.getElementById("editCriadorSolicitacao").value = data.criadorSolicitacao ?? "";
-    document.getElementById("editResponsavelSolucao").value = data.responsavelSolucao ?? "";
 
-    document.getElementById("editPrioridade").value = data.prioridade ?? "";
-    document.getElementById("editCriticidade").value = data.criticidade ?? "";
-    document.getElementById("editUrgencia").value = data.urgencia ?? "";
-    document.getElementById("editStatus").value = data.status ?? "Aberto";
+    setValueIfExists("editPrioridade", data.prioridade);
+    setValueIfExists("editCriticidade", data.criticidade);
+    setValueIfExists("editUrgencia", data.urgencia);
+    setValueIfExists("editStatus", data.status ?? "Aberto");
 
-    document.getElementById("editDataInicioAtendimento").value = formatDateTimeLocal(data.dataInicioAtendimento);
-    document.getElementById("editDataCriacao").value = formatDateTimeLocal(data.dataCriacao);
-    document.getElementById("editDataFinalizacao").value = formatDateTimeLocal(data.dataFinalizacao);
-    document.getElementById("editPrazoResposta").value = formatDateTimeLocal(data.prazoResposta);
-    document.getElementById("editPrazoConclusao").value = formatDateTimeLocal(data.prazoConclusao);
+    setValueIfExists("editDataInicioAtendimento", formatDateTimeLocal(data.dataInicioAtendimento));
+    setValueIfExists("editDataCriacao", formatDateTimeLocal(data.dataCriacao));
+    setValueIfExists("editDataFinalizacao", formatDateTimeLocal(data.dataFinalizacao));
+    setValueIfExists("editPrazoResposta", formatDateTimeLocal(data.prazoResposta));
+    setValueIfExists("editPrazoConclusao", formatDateTimeLocal(data.prazoConclusao));
 
-    document.getElementById("editPublico").checked = !!data.publico;
+    setCheckedIfExists("editPublico", data.publico);
 }
-// =============== SALVAR / CANCELAR EDIÇÃO ===============
+
 function inicializarBotoesEdicao() {
     const btnSalvar = document.getElementById("btnSalvarEdicao");
     const btnCancelar = document.getElementById("btnCancelarEdicao");
@@ -239,23 +261,28 @@ function inicializarBotoesEdicao() {
     }
 
     if (btnCancelar) {
-        btnCancelar.addEventListener("click", () => {
-            const form = document.getElementById("formEdicaoChamado");
-            const msg = document.getElementById("mensagemSelecioneChamado");
-            const label = document.getElementById("chamadoSelecionadoLabel");
-            if (form) form.classList.add("d-none");
-            if (msg) msg.classList.remove("d-none");
-            if (label) {
-                label.classList.add("d-none");
-                label.textContent = "";
-            }
-            chamadoSelecionadoId = null;
-        });
+        btnCancelar.addEventListener("click", cancelarEdicaoChamado);
     }
 
     if (btnExcluir) {
         btnExcluir.addEventListener("click", excluirChamado);
     }
+}
+
+function cancelarEdicaoChamado() {
+    const form = document.getElementById("formEdicaoChamado");
+    const msg = document.getElementById("mensagemSelecioneChamado");
+    const label = document.getElementById("chamadoSelecionadoLabel");
+
+    if (form) form.classList.add("d-none");
+    if (msg) msg.classList.remove("d-none");
+
+    if (label) {
+        label.classList.add("d-none");
+        label.textContent = "";
+    }
+
+    chamadoSelecionadoId = null;
 }
 
 async function excluirChamado() {
@@ -273,9 +300,8 @@ async function excluirChamado() {
         alert("Token de verificação não encontrado.");
         return;
     }
-    const token = tokenInput.value;
 
-    const payload = { id: chamadoSelecionadoId };
+    const token = tokenInput.value;
 
     try {
         const response = await fetch("?handler=ExcluirChamado", {
@@ -284,7 +310,7 @@ async function excluirChamado() {
                 "Content-Type": "application/json",
                 "RequestVerificationToken": token
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ id: chamadoSelecionadoId })
         });
 
         if (!response.ok) {
@@ -299,23 +325,13 @@ async function excluirChamado() {
             return;
         }
 
-        // Remove o card da esquerda
         const card = document.querySelector(`.ticket-card[data-id="${chamadoSelecionadoId}"]`);
-        if (card) card.remove();
-
-        // Reseta painel
-        const form = document.getElementById("formEdicaoChamado");
-        const msg = document.getElementById("mensagemSelecioneChamado");
-        const label = document.getElementById("chamadoSelecionadoLabel");
-        if (form) form.classList.add("d-none");
-        if (msg) msg.classList.remove("d-none");
-        if (label) {
-            label.classList.add("d-none");
-            label.textContent = "";
+        if (card) {
+            card.remove();
         }
-        chamadoSelecionadoId = null;
 
-        alert("Chamado excluído (status 'Cancelado').");
+        cancelarEdicaoChamado();
+        alert("Chamado excluído com sucesso.");
     } catch (error) {
         console.error("Erro ao excluir chamado:", error);
         alert("Erro ao excluir chamado: " + error.message);
@@ -333,43 +349,42 @@ async function salvarEdicaoChamado() {
         alert("Token de verificação não encontrado.");
         return;
     }
+
     const token = tokenInput.value;
 
     const payload = {
-        id: parseInt(document.getElementById("editId").value),
-        titulo: document.getElementById("editTitulo").value || null,
-        descricao: document.getElementById("editDescricao").value || null,
-        solucao: document.getElementById("editSolucao").value || null,
-        grupoId: toNullableInt(document.getElementById("editGrupoId").value),
-        setorId: toNullableInt(document.getElementById("editSetorId").value),
-        ocorrenciaTipoId: toNullableInt(document.getElementById("editOcorrenciaTipoId").value),
-        ocorrenciaCategoriaId: toNullableInt(document.getElementById("editOcorrenciaCategoriaId").value),
-        ocorrenciaSubcategoriaId: toNullableInt(document.getElementById("editOcorrenciaSubcategoriaId").value),
-        // anexoChamado removido daqui (arquivo vai separado)
-        criadorSolicitacao: document.getElementById("editCriadorSolicitacao").value || null,
-        responsavelSolucao: document.getElementById("editResponsavelSolucao").value || null,
-        prioridade: document.getElementById("editPrioridade").value || null,
-        criticidade: document.getElementById("editCriticidade").value || null,
-        urgencia: document.getElementById("editUrgencia").value || null,
-        status: document.getElementById("editStatus").value || null,
-        dataInicioAtendimento: toNullableDate(document.getElementById("editDataInicioAtendimento").value),
-        dataCriacao: toNullableDate(document.getElementById("editDataCriacao").value),
-        dataFinalizacao: toNullableDate(document.getElementById("editDataFinalizacao").value),
-        prazoResposta: toNullableDate(document.getElementById("editPrazoResposta").value),
-        prazoConclusao: toNullableDate(document.getElementById("editPrazoConclusao").value),
-        publico: document.getElementById("editPublico").checked
+        id: toNullableInt(getValue("editId")),
+        titulo: getNullableString("editTitulo"),
+        descricao: getNullableString("editDescricao"),
+        solucao: getNullableString("editSolucao"),
+        grupoId: toNullableInt(getValue("editGrupoId")),
+        setorId: toNullableInt(getValue("editSetorId")),
+        ocorrenciaTipoId: toNullableInt(getValue("editOcorrenciaTipoId")),
+        ocorrenciaCategoriaId: toNullableInt(getValue("editOcorrenciaCategoriaId")),
+        ocorrenciaSubcategoriaId: toNullableInt(getValue("editOcorrenciaSubcategoriaId")),
+        prioridade: getNullableString("editPrioridade"),
+        criticidade: getNullableString("editCriticidade"),
+        urgencia: getNullableString("editUrgencia"),
+        status: getNullableString("editStatus"),
+        dataInicioAtendimento: toNullableDate(getValue("editDataInicioAtendimento")),
+        dataCriacao: toNullableDate(getValue("editDataCriacao")),
+        dataFinalizacao: toNullableDate(getValue("editDataFinalizacao")),
+        prazoResposta: toNullableDate(getValue("editPrazoResposta")),
+        prazoConclusao: toNullableDate(getValue("editPrazoConclusao")),
+        publico: !!document.getElementById("editPublico")?.checked
     };
 
     const formData = new FormData();
+
     for (const [key, value] of Object.entries(payload)) {
-        if (value !== null && value !== undefined) {
+        if (value !== null && value !== undefined && value !== "") {
             formData.append(key, value);
         }
     }
 
     const fileInput = document.getElementById("editAnexoArquivo");
-    if (fileInput && fileInput.files.length > 0) {
-        formData.append("AnexoArquivo", fileInput.files[0]); // nome bate com o DTO
+    if (fileInput && fileInput.files && fileInput.files.length > 0) {
+        formData.append("AnexoArquivo", fileInput.files[0]);
     }
 
     try {
@@ -377,7 +392,6 @@ async function salvarEdicaoChamado() {
             method: "POST",
             headers: {
                 "RequestVerificationToken": token
-                // NÃO definir Content-Type aqui, o browser monta o multipart/form-data
             },
             body: formData
         });
@@ -394,25 +408,33 @@ async function salvarEdicaoChamado() {
             return;
         }
 
-        // sucesso -> recarrega a página
         alert("Chamado atualizado com sucesso.");
-        window.location.reload(); // ou location.reload();
-
-        alert("Chamado atualizado com sucesso.");
+        window.location.reload();
     } catch (error) {
         console.error("Erro ao salvar chamado:", error);
         alert("Erro ao salvar chamado: " + error.message);
     }
 }
 
-function toNullableInt(v) {
-    if (!v) return null;
-    const n = parseInt(v);
-    return isNaN(n) ? null : n;
+function getValue(id) {
+    return document.getElementById(id)?.value ?? "";
 }
 
-function toNullableDate(v) {
-    if (!v) return null;
-    // O model binder entende "yyyy-MM-ddTHH:mm" como hora local
-    return v;
+function getNullableString(id) {
+    const value = getValue(id).trim();
+    return value === "" ? null : value;
+}
+
+function toNullableInt(value) {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    const numero = parseInt(value, 10);
+    return Number.isNaN(numero) ? null : numero;
+}
+
+function toNullableDate(value) {
+    if (!value) return null;
+    return value;
 }

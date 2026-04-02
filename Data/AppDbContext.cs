@@ -24,6 +24,8 @@ namespace CallStationApp.Data
         public DbSet<ComentarioChamado> ComentariosChamados { get; set; }
         public DbSet<Tarefa> Tarefas { get; set; }
         public DbSet<FeedbackChamado> FeedbacksChamados { get; set; }
+        public DbSet<ConviteGrupo> ConvitesGrupo { get; set; }
+        public DbSet<Notificacao> Notificacoes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -267,16 +269,6 @@ namespace CallStationApp.Data
                     .HasColumnType("varchar(255)")
                     .HasMaxLength(255);
 
-                entity.Property(c => c.CriadorSolicitacao)
-                    .HasColumnName("criador_solicitacao")
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
-
-                entity.Property(c => c.ResponsavelSolucao)
-                    .HasColumnName("responsavel_solucao")
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
-
                 // ===== ENUMS =====
                 entity.Property(c => c.Prioridade)
                     .HasConversion<string>()
@@ -492,6 +484,85 @@ namespace CallStationApp.Data
                 entity.HasIndex(f => new { f.ChamadoId, f.AvaliadorId }).IsUnique();
                 entity.HasIndex(f => new { f.AvaliadorId }).HasDatabaseName("idx_feedback_avaliador");
                 entity.HasIndex(f => new { f.ChamadoId }).HasDatabaseName("idx_feedback_chamado");
+            });
+
+            // ===== ConviteGrupo =====
+            modelBuilder.Entity<ConviteGrupo>(entity =>
+            {
+                entity.ToTable("Convites_grupo");
+
+                entity.Property(c => c.Status)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('Pendente','Aceito','Recusado','Cancelado')")
+                    .HasDefaultValue(StatusConviteGrupo.Pendente);
+
+                entity.Property(c => c.Mensagem)
+                    .HasColumnType("varchar(255)")
+                    .HasMaxLength(255);
+
+                entity.Property(c => c.DataCriacao)
+                    .HasColumnName("data_criacao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(c => c.DataResposta)
+                    .HasColumnName("data_resposta")
+                    .HasColumnType("datetime");
+
+                entity.HasIndex(c => new { c.DestinatarioUsuarioId, c.Status })
+                    .HasDatabaseName("idx_convite_destinatario_status");
+
+                entity.HasIndex(c => new { c.GrupoId, c.Status })
+                    .HasDatabaseName("idx_convite_grupo_status");
+            });
+
+            // ===== Notificacao =====
+            modelBuilder.Entity<Notificacao>(entity =>
+            {
+                entity.ToTable("Notificacoes");
+
+                entity.Property(n => n.Tipo)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasColumnType("ENUM('ConviteGrupo','Sistema','Chamado','Tarefa')")
+                    .HasDefaultValue(TipoNotificacao.Sistema);
+
+                entity.Property(n => n.Titulo)
+                    .IsRequired()
+                    .HasColumnType("varchar(150)")
+                    .HasMaxLength(150);
+
+                entity.Property(n => n.Mensagem)
+                    .IsRequired()
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
+
+                entity.Property(n => n.Lida)
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(n => n.DataCriacao)
+                    .HasColumnName("data_criacao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(n => n.DataLeitura)
+                    .HasColumnName("data_leitura")
+                    .HasColumnType("datetime");
+
+                entity.Property(n => n.ReferenciaTipo)
+                    .HasColumnName("referencia_tipo")
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
+
+                entity.Property(n => n.LinkDestino)
+                    .HasColumnName("link_destino")
+                    .HasColumnType("varchar(255)")
+                    .HasMaxLength(255);
+
+                entity.HasIndex(n => new { n.UsuarioId, n.Lida, n.DataCriacao })
+                    .HasDatabaseName("idx_notificacao_usuario_lida");
             });
         }
     }

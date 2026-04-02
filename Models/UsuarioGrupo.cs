@@ -5,30 +5,29 @@ namespace CallStationApp.Models
 {
     public class UsuarioGrupo
     {
-        [Key]
-        [Column("id")]
-        public int Id { get; set; }
-            
         [Required]
         [Column("usuario_id")]
-        public required int UsuarioId { get; set; }
-        [ForeignKey("usuario_id")]
-        public required Usuario Usuario { get; set; }
-            
-        [Required] 
+        public int UsuarioId { get; set; }
+
+        [ForeignKey(nameof(UsuarioId))]
+        public Usuario Usuario { get; set; } = null!;
+
+        [Required]
         [Column("grupo_id")]
-        public required int GrupoId { get; set; }
-        [ForeignKey("grupo_id")]
-        public required Grupo Grupo { get; set; }
-        
+        public int GrupoId { get; set; }
+
+        [ForeignKey(nameof(GrupoId))]
+        public Grupo Grupo { get; set; } = null!;
+
         [Required(ErrorMessage = "Defina uma permissão para o usuário.")]
         [Column("permissao")]
         [EnumDataType(typeof(PermissaoUsuario))]
-        public required PermissaoUsuario Permissao { get; set; } = PermissaoUsuario.Nenhuma;
-        
+        public PermissaoUsuario Permissao { get; set; } = PermissaoUsuario.Nenhuma;
+
         [Column("data_adicao")]
         public DateTime DataAdicao { get; set; } = DateTime.Now;
     }
+
     public enum PermissaoUsuario
     {
         [Display(Name = "Nenhuma")]

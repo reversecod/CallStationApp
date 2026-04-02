@@ -75,14 +75,6 @@ namespace CallStationApp.Models
         [StringLength(255)]
         public string? AnexoChamado { get; set; }
 
-        [Column("criador_solicitacao", TypeName = "varchar(100)")]
-        [StringLength(100)]
-        public string? CriadorSolicitacao { get; set; }
-
-        [Column("responsavel_solucao", TypeName = "varchar(100)")]
-        [StringLength(100)]
-        public string? ResponsavelSolucao { get; set; }
-
         // =====================
         // ENUMS
         // =====================
@@ -95,6 +87,7 @@ namespace CallStationApp.Models
         [Column("urgencia")]
         public UrgenciaChamado? Urgencia { get; set; }
 
+        [Required]
         [Column("status")]
         public StatusChamado Status { get; set; } = StatusChamado.Aberto;
 
@@ -122,42 +115,60 @@ namespace CallStationApp.Models
         [Column("publico")]
         public bool Publico { get; set; } = false;
     }
+
     public enum StatusChamado
     {
         [Display(Name = "Aberto")]
         Aberto,
+
         [Display(Name = "Em Andamento")]
         EmAndamento,
+
+        [Display(Name = "Pendente")]
+        Pendente,
+
         [Display(Name = "Concluído")]
         Concluido,
+
         [Display(Name = "Fechado")]
         Fechado,
+
         [Display(Name = "Reaberto")]
         Reaberto,
+
         [Display(Name = "Cancelado")]
         Cancelado,
+
         [Display(Name = "Excluído")]
         Excluido
     }
+
     public enum UrgenciaChamado
     {
         [Display(Name = "Não Urgente")]
         NaoUrgente,
-        [Display(Name = "Pouco Urgente")]
+
+        [Display(Name = "Pouca Urgência")]
         PoucaUrgencia,
+
         [Display(Name = "Urgente")]
         Urgente,
+
         [Display(Name = "Emergência")]
         Emergencia
     }
+
     public enum CriticidadeChamado
-    {  
+    {
         [Display(Name = "Baixa Criticidade")]
         Baixa,
+
         [Display(Name = "Média Criticidade")]
         Media,
+
         [Display(Name = "Alta Criticidade")]
         Alta,
+
         [Display(Name = "Crítico")]
         Critico
     }
@@ -166,10 +177,13 @@ namespace CallStationApp.Models
     {
         [Display(Name = "Prioridade Baixa")]
         Baixa,
+
         [Display(Name = "Prioridade Média")]
         Media,
+
         [Display(Name = "Prioridade Alta")]
         Alta,
+
         [Display(Name = "Prioridade Crítica")]
         Critica
     }
