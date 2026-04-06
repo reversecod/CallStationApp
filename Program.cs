@@ -1,3 +1,4 @@
+using CallStationApp.Authorization;
 using CallStationApp.Data;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,8 @@ builder.Services.AddAuthorization();
 var cultureInfo = new CultureInfo("pt-BR");
 CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
 CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
+
+builder.Services.AddScoped<GrupoAuthorizationService>();
 
 // SERVIÇOS
 builder.Services.AddRazorPages();

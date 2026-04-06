@@ -36,6 +36,7 @@ namespace CallStationApp.Models
 
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; }
+        public ICollection<HistoricoAlteracaoChamado> HistoricoAlteracoesChamado { get; set; } = new List<HistoricoAlteracaoChamado>();
     }
     public enum EtiquetaCor
     {

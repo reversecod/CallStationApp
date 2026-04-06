@@ -40,5 +40,6 @@ namespace CallStationApp.Models
         [Required(ErrorMessage = "O campo de data de criação é obrigatório.")]
         [Column("data_criacao")]
         public DateTime DataCriacao { get; set; } = DateTime.Now;
+        public ICollection<HistoricoAlteracaoChamado> HistoricoAlteracoesChamado { get; set; } = new List<HistoricoAlteracaoChamado>();
     }
 }

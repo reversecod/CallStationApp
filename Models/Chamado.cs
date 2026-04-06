@@ -114,6 +114,7 @@ namespace CallStationApp.Models
         // =====================
         [Column("publico")]
         public bool Publico { get; set; } = false;
+        public ICollection<HistoricoAlteracaoChamado> HistoricoAlteracoes { get; set; } = new List<HistoricoAlteracaoChamado>();
     }
 
     public enum StatusChamado

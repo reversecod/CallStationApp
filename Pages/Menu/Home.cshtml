@@ -290,7 +290,8 @@
     </svg>
     <main>
         <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-            <a class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
+            <a asp-page="/Menu/Menu"
+               class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
                 <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
             </a>
 
@@ -298,7 +299,7 @@
 
             <ul class="nav nav-pills flex-column mb-auto">
                 <li class="nav-item">
-                    <a href="\home" class="nav-link active" aria-current="page">
+                    <a href="#" class="nav-link active" aria-current="page">
                         <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#home"></use></svg>
                         Chamados
                     </a>
@@ -376,11 +377,14 @@
                         }
 
                         <div class="d-flex align-items-center mt-3">
-                            <button type="button" id="btnNovoChamado"
-                                    class="btn p-0 border-0 rounded-circle shadow-sm btn-novo-chamado">
-                                <img src="~/images/logoticket.png" alt="Novo Ticket"
-                                     class="img-fluid rounded-circle" loading="lazy">
-                            </button>
+                            @if (Model.PodeCriarChamado)
+                            {
+                                <button type="button" id="btnNovoChamado"
+                                        class="btn p-0 border-0 rounded-circle shadow-sm btn-novo-chamado">
+                                    <img src="~/images/logoticket.png" alt="Novo Ticket"
+                                         class="img-fluid rounded-circle" loading="lazy">
+                                </button>
+                            }
 
                             <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
                             <input type="hidden" id="requestVerificationToken"
@@ -406,25 +410,35 @@
                             <form id="formEdicaoChamado" class="mt-3 d-none">
                                 <input type="hidden" id="editId" />
                                 <input type="hidden" id="editGrupoId" />
-                                <input type="hidden" id="editSetorId" />
 
-                                <div class="mb-2">
+                                <div class="mb-2" id="wrapEditTitulo">
                                     <label for="editTitulo" class="form-label">Título</label>
                                     <input type="text" class="form-control" id="editTitulo" maxlength="50">
                                 </div>
 
-                                <div class="mb-2">
+                                <div class="mb-2" id="wrapEditDescricao">
                                     <label for="editDescricao" class="form-label">Descrição</label>
                                     <textarea class="form-control" id="editDescricao" rows="3" maxlength="1000"></textarea>
                                 </div>
 
-                                <div class="mb-2">
+                                <div class="mb-2" id="wrapEditSolucao">
                                     <label for="editSolucao" class="form-label">Solução</label>
                                     <textarea class="form-control" id="editSolucao" rows="3" maxlength="1000"></textarea>
                                 </div>
 
+                                <div class="mb-2" id="wrapEditSetorId">
+                                    <label for="editSetorId" class="form-label">Setor</label>
+                                    <select id="editSetorId" class="form-select">
+                                        <option value="">Selecione</option>
+                                        @foreach (var setor in Model.SetoresDisponiveis)
+                                        {
+                                            <option value="@setor.Id">@setor.NomeSetor</option>
+                                        }
+                                    </select>
+                                </div>
+
                                 <div class="row">
-                                    <div class="col-md-12 mb-2">
+                                    <div class="col-md-12 mb-2" id="wrapEditOcorrenciaTipoId">
                                         <label for="editOcorrenciaTipoId" class="form-label">Tipo de Ocorrência</label>
                                         <select id="editOcorrenciaTipoId" class="form-select">
                                             <option value="">Selecione</option>
@@ -435,14 +449,14 @@
                                         </select>
                                     </div>
 
-                                    <div class="col-md-12 mb-2">
+                                    <div class="col-md-12 mb-2" id="wrapEditOcorrenciaCategoriaId">
                                         <label for="editOcorrenciaCategoriaId" class="form-label">Categoria</label>
                                         <select id="editOcorrenciaCategoriaId" class="form-select">
                                             <option value="">Selecione o tipo primeiro</option>
                                         </select>
                                     </div>
 
-                                    <div class="col-md-12 mb-2">
+                                    <div class="col-md-12 mb-2" id="wrapEditOcorrenciaSubcategoriaId">
                                         <label for="editOcorrenciaSubcategoriaId" class="form-label">Subcategoria</label>
                                         <select id="editOcorrenciaSubcategoriaId" class="form-select">
                                             <option value="">Selecione a categoria primeiro</option>
@@ -450,7 +464,7 @@
                                     </div>
                                 </div>
 
-                                <div class="mb-2">
+                                <div class="mb-2" id="wrapEditAnexoArquivo">
                                     <label for="editAnexoArquivo" class="form-label">Anexo (imagem)</label>
                                     <input type="file" class="form-control form-control-sm" id="editAnexoArquivo" accept="image/*">
                                     <div class="form-text">
@@ -459,7 +473,7 @@
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-6 mb-2">
+                                    <div class="col-6 mb-2" id="wrapEditPrioridade">
                                         <label for="editPrioridade" class="form-label">Prioridade</label>
                                         <select id="editPrioridade" class="form-select">
                                             <option value="">(vazio)</option>
@@ -470,7 +484,7 @@
                                         </select>
                                     </div>
 
-                                    <div class="col-6 mb-2">
+                                    <div class="col-6 mb-2" id="wrapEditCriticidade">
                                         <label for="editCriticidade" class="form-label">Criticidade</label>
                                         <select id="editCriticidade" class="form-select">
                                             <option value="">(vazio)</option>
@@ -483,7 +497,7 @@
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-6 mb-2">
+                                    <div class="col-6 mb-2" id="wrapEditUrgencia">
                                         <label for="editUrgencia" class="form-label">Urgência</label>
                                         <select id="editUrgencia" class="form-select">
                                             <option value="">(vazio)</option>
@@ -494,7 +508,7 @@
                                         </select>
                                     </div>
 
-                                    <div class="col-6 mb-2">
+                                    <div class="col-6 mb-2" id="wrapEditStatus">
                                         <label for="editStatus" class="form-label">Status</label>
                                         <select id="editStatus" class="form-select">
                                             <option value="Aberto">Aberto</option>
@@ -509,36 +523,29 @@
                                     </div>
                                 </div>
 
-                                <div class="row">
-                                    <div class="col-6 mb-2">
-                                        <label for="editDataInicioAtendimento" class="form-label">Início atendimento</label>
-                                        <input type="datetime-local" class="form-control" id="editDataInicioAtendimento">
-                                    </div>
-
-                                    <div class="col-6 mb-2">
-                                        <label for="editDataCriacao" class="form-label">Criação</label>
-                                        <input type="datetime-local" class="form-control" id="editDataCriacao" readonly>
-                                    </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Criado em</label>
+                                    <div id="textoDataCriacao" class="form-control-plaintext text-muted">-</div>
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-6 mb-2">
+                                    <div class="col-6 mb-2" id="wrapEditDataFinalizacao">
                                         <label for="editDataFinalizacao" class="form-label">Finalização</label>
                                         <input type="datetime-local" class="form-control" id="editDataFinalizacao">
                                     </div>
 
-                                    <div class="col-6 mb-2">
+                                    <div class="col-6 mb-2" id="wrapEditPrazoResposta">
                                         <label for="editPrazoResposta" class="form-label">Prazo resposta</label>
                                         <input type="datetime-local" class="form-control" id="editPrazoResposta">
                                     </div>
                                 </div>
 
-                                <div class="mb-2">
+                                <div class="mb-2" id="wrapEditPrazoConclusao">
                                     <label for="editPrazoConclusao" class="form-label">Prazo conclusão</label>
                                     <input type="datetime-local" class="form-control" id="editPrazoConclusao">
                                 </div>
 
-                                <div class="form-check form-switch mb-3">
+                                <div class="form-check form-switch mb-3" id="wrapEditPublico">
                                     <input class="form-check-input" type="checkbox" id="editPublico">
                                     <label class="form-check-label" for="editPublico">Chamado público</label>
                                 </div>

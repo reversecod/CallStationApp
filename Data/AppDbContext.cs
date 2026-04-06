@@ -26,6 +26,10 @@ namespace CallStationApp.Data
         public DbSet<FeedbackChamado> FeedbacksChamados { get; set; }
         public DbSet<ConviteGrupo> ConvitesGrupo { get; set; }
         public DbSet<Notificacao> Notificacoes { get; set; }
+        public DbSet<HistoricoAlteracaoChamado> HistoricoAlteracoesChamado { get; set; }
+        public DbSet<ChamadoContadorGrupo> ChamadosContadorGrupo { get; set; }
+        public DbSet<ChamadoContadorUsuario> ChamadosContadorUsuario { get; set; }
+        public DbSet<ChamadoContadorUsuarioGrupo> ChamadosContadorUsuarioGrupo { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -563,6 +567,137 @@ namespace CallStationApp.Data
 
                 entity.HasIndex(n => new { n.UsuarioId, n.Lida, n.DataCriacao })
                     .HasDatabaseName("idx_notificacao_usuario_lida");
+            });
+            modelBuilder.Entity<HistoricoAlteracaoChamado>(entity =>
+            {
+                entity.ToTable("historico_alteracoes_chamado");
+
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id)
+                    .HasColumnName("id");
+
+                entity.Property(e => e.ChamadoId)
+                    .HasColumnName("chamado_id")
+                    .IsRequired();
+
+                entity.Property(e => e.GrupoId)
+                    .HasColumnName("grupo_id")
+                    .IsRequired();
+
+                entity.Property(e => e.UsuarioId)
+                    .HasColumnName("usuario_id")
+                    .IsRequired();
+
+                entity.Property(e => e.CampoAlterado)
+                    .HasColumnName("campo_alterado")
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(e => e.ValorAnterior)
+                    .HasColumnName("valor_anterior")
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.ValorAlterado)
+                    .HasColumnName("valor_alterado")
+                    .HasMaxLength(500);
+
+                entity.Property(e => e.TipoAlteracao)
+                    .HasColumnName("tipo_alteracao")
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.DataAlteracao)
+                    .HasColumnName("data_alteracao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                    .IsRequired();
+
+                entity.HasIndex(e => new { e.ChamadoId, e.DataAlteracao })
+                    .HasDatabaseName("IX_historico_alteracoes_chamado_chamado_data");
+
+                entity.HasIndex(e => e.UsuarioId)
+                    .HasDatabaseName("IX_historico_alteracoes_chamado_usuario");
+
+                entity.HasOne(e => e.Chamado)
+                    .WithMany(c => c.HistoricoAlteracoes)
+                    .HasForeignKey(e => e.ChamadoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Grupo)
+                    .WithMany(g => g.HistoricoAlteracoesChamado)
+                    .HasForeignKey(e => e.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Usuario)
+                    .WithMany(u => u.HistoricoAlteracoesChamado)
+                    .HasForeignKey(e => e.UsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ChamadoContadorGrupo>(entity =>
+            {
+                entity.ToTable("Chamado_contador_grupo");
+
+                entity.HasKey(x => x.GrupoId);
+
+                entity.Property(x => x.GrupoId)
+                    .HasColumnName("grupo_id");
+
+                entity.Property(x => x.UltimoNumero)
+                    .HasColumnName("ultimo_numero")
+                    .IsRequired();
+
+                entity.HasOne(x => x.Grupo)
+                    .WithMany()
+                    .HasForeignKey(x => x.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ChamadoContadorUsuario>(entity =>
+            {
+                entity.ToTable("Chamado_contador_usuario");
+
+                entity.HasKey(x => x.UsuarioId);
+
+                entity.Property(x => x.UsuarioId)
+                    .HasColumnName("usuario_id");
+
+                entity.Property(x => x.UltimoNumero)
+                    .HasColumnName("ultimo_numero")
+                    .IsRequired();
+
+                entity.HasOne(x => x.Usuario)
+                    .WithMany()
+                    .HasForeignKey(x => x.UsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ChamadoContadorUsuarioGrupo>(entity =>
+            {
+                entity.ToTable("Chamado_contador_usuario_grupo");
+
+                entity.HasKey(x => new { x.UsuarioId, x.GrupoId });
+
+                entity.Property(x => x.UsuarioId)
+                    .HasColumnName("usuario_id");
+
+                entity.Property(x => x.GrupoId)
+                    .HasColumnName("grupo_id");
+
+                entity.Property(x => x.UltimoNumero)
+                    .HasColumnName("ultimo_numero")
+                    .IsRequired();
+
+                entity.HasOne(x => x.Usuario)
+                    .WithMany()
+                    .HasForeignKey(x => x.UsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.Grupo)
+                    .WithMany()
+                    .HasForeignKey(x => x.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

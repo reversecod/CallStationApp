@@ -153,7 +153,6 @@ function atualizarCronometros() {
 
 async function carregarChamado(id) {
     chamadoSelecionadoId = id;
-    console.log("Carregando chamado", id);
 
     try {
         const response = await fetch(`?handler=CarregarChamado&id=${encodeURIComponent(id)}`, {
@@ -165,7 +164,6 @@ async function carregarChamado(id) {
         }
 
         const data = await response.json();
-        console.log("Resposta CarregarChamado:", data);
 
         if (data.success === false) {
             alert(data.message || "Não foi possível carregar o chamado.");
@@ -173,6 +171,7 @@ async function carregarChamado(id) {
         }
 
         preencherFormularioEdicao(data);
+        aplicarPermissoesChamado(data.permissoes ?? {});
     } catch (error) {
         console.error("Erro ao carregar chamado:", error);
         alert("Erro ao carregar chamado: " + error.message);
@@ -204,13 +203,80 @@ function setCheckedIfExists(id, value) {
     }
 }
 
-function preencherFormularioEdicao(data) {
-    console.log("preencherFormularioEdicao", data);
+function aplicarPermissoesChamado(permissoes) {
+    configurarCampo("wrapEditTitulo", "editTitulo", !!permissoes.podeEditarTitulo);
+    configurarCampo("wrapEditDescricao", "editDescricao", !!permissoes.podeEditarDescricao);
+    configurarCampo("wrapEditSolucao", "editSolucao", !!permissoes.podeEditarSolucao);
 
+    configurarCampo("wrapEditSetorId", "editSetorId", !!permissoes.podeEditarSetorId);
+    configurarCampo("wrapEditOcorrenciaTipoId", "editOcorrenciaTipoId", !!permissoes.podeEditarOcorrenciaTipoId);
+    configurarCampo("wrapEditOcorrenciaCategoriaId", "editOcorrenciaCategoriaId", !!permissoes.podeEditarOcorrenciaCategoriaId);
+    configurarCampo("wrapEditOcorrenciaSubcategoriaId", "editOcorrenciaSubcategoriaId", !!permissoes.podeEditarOcorrenciaSubcategoriaId);
+
+    configurarCampo("wrapEditAnexoArquivo", "editAnexoArquivo", !!permissoes.podeEditarAnexoChamado);
+
+    configurarCampo("wrapEditPrioridade", "editPrioridade", !!permissoes.podeEditarPrioridade);
+    configurarCampo("wrapEditCriticidade", "editCriticidade", !!permissoes.podeEditarCriticidade);
+    configurarCampo("wrapEditUrgencia", "editUrgencia", !!permissoes.podeEditarUrgencia);
+    configurarCampo("wrapEditStatus", "editStatus", !!permissoes.podeEditarStatus);
+
+    configurarCampo("wrapEditDataFinalizacao", "editDataFinalizacao", !!permissoes.podeEditarDataFinalizacao);
+    configurarCampo("wrapEditPrazoResposta", "editPrazoResposta", !!permissoes.podeEditarPrazoResposta);
+    configurarCampo("wrapEditPrazoConclusao", "editPrazoConclusao", !!permissoes.podeEditarPrazoConclusao);
+    configurarCampo("wrapEditPublico", "editPublico", !!permissoes.podeEditarPublico);
+
+    const btnExcluir = document.getElementById("btnExcluirChamado");
+    if (btnExcluir) {
+        btnExcluir.classList.toggle("d-none", !permissoes.podeExcluir);
+    }
+
+    const btnSalvar = document.getElementById("btnSalvarEdicao");
+    if (btnSalvar) {
+        const podeSalvar =
+            !!permissoes.podeEditarTitulo ||
+            !!permissoes.podeEditarDescricao ||
+            !!permissoes.podeEditarSolucao ||
+            !!permissoes.podeEditarSetorId ||
+            !!permissoes.podeEditarOcorrenciaTipoId ||
+            !!permissoes.podeEditarOcorrenciaCategoriaId ||
+            !!permissoes.podeEditarOcorrenciaSubcategoriaId ||
+            !!permissoes.podeEditarAnexoChamado ||
+            !!permissoes.podeEditarPrioridade ||
+            !!permissoes.podeEditarCriticidade ||
+            !!permissoes.podeEditarUrgencia ||
+            !!permissoes.podeEditarStatus ||
+            !!permissoes.podeEditarDataFinalizacao ||
+            !!permissoes.podeEditarPrazoResposta ||
+            !!permissoes.podeEditarPrazoConclusao ||
+            !!permissoes.podeEditarPublico;
+
+        btnSalvar.disabled = !podeSalvar;
+    }
+}
+
+function configurarCampo(wrapperId, inputId, podeEditar) {
+    const wrapper = document.getElementById(wrapperId);
+    const input = document.getElementById(inputId);
+
+    if (!wrapper || !input) return;
+
+    if (podeEditar) {
+        wrapper.classList.remove("d-none");
+        input.disabled = false;
+        input.readOnly = false;
+    } else {
+        wrapper.classList.add("d-none");
+        input.disabled = true;
+        input.readOnly = true;
+    }
+}
+
+function preencherFormularioEdicao(data) {
     const msg = document.getElementById("mensagemSelecioneChamado");
     const form = document.getElementById("formEdicaoChamado");
     const label = document.getElementById("chamadoSelecionadoLabel");
     const anexoTexto = document.getElementById("anexoAtualTexto");
+    const textoDataCriacao = document.getElementById("textoDataCriacao");
 
     if (!form) return;
 
@@ -237,13 +303,17 @@ function preencherFormularioEdicao(data) {
         anexoTexto.textContent = data.anexoChamado ? data.anexoChamado : "Nenhum";
     }
 
+    if (textoDataCriacao) {
+        textoDataCriacao.textContent = data.dataCriacao
+            ? new Date(data.dataCriacao).toLocaleString("pt-BR")
+            : "-";
+    }
+
     setValueIfExists("editPrioridade", data.prioridade);
     setValueIfExists("editCriticidade", data.criticidade);
     setValueIfExists("editUrgencia", data.urgencia);
     setValueIfExists("editStatus", data.status ?? "Aberto");
 
-    setValueIfExists("editDataInicioAtendimento", formatDateTimeLocal(data.dataInicioAtendimento));
-    setValueIfExists("editDataCriacao", formatDateTimeLocal(data.dataCriacao));
     setValueIfExists("editDataFinalizacao", formatDateTimeLocal(data.dataFinalizacao));
     setValueIfExists("editPrazoResposta", formatDateTimeLocal(data.prazoResposta));
     setValueIfExists("editPrazoConclusao", formatDateTimeLocal(data.prazoConclusao));
@@ -318,7 +388,6 @@ async function excluirChamado() {
         }
 
         const data = await response.json();
-        console.log("Resposta ExcluirChamado:", data);
 
         if (!data.success) {
             alert(data.message || "Erro ao excluir chamado.");
@@ -366,8 +435,6 @@ async function salvarEdicaoChamado() {
         criticidade: getNullableString("editCriticidade"),
         urgencia: getNullableString("editUrgencia"),
         status: getNullableString("editStatus"),
-        dataInicioAtendimento: toNullableDate(getValue("editDataInicioAtendimento")),
-        dataCriacao: toNullableDate(getValue("editDataCriacao")),
         dataFinalizacao: toNullableDate(getValue("editDataFinalizacao")),
         prazoResposta: toNullableDate(getValue("editPrazoResposta")),
         prazoConclusao: toNullableDate(getValue("editPrazoConclusao")),
@@ -401,7 +468,6 @@ async function salvarEdicaoChamado() {
         }
 
         const data = await response.json();
-        console.log("Resposta SalvarChamado:", data);
 
         if (!data.success) {
             alert(data.message || "Erro ao salvar chamado.");
