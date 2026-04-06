@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using CallStationApp.Data;
 using CallStationApp.Models;
 
-namespace CallStationApp.Pages;
+namespace CallStationApp.Pages.Menu;
 
 [Authorize]
 public class MenuModel : PageModel
@@ -19,6 +19,19 @@ public class MenuModel : PageModel
 
     public Usuario? UsuarioLogado { get; set; }
     public List<GrupoViewModel> Grupos { get; set; } = new();
+    public int TotalNotificacoesNaoLidas { get; set; }
+    public List<NotificacaoViewModel> Notificacoes { get; set; } = new();
+
+    public class NotificacaoViewModel
+    {
+        public int Id { get; set; }
+        public string Tipo { get; set; } = string.Empty;
+        public string Titulo { get; set; } = string.Empty;
+        public string Mensagem { get; set; } = string.Empty;
+        public bool Lida { get; set; }
+        public DateTime DataCriacao { get; set; }
+        public string? LinkDestino { get; set; }
+    }
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -32,6 +45,30 @@ public class MenuModel : PageModel
 
         if (UsuarioLogado == null)
             return RedirectToPage("/Login");
+
+        if (ModelState.IsValid && UsuarioLogado != null)
+{
+    TotalNotificacoesNaoLidas = await _context.Notificacoes
+        .AsNoTracking()
+        .CountAsync(n => n.UsuarioId == UsuarioLogado.Id && !n.Lida);
+
+    Notificacoes = await _context.Notificacoes
+        .AsNoTracking()
+        .Where(n => n.UsuarioId == UsuarioLogado.Id)
+        .OrderByDescending(n => n.DataCriacao)
+        .Take(20)
+        .Select(n => new NotificacaoViewModel
+        {
+            Id = n.Id,
+            Tipo = n.Tipo.ToString(),
+            Titulo = n.Titulo,
+            Mensagem = n.Mensagem,
+            Lida = n.Lida,
+            DataCriacao = n.DataCriacao,
+            LinkDestino = n.LinkDestino
+        })
+        .ToListAsync();
+}
 
         var vinculosUsuario = await _context.UsuariosGrupos
             .AsNoTracking()
@@ -197,8 +234,62 @@ public class MenuModel : PageModel
         {
             success = true,
             grupoId = novoGrupo.Id,
-            redirectUrl = Url.Page("/Home", new { grupoId = novoGrupo.Id })
+            redirectUrl = Url.Page("/Menu/Home", new { grupoId = novoGrupo.Id })
         });
+    }
+
+    public async Task<IActionResult> OnGetListarNotificacoesAsync()
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
+
+        var notificacoes = await _context.Notificacoes
+            .AsNoTracking()
+            .Where(n => n.UsuarioId == idUsuario.Value)
+            .OrderByDescending(n => n.DataCriacao)
+            .Take(30)
+            .Select(n => new
+            {
+                id = n.Id,
+                tipo = n.Tipo.ToString(),
+                titulo = n.Titulo,
+                mensagem = n.Mensagem,
+                lida = n.Lida,
+                dataCriacao = n.DataCriacao,
+                linkDestino = n.LinkDestino
+            })
+            .ToListAsync();
+
+        var naoLidas = notificacoes.Count(x => !x.lida);
+
+        return new JsonResult(new
+        {
+            success = true,
+            notificacoes,
+            totalNaoLidas = naoLidas
+        });
+    }
+
+    public async Task<IActionResult> OnPostMarcarNotificacoesComoLidasAsync()
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
+
+        var notificacoesNaoLidas = await _context.Notificacoes
+            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
+            .ToListAsync();
+
+        foreach (var notificacao in notificacoesNaoLidas)
+        {
+            notificacao.Lida = true;
+            notificacao.DataLeitura = DateTime.Now;
+        }
+
+        await _context.SaveChangesAsync();
+
+        return new JsonResult(new { success = true });
     }
 
     private int? GetUsuarioLogadoId()

@@ -5,7 +5,7 @@ using CallStationApp.Data;
 using CallStationApp.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CallStationApp.Pages;
+namespace CallStationApp.Pages.Menu;
 
 [Authorize]
 public class HomeModel : PageModel
@@ -34,20 +34,20 @@ public class HomeModel : PageModel
             return RedirectToPage("/Login");
 
         if (GrupoId <= 0)
-            return RedirectToPage("/Menu");
+            return RedirectToPage("/Menu/Menu");
 
         var pertenceAoGrupo = await _context.UsuariosGrupos
             .AnyAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId);
 
         if (!pertenceAoGrupo)
-            return RedirectToPage("/Menu");
+            return RedirectToPage("/Menu/Menu");
 
         GrupoAtual = await _context.Grupos
             .AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == GrupoId);
 
         if (GrupoAtual == null)
-            return RedirectToPage("/Menu");
+            return RedirectToPage("/Menu/Menu");
 
         Chamados = await _context.Chamados
             .AsNoTracking()

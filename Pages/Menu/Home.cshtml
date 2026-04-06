@@ -1,5 +1,5 @@
 @page
-@model CallStationApp.Pages.HomeModel
+@model CallStationApp.Pages.Menu.HomeModel
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 
 @{
@@ -322,7 +322,7 @@
                     </a>
                 </li>
                 <li>
-                    <a asp-page="/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
                         <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#people-circle"></use></svg>
                         Membros
                     </a>

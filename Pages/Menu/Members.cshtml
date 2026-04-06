@@ -1,6 +1,7 @@
 ﻿@page
 @using CallStationApp.Models
-@model CallStationApp.Pages.MembersModel
+@model CallStationApp.Pages.Menu.MembersModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Membros do Grupo";
 }
@@ -237,7 +238,7 @@
                         </div>
 
                         <div class="d-flex flex-wrap gap-2 mt-3 mt-md-0">
-                            <button type="button" class="btn btn-primary">
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAdicionarMembro">
                                 <i class="bi bi-person-plus me-1"></i>
                                 Adicionar membro
                             </button>
@@ -355,8 +356,204 @@
                 }
             </div>
         </div>
-    </main>
+        <div class="modal fade" id="modalAdicionarMembro" tabindex="-1" aria-labelledby="modalAdicionarMembroLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalAdicionarMembroLabel">
+                        Adicionar membro
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
 
+                <div class="modal-body">
+                    <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
+                    <input type="hidden" id="requestVerificationToken"
+                           value="@(Antiforgery.GetAndStoreTokens(HttpContext).RequestToken)" />
+
+                    <div class="mb-3">
+                        <label for="inputBuscarUsuario" class="form-label">
+                            Procurar por nome completo, nome de usuário ou e-mail
+                        </label>
+                        <input type="text" class="form-control" id="inputBuscarUsuario"
+                               placeholder="Digite pelo menos 2 caracteres..." autocomplete="off" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="inputMensagemConvite" class="form-label">Mensagem do convite (opcional)</label>
+                        <textarea class="form-control" id="inputMensagemConvite" rows="3"
+                                  placeholder="Ex.: Gostaria de te adicionar ao grupo."></textarea>
+                    </div>
+
+                    <div id="resultadoBuscaUsuarios" class="list-group"></div>
+
+                    <div id="usuarioSelecionadoBox" class="alert alert-light border mt-3 d-none">
+                        <div class="fw-semibold mb-1">Usuário selecionado</div>
+                        <div id="usuarioSelecionadoTexto" class="small text-muted"></div>
+                    </div>
+
+                    <div id="mensagemConviteFeedback" class="mt-3 d-none"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btnEnviarConvite" disabled>
+                        Enviar solicitação
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </main>
+    <script>
+        let timeoutBuscaUsuario = null;
+        let usuarioSelecionadoId = null;
+
+        const inputBuscarUsuario = document.getElementById("inputBuscarUsuario");
+        const inputMensagemConvite = document.getElementById("inputMensagemConvite");
+        const resultadoBuscaUsuarios = document.getElementById("resultadoBuscaUsuarios");
+        const usuarioSelecionadoBox = document.getElementById("usuarioSelecionadoBox");
+        const usuarioSelecionadoTexto = document.getElementById("usuarioSelecionadoTexto");
+        const btnEnviarConvite = document.getElementById("btnEnviarConvite");
+        const mensagemConviteFeedback = document.getElementById("mensagemConviteFeedback");
+        const grupoIdAtual = document.getElementById("grupoIdAtual").value;
+        const requestVerificationToken = document.getElementById("requestVerificationToken").value;
+        const modalAdicionarMembro = document.getElementById("modalAdicionarMembro");
+
+        function limparFeedbackConvite() {
+            mensagemConviteFeedback.className = "mt-3 d-none";
+            mensagemConviteFeedback.innerHTML = "";
+        }
+
+        function exibirFeedbackConvite(tipo, mensagem) {
+            mensagemConviteFeedback.className = `alert alert-${tipo} mt-3`;
+            mensagemConviteFeedback.innerHTML = mensagem;
+        }
+
+        function limparSelecaoUsuario() {
+            usuarioSelecionadoId = null;
+            usuarioSelecionadoBox.classList.add("d-none");
+            usuarioSelecionadoTexto.textContent = "";
+            btnEnviarConvite.disabled = true;
+        }
+
+        function renderizarResultados(usuarios) {
+            resultadoBuscaUsuarios.innerHTML = "";
+
+            if (!usuarios || usuarios.length === 0) {
+                resultadoBuscaUsuarios.innerHTML = `
+                    <div class="list-group-item text-muted">
+                        Nenhum usuário encontrado.
+                    </div>`;
+                return;
+            }
+
+            usuarios.forEach(usuario => {
+                const item = document.createElement("button");
+                item.type = "button";
+                item.className = "list-group-item list-group-item-action";
+
+                item.innerHTML = `
+                    <div class="fw-semibold">${usuario.nomeCompleto}</div>
+                    <div class="small text-muted">
+                        @@${usuario.nomeUsuario}${usuario.email ? " • " + usuario.email : ""}
+                    </div>
+                `;
+
+                item.addEventListener("click", () => {
+                    usuarioSelecionadoId = usuario.id;
+                    usuarioSelecionadoBox.classList.remove("d-none");
+                    usuarioSelecionadoTexto.textContent =
+                        `${usuario.nomeCompleto} (@@${usuario.nomeUsuario}${usuario.email ? " - " + usuario.email : ""})`;
+                    btnEnviarConvite.disabled = false;
+                });
+
+                resultadoBuscaUsuarios.appendChild(item);
+            });
+        }
+
+        inputBuscarUsuario.addEventListener("input", function () {
+            const termo = this.value.trim();
+            limparFeedbackConvite();
+            limparSelecaoUsuario();
+            resultadoBuscaUsuarios.innerHTML = "";
+
+            clearTimeout(timeoutBuscaUsuario);
+
+            if (termo.length < 2) {
+                return;
+            }
+
+            timeoutBuscaUsuario = setTimeout(async () => {
+                try {
+                    const response = await fetch(`/Menu/Members?handler=BuscarUsuarios&grupoId=${grupoIdAtual}&termo=${encodeURIComponent(termo)}`);
+                    const data = await response.json();
+
+                    if (!data.success) {
+                        exibirFeedbackConvite("danger", data.message || "Erro ao buscar usuários.");
+                        return;
+                    }
+
+                    renderizarResultados(data.usuarios);
+                } catch {
+                    exibirFeedbackConvite("danger", "Erro ao buscar usuários.");
+                }
+            }, 300);
+        });
+
+        btnEnviarConvite.addEventListener("click", async function () {
+            limparFeedbackConvite();
+
+            if (!usuarioSelecionadoId) {
+                exibirFeedbackConvite("warning", "Selecione um usuário antes de enviar a solicitação.");
+                return;
+            }
+
+            btnEnviarConvite.disabled = true;
+
+            try {
+                const response = await fetch(`/Menu/Members?handler=EnviarConvite&grupoId=${grupoIdAtual}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "RequestVerificationToken": requestVerificationToken
+                    },
+                    body: JSON.stringify({
+                        destinatarioUsuarioId: usuarioSelecionadoId,
+                        mensagem: inputMensagemConvite.value.trim()
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    exibirFeedbackConvite("danger", data.message || "Erro ao enviar solicitação.");
+                    btnEnviarConvite.disabled = false;
+                    return;
+                }
+
+                exibirFeedbackConvite("success", data.message || "Solicitação enviada com sucesso.");
+                inputBuscarUsuario.value = "";
+                inputMensagemConvite.value = "";
+                resultadoBuscaUsuarios.innerHTML = "";
+                limparSelecaoUsuario();
+
+            } catch {
+                exibirFeedbackConvite("danger", "Erro ao enviar solicitação.");
+                btnEnviarConvite.disabled = false;
+            }
+        });
+
+        modalAdicionarMembro.addEventListener("hidden.bs.modal", function () {
+            inputBuscarUsuario.value = "";
+            inputMensagemConvite.value = "";
+            resultadoBuscaUsuarios.innerHTML = "";
+            limparSelecaoUsuario();
+            limparFeedbackConvite();
+        });
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
             integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q"
             crossorigin="anonymous"></script>

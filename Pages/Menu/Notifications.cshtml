@@ -1,0 +1,417 @@
+﻿@page
+@model CallStationApp.Pages.Menu.NotificationsModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Notificações";
+
+    var fotoUsuario = !string.IsNullOrWhiteSpace(Model.UsuarioLogado?.FotoUsuario)
+        ? Model.UsuarioLogado!.FotoUsuario
+        : "/images/default-user.png";
+}
+
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CallStation - Notificações</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+        body {
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            min-height: 100vh;
+        }
+
+        .navbar-brand img {
+            object-fit: contain;
+        }
+
+        .perfil-img {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255,255,255,.15);
+        }
+
+        .page-box {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            border-radius: 1.25rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,.05);
+        }
+
+        .notificacao-card {
+            border: 1px solid #e9ecef;
+            border-radius: 1rem;
+            background: #fff;
+            transition: .2s ease;
+        }
+
+        .notificacao-card:hover {
+            box-shadow: 0 8px 20px rgba(0,0,0,.06);
+        }
+
+        .notificacao-card.nao-lida {
+            border-color: #cfe2ff;
+            background: #f8fbff;
+        }
+
+        .notificacao-tipo {
+            font-size: .75rem;
+            border-radius: 999px;
+            padding: .35rem .6rem;
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+        }
+
+        .notificacao-data {
+            font-size: .85rem;
+            color: #64748b;
+        }
+
+        .notificacao-mensagem {
+            color: #475569;
+        }
+
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+        }
+
+        .btn-notificacao-topo {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            border: 0;
+            border-radius: 50%;
+            background: rgba(255,255,255,.08);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .badge-notificacao {
+            min-width: 22px;
+            height: 22px;
+            padding: 0 6px;
+            border-radius: 999px;
+            font-size: .75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #dc3545;
+            color: #fff;
+        }
+
+        .empty-state {
+            border: 2px dashed #cbd5e1;
+            background: rgba(255,255,255,.7);
+            border-radius: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-dark border-bottom" data-bs-theme="dark">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center" asp-page="/Menu/Menu">
+                <img src="~/images/CallStationLogo.png" alt="CallStation" width="76" height="52" />
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNotifications" aria-controls="navbarNotifications" aria-expanded="false" aria-label="Alternar navegação">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNotifications">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" asp-page="/Menu/Menu">Meus quadros</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" asp-page="/Menu/Notifications">Notificações</a>
+                    </li>
+                </ul>
+
+                <div class="navbar-actions">
+                    <div class="btn-notificacao-topo" aria-label="Notificações">
+                        <i class="bi bi-bell fs-5"></i>
+                    </div>
+
+                    @if (Model.TotalNaoLidas > 0)
+                    {
+                        <span class="badge-notificacao" title="Notificações não lidas">
+                            @(Model.TotalNaoLidas > 9 ? "9+" : Model.TotalNaoLidas.ToString())
+                        </span>
+                    }
+
+                    <div class="dropdown">
+                        <a class="nav-link text-white d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+                            <img src="@fotoUsuario" alt="Perfil" class="perfil-img" />
+                            <span>@(Model.UsuarioLogado?.NomeUsuario ?? "Usuário")</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li class="dropdown-header">
+                                <strong>@(Model.UsuarioLogado?.NomeCompleto ?? "Usuário")</strong><br />
+                                <small class="text-muted">Sua conta</small>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#">Meu perfil</a></li>
+                            <li><a class="dropdown-item" href="#">Configurações</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container py-5">
+        <div class="page-box p-4 p-md-5 mb-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <h1 class="h3 mb-2">Histórico de notificações</h1>
+                    <p class="text-muted mb-0">
+                        Acompanhe convites, atualizações e alertas do sistema.
+                    </p>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            id="btnMarcarTodasComoLidas"
+                            @(Model.TotalNaoLidas == 0 ? "disabled" : null)>
+                        <i class="bi bi-check2-all me-2"></i>
+                        Marcar todas como lidas
+                    </button>
+
+                    <a asp-page="/Menu/Menu" class="btn btn-primary">
+                        <i class="bi bi-arrow-left me-2"></i>
+                        Voltar ao menu
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        @if (Model.Notificacoes.Any())
+        {
+            <div class="row g-3">
+                @foreach (var notificacao in Model.Notificacoes)
+                {
+                    <div class="col-12">
+                        <div class="notificacao-card @(notificacao.Lida ? "" : "nao-lida") p-4">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-2">
+                                <div>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                                        <span class="notificacao-tipo">@notificacao.Tipo</span>
+
+                                        @if (!notificacao.Lida)
+                                        {
+                                            <span class="badge text-bg-primary">Nova</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-light border text-dark">Lida</span>
+                                        }
+                                    </div>
+
+                                    <h2 class="h5 mb-1">@notificacao.Titulo</h2>
+                                </div>
+
+                                <div class="notificacao-data text-md-end">
+                                    <div>Criada em @notificacao.DataCriacao.ToString("dd/MM/yyyy HH:mm")</div>
+                                    @if (notificacao.DataLeitura.HasValue)
+                                    {
+                                        <div>Lida em @notificacao.DataLeitura.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                                    }
+                                </div>
+                            </div>
+
+                            <p class="notificacao-mensagem mb-0">
+                                @notificacao.Mensagem
+                            </p>
+
+                            @if (notificacao.PodeResponderConvite && notificacao.ReferenciaId.HasValue)
+                            {
+                                <div class="mt-3 d-flex gap-2">
+                                    <button type="button"
+                                            class="btn btn-sm btn-primary btn-acao-convite"
+                                            data-action-url="?handler=AceitarConvite"
+                                            data-notificacao-id="@notificacao.Id"
+                                            data-convite-id="@notificacao.ReferenciaId.Value">
+                                        <i class="bi bi-check2 me-1"></i>
+                                        Aceitar
+                                    </button>
+
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger btn-acao-convite"
+                                            data-action-url="?handler=RecusarConvite"
+                                            data-notificacao-id="@notificacao.Id"
+                                            data-convite-id="@notificacao.ReferenciaId.Value">
+                                        <i class="bi bi-x-lg me-1"></i>
+                                        Recusar
+                                    </button>
+                                </div>
+                            }
+                            else if (string.Equals(notificacao.ReferenciaTipo, "ConviteGrupoRespondidoAceito", StringComparison.Ordinal))
+                            {
+                                <div class="mt-3">
+                                    <span class="badge text-bg-success">Aceita</span>
+                                </div>
+                            }
+                            else if (string.Equals(notificacao.ReferenciaTipo, "ConviteGrupoRespondidoRecusado", StringComparison.Ordinal))
+                            {
+                                <div class="mt-3">
+                                    <span class="badge text-bg-danger">Recusada</span>
+                                </div>
+                            }
+                            else if (!string.Equals(notificacao.ReferenciaTipo, "ConviteGrupo", StringComparison.Ordinal) &&
+                                     !string.IsNullOrWhiteSpace(notificacao.LinkDestino))
+                            {
+                                <div class="mt-3">
+                                    <a href="@notificacao.LinkDestino" class="text-decoration-none">
+                                        Abrir notificação <i class="bi bi-arrow-right-short"></i>
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="empty-state text-center p-5">
+                <div class="mb-3">
+                    <i class="bi bi-bell-slash fs-1 text-secondary"></i>
+                </div>
+                <h2 class="h4">Nenhuma notificação encontrada</h2>
+                <p class="text-muted mb-0">
+                    Quando houver novos convites, alertas ou atualizações, eles aparecerão aqui.
+                </p>
+            </div>
+        }
+    </main>
+
+    <input type="hidden"
+           id="requestVerificationTokenNotifications"
+           value="@(Antiforgery.GetAndStoreTokens(HttpContext).RequestToken)" />
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        (function () {
+            const tokenElement = document.getElementById('requestVerificationTokenNotifications');
+            const btnMarcarTodasComoLidas = document.getElementById('btnMarcarTodasComoLidas');
+            const botoesAcaoConvite = document.querySelectorAll('.btn-acao-convite');
+
+            if (!tokenElement || !tokenElement.value) {
+                console.error('Token antiforgery não encontrado.');
+                return;
+            }
+
+            const requestVerificationToken = tokenElement.value;
+
+            async function enviarRequisicao(url, options = {}) {
+                const response = await fetch(url, {
+                    method: options.method || 'POST',
+                    headers: {
+                        'RequestVerificationToken': requestVerificationToken,
+                        ...(options.headers || {})
+                    },
+                    body: options.body || null
+                });
+
+                let data = null;
+                const contentType = response.headers.get('content-type') || '';
+
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                }
+
+                if (!response.ok) {
+                    const mensagemErro = data?.message || 'Ocorreu um erro ao processar a solicitação.';
+                    throw new Error(mensagemErro);
+                }
+
+                if (!data) {
+                    throw new Error('Resposta inválida do servidor.');
+                }
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Não foi possível concluir a ação.');
+                }
+
+                return data;
+            }
+
+            async function executarAcaoConvite(botao) {
+                const url = botao.dataset.actionUrl;
+                const notificacaoId = Number.parseInt(botao.dataset.notificacaoId, 10);
+                const conviteId = Number.parseInt(botao.dataset.conviteId, 10);
+
+                if (!url || Number.isNaN(notificacaoId) || Number.isNaN(conviteId) || notificacaoId <= 0 || conviteId <= 0) {
+                    alert('Dados inválidos para processar a ação.');
+                    return;
+                }
+
+                const textoOriginal = botao.innerHTML;
+
+                try {
+                    botao.disabled = true;
+
+                    await enviarRequisicao(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            notificacaoId: notificacaoId,
+                            conviteId: conviteId
+                        })
+                    });
+
+                    window.location.reload();
+                } catch (error) {
+                    console.error(error);
+                    alert(error.message || 'Ocorreu um erro ao processar a ação.');
+                    botao.disabled = false;
+                    botao.innerHTML = textoOriginal;
+                }
+            }
+
+            if (btnMarcarTodasComoLidas) {
+                btnMarcarTodasComoLidas.addEventListener('click', async function () {
+                    const textoOriginal = this.innerHTML;
+
+                    try {
+                        this.disabled = true;
+                        this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Processando...';
+
+                        await enviarRequisicao('?handler=MarcarTodasComoLidas');
+
+                        window.location.reload();
+                    } catch (error) {
+                        console.error(error);
+                        alert(error.message || 'Não foi possível marcar as notificações como lidas.');
+                        this.disabled = false;
+                        this.innerHTML = textoOriginal;
+                    }
+                });
+            }
+
+            botoesAcaoConvite.forEach(botao => {
+                botao.addEventListener('click', function () {
+                    executarAcaoConvite(this);
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 ﻿@page
-@model CallStationApp.Pages.MenuModel
+@model CallStationApp.Pages.Menu.MenuModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Menu";
     var fotoUsuario = !string.IsNullOrWhiteSpace(Model.UsuarioLogado?.FotoUsuario)
@@ -130,12 +131,87 @@
                 font-size: 1.8rem;
                 margin-bottom: 1rem;
             }
+            .navbar-actions {
+                display: flex;
+                align-items: center;
+                gap: .75rem;
+            }
+
+            .btn-notificacao {
+                position: relative;
+                width: 40px;
+                height: 40px;
+                border: 0;
+                border-radius: 50%;
+                background: transparent;
+                color: #fff;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                transition: .2s ease;
+            }
+
+            .btn-notificacao:hover {
+                background: rgba(255,255,255,.08);
+                color: #fff;
+            }
+
+            .badge-notificacao {
+                position: absolute;
+                top: 2px;
+                right: 1px;
+                min-width: 18px;
+                height: 18px;
+                padding: 0 5px;
+                border-radius: 999px;
+                font-size: .7rem;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: #dc3545;
+                color: #fff;
+                border: 2px solid #212529;
+            }
+
+            .notificacao-item {
+                border: 1px solid #eef2f7;
+                border-radius: .9rem;
+                padding: .9rem 1rem;
+                background: #fff;
+            }
+
+            .notificacao-item.nao-lida {
+                border-color: #cfe2ff;
+                background: #f8fbff;
+            }
+
+            .notificacao-titulo {
+                font-weight: 600;
+            }
+
+            .notificacao-mensagem {
+                color: #6b7280;
+                font-size: .95rem;
+            }
+
+            .notificacao-data {
+                font-size: .8rem;
+                color: #94a3b8;
+            }
+
+            .notificacoes-lista {
+                display: flex;
+                flex-direction: column;
+                gap: .75rem;
+                max-height: 420px;
+                overflow-y: auto;
+            }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg bg-dark border-bottom" data-bs-theme="dark">
         <div class="container-fluid px-4">
-            <a class="navbar-brand d-flex align-items-center" asp-page="/Menu">
+            <a class="navbar-brand d-flex align-items-center" asp-page="/Menu/Menu">
                 <img src="~/images/CallStationLogo.png" alt="CallStation" width="76" height="52" />
             </a>
 
@@ -146,26 +222,48 @@
             <div class="collapse navbar-collapse" id="navbarMenu">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link active" asp-page="/Menu">Meus quadros</a>
+                        <a class="nav-link active" asp-page="/Menu/Menu">Meus quadros</a>
                     </li>
                 </ul>
 
-                <div class="dropdown">
-                    <a class="nav-link text-white d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
-                        <img src="@fotoUsuario" alt="Perfil" class="perfil-img" />
-                        <span>@(Model.UsuarioLogado?.NomeUsuario ?? "Usuário")</span>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li class="dropdown-header">
-                            <strong>@(Model.UsuarioLogado?.NomeCompleto ?? "Usuário")</strong><br />
-                            <small class="text-muted">Sua conta</small>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#">Meu perfil</a></li>
-                        <li><a class="dropdown-item" href="#">Configurações</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
-                    </ul>
+                <div class="navbar-actions">
+                    <button type="button"
+                            class="btn-notificacao"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalNotificacoes"
+                            id="btnAbrirNotificacoes"
+                            aria-label="Notificações">
+                        <i class="bi bi-bell fs-5"></i>
+
+                        @if (Model.TotalNotificacoesNaoLidas > 0)
+                        {
+                            <span class="badge-notificacao" id="badgeNotificacoes">
+                                @(Model.TotalNotificacoesNaoLidas > 9 ? "9+" : Model.TotalNotificacoesNaoLidas.ToString())
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge-notificacao d-none" id="badgeNotificacoes">0</span>
+                        }
+                    </button>
+
+                    <div class="dropdown">
+                        <a class="nav-link text-white d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
+                            <img src="@fotoUsuario" alt="Perfil" class="perfil-img" />
+                            <span>@(Model.UsuarioLogado?.NomeUsuario ?? "Usuário")</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li class="dropdown-header">
+                                <strong>@(Model.UsuarioLogado?.NomeCompleto ?? "Usuário")</strong><br />
+                                <small class="text-muted">Sua conta</small>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#">Meu perfil</a></li>
+                            <li><a class="dropdown-item" href="#">Configurações</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -204,7 +302,7 @@
                             .ToArray());
 
                     <div class="col-12 col-sm-6 col-lg-4">
-                        <a asp-page="/Home"
+                        <a asp-page="/Menu/Home"
                                asp-route-grupoId="@grupo.GrupoId"
                                class="grupo-link">
                             <div class="grupo-card">
@@ -367,7 +465,119 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="modalNotificacoes" tabindex="-1" aria-labelledby="modalNotificacoesLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalNotificacoesLabel">
+                        <i class="bi bi-bell me-2"></i>
+                        Notificações
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
 
+                <div class="modal-body">
+                    <div id="listaNotificacoes" class="notificacoes-lista">
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
+                            Nenhuma notificação no momento.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer d-flex justify-content-between">
+                <a asp-page="/Menu/Notifications" class="btn btn-primary">
+                    <i class="bi bi-clock-history me-2"></i>
+                    Histórico
+                </a>
+
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Fechar
+                </button>
+            </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const btnAbrirNotificacoes = document.getElementById('btnAbrirNotificacoes');
+        const badgeNotificacoes = document.getElementById('badgeNotificacoes');
+        const listaNotificacoes = document.getElementById('listaNotificacoes');
+        const modalNotificacoes = document.getElementById('modalNotificacoes');
+
+        function formatarDataNotificacao(dataIso) {
+            const data = new Date(dataIso);
+            return data.toLocaleString('pt-BR');
+        }
+
+        function renderizarNotificacoes(notificacoes) {
+            if (!notificacoes || notificacoes.length === 0) {
+                listaNotificacoes.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
+                        Nenhuma notificação no momento.
+                    </div>
+                `;
+                return;
+            }
+
+            listaNotificacoes.innerHTML = notificacoes.map(n => `
+                <div class="notificacao-item ${n.lida ? '' : 'nao-lida'}">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                        <div class="notificacao-titulo">${n.titulo}</div>
+                        <div class="notificacao-data">${formatarDataNotificacao(n.dataCriacao)}</div>
+                    </div>
+
+                    <div class="notificacao-mensagem mb-2">${n.mensagem}</div>
+
+                    <a href="/Menu/Notifications" class="small text-decoration-none">Abrir</a>
+                </div>
+            `).join('');
+        }
+
+        async function carregarNotificacoes() {
+            try {
+                const response = await fetch('?handler=ListarNotificacoes');
+                const data = await response.json();
+
+                if (!data.success) {
+                    return;
+                }
+
+                renderizarNotificacoes(data.notificacoes);
+
+                if (data.totalNaoLidas > 0) {
+                    badgeNotificacoes.classList.remove('d-none');
+                    badgeNotificacoes.textContent = data.totalNaoLidas > 9 ? '9+' : data.totalNaoLidas;
+                } else {
+                    badgeNotificacoes.classList.add('d-none');
+                    badgeNotificacoes.textContent = '0';
+                }
+            } catch {
+            }
+        }
+
+        async function marcarNotificacoesComoLidas() {
+            try {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+                await fetch('?handler=MarcarNotificacoesComoLidas', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                badgeNotificacoes.classList.add('d-none');
+                badgeNotificacoes.textContent = '0';
+            } catch {
+            }
+        }
+
+        modalNotificacoes.addEventListener('show.bs.modal', async function () {
+            await carregarNotificacoes();
+            await marcarNotificacoesComoLidas();
+        });
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const formCriarGrupo = document.getElementById('formCriarGrupo');
@@ -402,5 +612,7 @@
         }
         });
     </script>
+    <input type="hidden" id="requestVerificationTokenMenu"
+       value="@(Antiforgery.GetAndStoreTokens(HttpContext).RequestToken)" />
 </body>
 </html>
