@@ -32,7 +32,7 @@ namespace CallStationApp.Models
         public bool Lida { get; set; } = false;
 
         [Column("data_criacao")]
-        public DateTime DataCriacao { get; set; } = DateTime.Now;
+        public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
 
         [Column("data_leitura")]
         public DateTime? DataLeitura { get; set; }

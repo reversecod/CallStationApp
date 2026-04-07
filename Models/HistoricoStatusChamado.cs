@@ -27,7 +27,7 @@ namespace CallStationApp.Models
         public required StatusNovoChamado StatusNovo { get; set; }
         
         [Column("data_transicao", TypeName = "datetime")]
-        public DateTime DataTransicao { get; set; } = DateTime.Now;
+        public DateTime DataTransicao { get; set; } = DateTime.UtcNow;
     }
     
     public enum StatusAnteriorChamado

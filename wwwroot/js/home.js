@@ -53,7 +53,7 @@ async function criarNovoChamado() {
     const grupoId = grupoIdInput.value;
 
     const chamadoDiv = document.createElement("div");
-    chamadoDiv.className = "ticket-card";
+    chamadoDiv.className = "ticket-card ticket-aberto";
 
     const img = document.createElement("img");
     img.src = "/images/logoticket.png";
@@ -63,7 +63,7 @@ async function criarNovoChamado() {
 
     const spanOuter = document.createElement("span");
     spanOuter.className = "ticket-text";
-    spanOuter.append("Criando... - ");
+    spanOuter.append("Criando... ");
 
     const spanCronometro = document.createElement("span");
     spanCronometro.className = "cronometro";
@@ -125,7 +125,7 @@ function atualizarCronometros() {
         }
 
         const diffMs = agora - criadoEm;
-        const totalSegundos = Math.floor(diffMs / 1000);
+        const totalSegundos = Math.max(0, Math.floor(diffMs / 1000));
 
         const dias = Math.floor(totalSegundos / 86400);
         const horas = Math.floor((totalSegundos % 86400) / 3600);
@@ -154,8 +154,14 @@ function atualizarCronometros() {
 async function carregarChamado(id) {
     chamadoSelecionadoId = id;
 
+    const grupoId = document.getElementById("grupoIdAtual")?.value;
+    if (!grupoId) {
+        alert("Grupo atual não encontrado.");
+        return;
+    }
+
     try {
-        const response = await fetch(`?handler=CarregarChamado&id=${encodeURIComponent(id)}`, {
+        const response = await fetch(`?handler=CarregarChamado&id=${encodeURIComponent(id)}&grupoId=${encodeURIComponent(grupoId)}`, {
             method: "GET"
         });
 

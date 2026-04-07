@@ -37,6 +37,6 @@ namespace CallStationApp.Models
         public int? TempoResolucao { get; set; }
                 
         [Column("data_avaliacao")]
-        public DateTime DataAvaliacao { get; set; } = DateTime.Now;
+        public DateTime DataAvaliacao { get; set; } = DateTime.UtcNow;
     }
 }

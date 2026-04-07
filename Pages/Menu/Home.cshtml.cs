@@ -99,9 +99,9 @@ public class HomeModel : PageModel
         if (idUsuario == null)
             return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
-        var chamado = await _context.Chamados
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == id);
+         var chamado = await _context.Chamados
+        .AsNoTracking()
+        .FirstOrDefaultAsync(c => c.Id == id && c.GrupoId == GrupoId);
 
         if (chamado == null)
             return new JsonResult(new { success = false, message = "Chamado não encontrado." });
@@ -165,7 +165,7 @@ public class HomeModel : PageModel
                 podeEditarPrazoResposta = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoResposta, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarPrazoConclusao = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarPublico = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Publico, idUsuario.Value, chamado.CriadorChamadoId),
-                podeExcluir = GrupoPermissionService.PodeExcluirChamado(contextoMembro.Permissao)
+                podeExcluir = GrupoPermissionService.PodeExcluirChamado(contextoMembro.Permissao, idUsuario.Value, chamado.CriadorChamadoId)
             }
         });
     }
@@ -265,7 +265,7 @@ public class HomeModel : PageModel
                         NumeroChamadoUsuario = numeroUsuario,
                         NumeroChamadoUsuarioGrupo = numeroUsuarioGrupo,
                         Status = StatusChamado.Aberto,
-                        DataCriacao = DateTime.Now,
+                        DataCriacao = DateTime.UtcNow,
                         Publico = false
                     };
 
@@ -335,7 +335,10 @@ public class HomeModel : PageModel
             return new JsonResult(new { success = false, message = "Você não tem permissão para visualizar este chamado." });
         }
 
-        if (!GrupoPermissionService.PodeExcluirChamado(contextoMembro.Permissao))
+        if (!GrupoPermissionService.PodeExcluirChamado(
+        contextoMembro.Permissao,
+        idUsuario.Value,
+        chamado.CriadorChamadoId))
         {
             return new JsonResult(new { success = false, message = "Você não tem permissão para excluir este chamado." });
         }
@@ -376,13 +379,136 @@ public class HomeModel : PageModel
         if (contextoMembro == null)
             return new JsonResult(new { success = false, message = "Você não tem acesso a este chamado." });
 
+        if (request.AnexoArquivo != null && request.AnexoArquivo.Length > 0)
+        {
+            var contentTypesPermitidos = new[]
+            {
+                "image/jpeg",
+                "image/png",
+                "application/pdf"
+            };
+
+            if (!contentTypesPermitidos.Contains(request.AnexoArquivo.ContentType))
+            {
+                return new JsonResult(new { success = false, message = "Conteúdo do arquivo não permitido." });
+            }
+
+            var extensoesPermitidas = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
+            var extensao = Path.GetExtension(request.AnexoArquivo.FileName).ToLowerInvariant();
+
+            if (!extensoesPermitidas.Contains(extensao))
+                return new JsonResult(new { success = false, message = "Tipo de arquivo não permitido." });
+
+            if (request.AnexoArquivo.Length > 5 * 1024 * 1024)
+                return new JsonResult(new { success = false, message = "Arquivo excede o limite de 5 MB." });
+        }
+
         if (!GrupoPermissionService.PodeVerChamado(
                 contextoMembro.Permissao,
                 chamado.Publico,
                 idUsuario.Value,
                 chamado.CriadorChamadoId))
         {
-            return new JsonResult(new { success = false, message = "Você não tem permissão para visualizar este chamado." });
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Você não tem permissão para visualizar este chamado."
+            });
+        }
+
+        if (request.GrupoId.HasValue && request.GrupoId.Value != chamado.GrupoId)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Não é permitido alterar o grupo do chamado."
+            });
+        }
+
+        if (request.SetorId.HasValue)
+        {
+            var setorValido = await _context.Setores
+                .AsNoTracking()
+                .AnyAsync(s => s.Id == request.SetorId.Value && s.GrupoId == chamado.GrupoId);
+
+            if (!setorValido)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "O setor informado não pertence ao grupo do chamado."
+                });
+            }
+        }
+
+        if (request.OcorrenciaTipoId.HasValue)
+        {
+            var tipoValido = await _context.OcorrenciasTipo
+                .AsNoTracking()
+                .AnyAsync(t => t.Id == request.OcorrenciaTipoId.Value && t.GrupoId == chamado.GrupoId);
+
+            if (!tipoValido)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "O tipo de ocorrência informado não pertence ao grupo do chamado."
+                });
+            }
+        }
+
+        if (request.OcorrenciaCategoriaId.HasValue)
+        {
+            if (!request.OcorrenciaTipoId.HasValue)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "A categoria informada exige um tipo de ocorrência válido."
+                });
+            }
+
+            var categoriaValida = await _context.OcorrenciasCategoria
+                .AsNoTracking()
+                .AnyAsync(c =>
+                    c.Id == request.OcorrenciaCategoriaId.Value &&
+                    c.TipoId == request.OcorrenciaTipoId.Value);
+
+            if (!categoriaValida)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "A categoria informada não pertence ao tipo de ocorrência selecionado."
+                });
+            }
+        }
+
+        if (request.OcorrenciaSubcategoriaId.HasValue)
+        {
+            if (!request.OcorrenciaCategoriaId.HasValue)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "A subcategoria informada exige uma categoria válida."
+                });
+            }
+
+            var subcategoriaValida = await _context.OcorrenciasSubcategoria
+                .AsNoTracking()
+                .AnyAsync(sc =>
+                    sc.Id == request.OcorrenciaSubcategoriaId.Value &&
+                    sc.CategoriaId == request.OcorrenciaCategoriaId.Value);
+
+            if (!subcategoriaValida)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "A subcategoria informada não pertence à categoria selecionada."
+                });
+            }
         }
 
         var houveAlteracao = false;
@@ -390,21 +516,21 @@ public class HomeModel : PageModel
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Titulo, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Titulo != request.Titulo)
         {
-            chamado.Titulo = request.Titulo;
+            chamado.Titulo = string.IsNullOrWhiteSpace(request.Titulo) ? null : request.Titulo.Trim();
             houveAlteracao = true;
         }
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Descricao, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Descricao != request.Descricao)
         {
-            chamado.Descricao = request.Descricao;
+            chamado.Descricao = string.IsNullOrWhiteSpace(request.Descricao) ? null : request.Descricao.Trim();
             houveAlteracao = true;
         }
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Solucao, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Solucao != request.Solucao)
         {
-            chamado.Solucao = request.Solucao;
+            chamado.Solucao = string.IsNullOrWhiteSpace(request.Solucao) ? null : request.Solucao.Trim();
             houveAlteracao = true;
         }
 
@@ -527,7 +653,11 @@ public class HomeModel : PageModel
         try
         {
             await _context.SaveChangesAsync();
-            return new JsonResult(new { success = true, message = "Chamado salvo com sucesso." });
+            return new JsonResult(new
+            {
+                success = true,
+                message = "Chamado salvo com sucesso."
+            });
         }
         catch (Exception ex)
         {

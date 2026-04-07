@@ -9,8 +9,19 @@ public static class GrupoPermissionService
         permissao == PermissaoUsuario.Tecnico ||
         permissao == PermissaoUsuario.Colaborador;
 
-    public static bool PodeExcluirChamado(PermissaoUsuario permissao) =>
-        permissao == PermissaoUsuario.Administracao;
+    public static bool PodeExcluirChamado(
+    PermissaoUsuario permissao,
+    int usuarioLogadoId,
+    int criadorChamadoId)
+    {
+        if (permissao == PermissaoUsuario.Administracao || permissao == PermissaoUsuario.Tecnico)
+            return true;
+
+        if (permissao == PermissaoUsuario.Colaborador)
+            return usuarioLogadoId == criadorChamadoId;
+
+        return false;
+    }
 
     public static bool PodeVerChamado(
         PermissaoUsuario permissao,

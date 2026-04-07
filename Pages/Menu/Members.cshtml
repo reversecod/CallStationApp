@@ -139,6 +139,19 @@
                 padding: 1rem;
             }
         }
+
+        .member-card {
+            overflow: visible;
+        }
+
+        .dropdown-menu {
+            z-index: 2000;
+        }
+
+        .content-wrapper {
+            overflow-y: auto;
+            overflow-x: visible;
+        }
     </style>
 </head>
 <body>
@@ -243,12 +256,15 @@
                         </div>
 
                         <div class="d-flex flex-wrap gap-2 mt-3 mt-md-0">
-                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAdicionarMembro">
-                                <i class="bi bi-person-plus me-1"></i>
-                                Adicionar membro
-                            </button>
+                            @if (Model.UsuarioLogadoEhAdministrador)
+                            {
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAdicionarMembro">
+                                    <i class="bi bi-person-plus me-1"></i>
+                                    Adicionar membro
+                                </button>
+                            }
 
-                            <a asp-page="/Home" asp-route-grupoId="@Model.GrupoId" class="btn btn-outline-secondary">
+                            <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="btn btn-outline-secondary">
                                 <i class="bi bi-arrow-left me-1"></i>
                                 Voltar
                             </a>
@@ -327,18 +343,44 @@
                                             Desde @membro.DataAdicao.ToString("dd/MM/yyyy")
                                         </small>
 
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
-                                                    data-bs-toggle="dropdown" aria-expanded="false">
-                                                Ações
-                                            </button>
-                                            <ul class="dropdown-menu dropdown-menu-end">
-                                                <li><button type="button" class="dropdown-item">Editar apelido</button></li>
-                                                <li><button type="button" class="dropdown-item">Alterar permissão</button></li>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li><button type="button" class="dropdown-item text-danger">Remover do grupo</button></li>
-                                            </ul>
-                                        </div>
+                                        @if (Model.UsuarioLogadoEhAdministrador)
+                                        {
+                                            <div class="dropdown">
+                                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                                    Ações
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    <li>
+                                                        <button type="button"
+                                                                class="dropdown-item btn-editar-apelido"
+                                                                data-usuario-id="@membro.UsuarioId"
+                                                                data-nome="@membro.NomeCompleto"
+                                                                data-apelido="@membro.Apelido">
+                                                            Editar apelido
+                                                        </button>
+                                                    </li>
+                                                    <li>
+                                                        <button type="button"
+                                                                class="dropdown-item btn-alterar-permissao"
+                                                                data-usuario-id="@membro.UsuarioId"
+                                                                data-nome="@membro.NomeCompleto"
+                                                                data-permissao="@membro.Permissao">
+                                                            Alterar permissão
+                                                        </button>
+                                                    </li>
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li>
+                                                        <button type="button"
+                                                                class="dropdown-item text-danger btn-remover-membro"
+                                                                data-usuario-id="@membro.UsuarioId"
+                                                                data-nome="@membro.NomeCompleto">
+                                                            Remover do grupo
+                                                        </button>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -362,56 +404,154 @@
             </div>
         </div>
         <div class="modal fade" id="modalAdicionarMembro" tabindex="-1" aria-labelledby="modalAdicionarMembroLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content border-0 shadow">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modalAdicionarMembroLabel">
-                        Adicionar membro
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                </div>
-
-                <div class="modal-body">
-                    <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
-                    <input type="hidden" id="requestVerificationToken"
-                           value="@(Antiforgery.GetAndStoreTokens(HttpContext).RequestToken)" />
-
-                    <div class="mb-3">
-                        <label for="inputBuscarUsuario" class="form-label">
-                            Procurar por nome completo, nome de usuário ou e-mail
-                        </label>
-                        <input type="text" class="form-control" id="inputBuscarUsuario"
-                               placeholder="Digite pelo menos 2 caracteres..." autocomplete="off" />
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalAdicionarMembroLabel">
+                            Adicionar membro
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="inputMensagemConvite" class="form-label">Mensagem do convite (opcional)</label>
-                        <textarea class="form-control" id="inputMensagemConvite" rows="3"
-                                  placeholder="Ex.: Gostaria de te adicionar ao grupo."></textarea>
+                    <div class="modal-body">
+                        <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
+                        <input type="hidden" id="requestVerificationToken"
+                               value="@(Antiforgery.GetAndStoreTokens(HttpContext).RequestToken)" />
+
+                        <div class="mb-3">
+                            <label for="inputBuscarUsuario" class="form-label">
+                                Procurar por nome completo, nome de usuário ou e-mail
+                            </label>
+                            <input type="text" class="form-control" id="inputBuscarUsuario"
+                                   placeholder="Digite pelo menos 2 caracteres..." autocomplete="off" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inputMensagemConvite" class="form-label">Mensagem do convite (opcional)</label>
+                            <textarea class="form-control" id="inputMensagemConvite" rows="3"
+                                      placeholder="Ex.: Gostaria de te adicionar ao grupo."></textarea>
+                        </div>
+
+                        <div id="resultadoBuscaUsuarios" class="list-group"></div>
+
+                        <div id="usuarioSelecionadoBox" class="alert alert-light border mt-3 d-none">
+                            <div class="fw-semibold mb-1">Usuário selecionado</div>
+                            <div id="usuarioSelecionadoTexto" class="small text-muted"></div>
+                        </div>
+
+                        <div id="mensagemConviteFeedback" class="mt-3 d-none"></div>
                     </div>
 
-                    <div id="resultadoBuscaUsuarios" class="list-group"></div>
-
-                    <div id="usuarioSelecionadoBox" class="alert alert-light border mt-3 d-none">
-                        <div class="fw-semibold mb-1">Usuário selecionado</div>
-                        <div id="usuarioSelecionadoTexto" class="small text-muted"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                            Cancelar
+                        </button>
+                        <button type="button" class="btn btn-primary" id="btnEnviarConvite" disabled>
+                            Enviar solicitação
+                        </button>
                     </div>
-
-                    <div id="mensagemConviteFeedback" class="mt-3 d-none"></div>
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                        Cancelar
-                    </button>
-                    <button type="button" class="btn btn-primary" id="btnEnviarConvite" disabled>
-                        Enviar solicitação
-                    </button>
                 </div>
             </div>
         </div>
-    </div>
+
+        <div class="modal fade" id="modalEditarApelido" tabindex="-1" aria-labelledby="modalEditarApelidoLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalEditarApelidoLabel">Editar apelido</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <input type="hidden" id="editarApelidoUsuarioId" />
+
+                        <div class="mb-3">
+                            <label class="form-label">Membro</label>
+                            <div id="editarApelidoNome" class="form-control-plaintext"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inputNovoApelido" class="form-label">Apelido no grupo</label>
+                            <input type="text" class="form-control" id="inputNovoApelido" maxlength="100" placeholder="Digite um apelido ou deixe em branco" />
+                        </div>
+
+                        <div id="feedbackEditarApelido" class="d-none"></div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="btnSalvarApelido">Salvar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalAlterarPermissao" tabindex="-1" aria-labelledby="modalAlterarPermissaoLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalAlterarPermissaoLabel">Alterar permissão</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <input type="hidden" id="alterarPermissaoUsuarioId" />
+
+                        <div class="mb-3">
+                            <label class="form-label">Membro</label>
+                            <div id="alterarPermissaoNome" class="form-control-plaintext"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="selectNovaPermissao" class="form-label">Nova permissão</label>
+                            <select id="selectNovaPermissao" class="form-select">
+                                <option value="Nenhuma">Nenhuma</option>
+                                <option value="Colaborador">Colaborador</option>
+                                <option value="Tecnico">Técnico</option>
+                                <option value="Administracao">Administração</option>
+                            </select>
+                        </div>
+
+                        <div id="feedbackAlterarPermissao" class="d-none"></div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="btnSalvarPermissao">Salvar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalRemoverMembro" tabindex="-1" aria-labelledby="modalRemoverMembroLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalRemoverMembroLabel">Remover membro</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <input type="hidden" id="removerMembroUsuarioId" />
+
+                        <p class="mb-2">Tem certeza que deseja remover este membro do grupo?</p>
+                        <div class="fw-semibold" id="removerMembroNome"></div>
+
+                        <div id="feedbackRemoverMembro" class="d-none mt-3"></div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-danger" id="btnConfirmarRemoverMembro">Remover</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q"
+            crossorigin="anonymous">
+   </script>
     <script>
         let timeoutBuscaUsuario = null;
         let usuarioSelecionadoId = null;
@@ -423,9 +563,35 @@
         const usuarioSelecionadoTexto = document.getElementById("usuarioSelecionadoTexto");
         const btnEnviarConvite = document.getElementById("btnEnviarConvite");
         const mensagemConviteFeedback = document.getElementById("mensagemConviteFeedback");
-        const grupoIdAtual = document.getElementById("grupoIdAtual").value;
-        const requestVerificationToken = document.getElementById("requestVerificationToken").value;
-        const modalAdicionarMembro = document.getElementById("modalAdicionarMembro");
+        const grupoIdAtual = document.getElementById("grupoIdAtual")?.value;
+        const requestVerificationToken = document.getElementById("requestVerificationToken")?.value;
+        const modalAdicionarMembroElement = document.getElementById("modalAdicionarMembro");
+
+        const modalEditarApelidoElement = document.getElementById("modalEditarApelido");
+        const modalAlterarPermissaoElement = document.getElementById("modalAlterarPermissao");
+        const modalRemoverMembroElement = document.getElementById("modalRemoverMembro");
+
+        const modalAdicionarMembro = modalAdicionarMembroElement ? bootstrap.Modal.getOrCreateInstance(modalAdicionarMembroElement) : null;
+        const modalEditarApelido = modalEditarApelidoElement ? bootstrap.Modal.getOrCreateInstance(modalEditarApelidoElement) : null;
+        const modalAlterarPermissao = modalAlterarPermissaoElement ? bootstrap.Modal.getOrCreateInstance(modalAlterarPermissaoElement) : null;
+        const modalRemoverMembro = modalRemoverMembroElement ? bootstrap.Modal.getOrCreateInstance(modalRemoverMembroElement) : null;
+
+        const editarApelidoUsuarioId = document.getElementById("editarApelidoUsuarioId");
+        const editarApelidoNome = document.getElementById("editarApelidoNome");
+        const inputNovoApelido = document.getElementById("inputNovoApelido");
+        const btnSalvarApelido = document.getElementById("btnSalvarApelido");
+        const feedbackEditarApelido = document.getElementById("feedbackEditarApelido");
+
+        const alterarPermissaoUsuarioId = document.getElementById("alterarPermissaoUsuarioId");
+        const alterarPermissaoNome = document.getElementById("alterarPermissaoNome");
+        const selectNovaPermissao = document.getElementById("selectNovaPermissao");
+        const btnSalvarPermissao = document.getElementById("btnSalvarPermissao");
+        const feedbackAlterarPermissao = document.getElementById("feedbackAlterarPermissao");
+
+        const removerMembroUsuarioId = document.getElementById("removerMembroUsuarioId");
+        const removerMembroNome = document.getElementById("removerMembroNome");
+        const btnConfirmarRemoverMembro = document.getElementById("btnConfirmarRemoverMembro");
+        const feedbackRemoverMembro = document.getElementById("feedbackRemoverMembro");
 
         function limparFeedbackConvite() {
             mensagemConviteFeedback.className = "mt-3 d-none";
@@ -479,7 +645,20 @@
             });
         }
 
-        inputBuscarUsuario.addEventListener("input", function () {
+        function limparFeedbackElemento(elemento) {
+            if (!elemento) return;
+            elemento.className = "d-none";
+            elemento.textContent = "";
+            elemento.innerHTML = "";
+        }
+
+        function exibirFeedbackElemento(elemento, tipo, mensagem) {
+            if (!elemento) return;
+            elemento.className = `alert alert-${tipo}`;
+            elemento.textContent = mensagem;
+        }
+
+        inputBuscarUsuario?.addEventListener("input", function () {
             const termo = this.value.trim();
             limparFeedbackConvite();
             limparSelecaoUsuario();
@@ -508,7 +687,7 @@
             }, 300);
         });
 
-        btnEnviarConvite.addEventListener("click", async function () {
+        btnEnviarConvite?.addEventListener("click", async function () {
             limparFeedbackConvite();
 
             if (!usuarioSelecionadoId) {
@@ -544,23 +723,169 @@
                 inputMensagemConvite.value = "";
                 resultadoBuscaUsuarios.innerHTML = "";
                 limparSelecaoUsuario();
-
             } catch {
                 exibirFeedbackConvite("danger", "Erro ao enviar solicitação.");
                 btnEnviarConvite.disabled = false;
             }
         });
 
-        modalAdicionarMembro.addEventListener("hidden.bs.modal", function () {
+        modalAdicionarMembroElement?.addEventListener("hidden.bs.modal", function () {
             inputBuscarUsuario.value = "";
             inputMensagemConvite.value = "";
             resultadoBuscaUsuarios.innerHTML = "";
             limparSelecaoUsuario();
             limparFeedbackConvite();
         });
+
+        document.querySelectorAll(".btn-editar-apelido").forEach(btn => {
+            btn.addEventListener("click", () => {
+                editarApelidoUsuarioId.value = btn.dataset.usuarioId || "";
+                editarApelidoNome.textContent = btn.dataset.nome || "";
+                inputNovoApelido.value = btn.dataset.apelido || "";
+                limparFeedbackElemento(feedbackEditarApelido);
+                modalEditarApelido?.show();
+            });
+        });
+
+        document.querySelectorAll(".btn-alterar-permissao").forEach(btn => {
+            btn.addEventListener("click", () => {
+                alterarPermissaoUsuarioId.value = btn.dataset.usuarioId || "";
+                alterarPermissaoNome.textContent = btn.dataset.nome || "";
+                selectNovaPermissao.value = btn.dataset.permissao || "Nenhuma";
+                limparFeedbackElemento(feedbackAlterarPermissao);
+                modalAlterarPermissao?.show();
+            });
+        });
+
+        document.querySelectorAll(".btn-remover-membro").forEach(btn => {
+            btn.addEventListener("click", () => {
+                removerMembroUsuarioId.value = btn.dataset.usuarioId || "";
+                removerMembroNome.textContent = btn.dataset.nome || "";
+                limparFeedbackElemento(feedbackRemoverMembro);
+                modalRemoverMembro?.show();
+            });
+        });
+
+        btnSalvarApelido?.addEventListener("click", async () => {
+            limparFeedbackElemento(feedbackEditarApelido);
+            btnSalvarApelido.disabled = true;
+
+            try {
+                const response = await fetch(`/Menu/Members?handler=EditarApelido&grupoId=${grupoIdAtual}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "RequestVerificationToken": requestVerificationToken
+                    },
+                    body: JSON.stringify({
+                        usuarioId: parseInt(editarApelidoUsuarioId.value, 10),
+                        apelido: inputNovoApelido.value.trim()
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    exibirFeedbackElemento(feedbackEditarApelido, "danger", data.message || "Erro ao editar apelido.");
+                    btnSalvarApelido.disabled = false;
+                    return;
+                }
+
+                exibirFeedbackElemento(feedbackEditarApelido, "success", data.message || "Apelido atualizado com sucesso.");
+                setTimeout(() => window.location.reload(), 700);
+            } catch {
+                exibirFeedbackElemento(feedbackEditarApelido, "danger", "Erro ao editar apelido.");
+                btnSalvarApelido.disabled = false;
+            }
+        });
+
+        btnSalvarPermissao?.addEventListener("click", async () => {
+            limparFeedbackElemento(feedbackAlterarPermissao);
+            btnSalvarPermissao.disabled = true;
+
+            try {
+                const response = await fetch(`/Menu/Members?handler=AlterarPermissao&grupoId=${grupoIdAtual}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "RequestVerificationToken": requestVerificationToken
+                    },
+                    body: JSON.stringify({
+                        usuarioId: parseInt(alterarPermissaoUsuarioId.value, 10),
+                        novaPermissao: selectNovaPermissao.value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    exibirFeedbackElemento(feedbackAlterarPermissao, "danger", data.message || "Erro ao alterar permissão.");
+                    btnSalvarPermissao.disabled = false;
+                    return;
+                }
+
+                exibirFeedbackElemento(feedbackAlterarPermissao, "success", data.message || "Permissão alterada com sucesso.");
+                setTimeout(() => window.location.reload(), 700);
+            } catch {
+                exibirFeedbackElemento(feedbackAlterarPermissao, "danger", "Erro ao alterar permissão.");
+                btnSalvarPermissao.disabled = false;
+            }
+        });
+
+        btnConfirmarRemoverMembro?.addEventListener("click", async () => {
+            limparFeedbackElemento(feedbackRemoverMembro);
+            btnConfirmarRemoverMembro.disabled = true;
+
+            try {
+                const response = await fetch(`/Menu/Members?handler=RemoverMembro&grupoId=${grupoIdAtual}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "RequestVerificationToken": requestVerificationToken
+                    },
+                    body: JSON.stringify({
+                        usuarioId: parseInt(removerMembroUsuarioId.value, 10)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    exibirFeedbackElemento(feedbackRemoverMembro, "danger", data.message || "Erro ao remover membro.");
+                    btnConfirmarRemoverMembro.disabled = false;
+                    return;
+                }
+
+                exibirFeedbackElemento(feedbackRemoverMembro, "success", data.message || "Membro removido com sucesso.");
+                setTimeout(() => window.location.reload(), 700);
+            } catch {
+                exibirFeedbackElemento(feedbackRemoverMembro, "danger", "Erro ao remover membro.");
+                btnConfirmarRemoverMembro.disabled = false;
+            }
+        });
+
+        modalEditarApelidoElement?.addEventListener("hidden.bs.modal", () => {
+            editarApelidoUsuarioId.value = "";
+            editarApelidoNome.textContent = "";
+            inputNovoApelido.value = "";
+            limparFeedbackElemento(feedbackEditarApelido);
+            btnSalvarApelido.disabled = false;
+        });
+
+        modalAlterarPermissaoElement?.addEventListener("hidden.bs.modal", () => {
+            alterarPermissaoUsuarioId.value = "";
+            alterarPermissaoNome.textContent = "";
+            selectNovaPermissao.value = "Nenhuma";
+            limparFeedbackElemento(feedbackAlterarPermissao);
+            btnSalvarPermissao.disabled = false;
+        });
+
+        modalRemoverMembroElement?.addEventListener("hidden.bs.modal", () => {
+            removerMembroUsuarioId.value = "";
+            removerMembroNome.textContent = "";
+            limparFeedbackElemento(feedbackRemoverMembro);
+            btnConfirmarRemoverMembro.disabled = false;
+        });
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q"
-            crossorigin="anonymous"></script>
 </body>
 </html>

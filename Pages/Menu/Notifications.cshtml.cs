@@ -121,7 +121,7 @@ public class NotificationsModel : PageModel
             });
         }
 
-        var agora = DateTime.Now;
+        var agora = DateTime.UtcNow;
 
         foreach (var notificacao in notificacoes)
         {
@@ -138,211 +138,188 @@ public class NotificationsModel : PageModel
         });
     }
 
-    public async Task<IActionResult> OnPostAceitarConviteAsync([FromBody] AcaoConviteRequest? request)
+    public async Task<IActionResult> OnPostAceitarConviteAsync([FromBody] ResponderConviteRequest request)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-        {
-            return new JsonResult(new { success = false, message = "Usuário não autenticado." })
-            {
-                StatusCode = StatusCodes.Status401Unauthorized
-            };
-        }
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
-        if (request == null || request.NotificacaoId <= 0 || request.ConviteId <= 0)
-            return BadRequest(new { success = false, message = "Dados inválidos." });
+        if (request == null || request.ConviteId <= 0)
+            return new JsonResult(new { success = false, message = "Convite inválido." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
 
         try
         {
-            var notificacao = await _context.Notificacoes
-                .FirstOrDefaultAsync(n => n.Id == request.NotificacaoId && n.UsuarioId == idUsuario.Value);
-
-            if (notificacao == null)
-                return NotFound(new { success = false, message = "Notificação não encontrada." });
-
-            var convite = await _context.ConvitesGrupo
-                .FirstOrDefaultAsync(c =>
-                    c.Id == request.ConviteId &&
-                    c.DestinatarioUsuarioId == idUsuario.Value);
-
-            if (convite == null)
-                return NotFound(new { success = false, message = "Convite não encontrado." });
-
-            if (convite.Status != StatusConviteGrupo.Pendente)
-                return BadRequest(new { success = false, message = "Esse convite já foi respondido." });
-
-            var usuarioDestino = await _context.Usuarios
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == idUsuario.Value);
-
-            var grupo = await _context.Grupos
-                .AsNoTracking()
-                .FirstOrDefaultAsync(g => g.Id == convite.GrupoId);
-
-            var jaEstaNoGrupo = await _context.UsuariosGrupos
-                .AnyAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == convite.GrupoId);
-
-            var agora = DateTime.Now;
-
-            if (!jaEstaNoGrupo)
+            return await strategy.ExecuteAsync(async () =>
             {
-                _context.UsuariosGrupos.Add(new UsuarioGrupo
-                {
-                    UsuarioId = idUsuario.Value,
-                    GrupoId = convite.GrupoId,
-                    Permissao = PermissaoUsuario.Nenhuma,
-                    DataAdicao = agora
-                });
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                var jaExisteInfoUsuarioGrupo = await _context.InfoUsuariosGrupos
-                    .AnyAsync(iug => iug.UsuarioId == idUsuario.Value && iug.GrupoId == convite.GrupoId);
-
-                if (!jaExisteInfoUsuarioGrupo)
+                try
                 {
-                    _context.InfoUsuariosGrupos.Add(new InfoUsuarioGrupo
+                    var convite = await _context.ConvitesGrupo
+                        .FirstOrDefaultAsync(c => c.Id == request.ConviteId &&
+                                                  c.DestinatarioUsuarioId == idUsuario.Value);
+
+                    if (convite == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Convite não encontrado." });
+
+                    if (convite.Status != StatusConviteGrupo.Pendente)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Este convite não está mais pendente." });
+
+                    var vinculoExistente = await _context.UsuariosGrupos
+                        .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value &&
+                                                   ug.GrupoId == convite.GrupoId);
+
+                    if (vinculoExistente != null && vinculoExistente.Ativo)
                     {
-                        UsuarioId = idUsuario.Value,
-                        GrupoId = convite.GrupoId,
-                        DataAtualizacaoRegistro = agora
+                        convite.Status = StatusConviteGrupo.Cancelado;
+                        convite.DataResposta = DateTime.UtcNow;
+
+                        var notificacaoExistenteAtivo = await _context.Notificacoes
+                            .FirstOrDefaultAsync(n =>
+                                n.UsuarioId == idUsuario.Value &&
+                                n.ReferenciaId == convite.Id &&
+                                n.ReferenciaTipo == "ConviteGrupo");
+
+                        if (notificacaoExistenteAtivo != null)
+                        {
+                            notificacaoExistenteAtivo.Titulo = "Convite cancelado";
+                            notificacaoExistenteAtivo.Mensagem = "Este convite foi cancelado porque você já faz parte deste grupo.";
+                            notificacaoExistenteAtivo.ReferenciaTipo = "ConviteGrupoCancelado";
+                            notificacaoExistenteAtivo.Lida = true;
+                            notificacaoExistenteAtivo.DataLeitura = DateTime.UtcNow;
+                        }
+
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = false,
+                            message = "Você já faz parte deste grupo."
+                        });
+                    }
+
+                    if (vinculoExistente != null && !vinculoExistente.Ativo)
+                    {
+                        vinculoExistente.Ativo = true;
+                        vinculoExistente.Permissao = PermissaoUsuario.Nenhuma;
+                        vinculoExistente.DataRemocao = null;
+                        vinculoExistente.RemovidoPorUsuarioId = null;
+                        vinculoExistente.DataAdicao = DateTime.UtcNow;
+                    }
+                    else if (vinculoExistente == null)
+                    {
+                        var vinculo = new UsuarioGrupo
+                        {
+                            UsuarioId = idUsuario.Value,
+                            GrupoId = convite.GrupoId,
+                            Permissao = PermissaoUsuario.Nenhuma,
+                            DataAdicao = DateTime.UtcNow,
+                            Ativo = true
+                        };
+
+                        _context.UsuariosGrupos.Add(vinculo);
+                    }
+
+                    convite.Status = StatusConviteGrupo.Aceito;
+                    convite.DataResposta = DateTime.UtcNow;
+
+                    var notificacao = await _context.Notificacoes
+                        .FirstOrDefaultAsync(n =>
+                            n.UsuarioId == idUsuario.Value &&
+                            n.ReferenciaId == convite.Id &&
+                            n.ReferenciaTipo == "ConviteGrupo");
+
+                    if (notificacao != null)
+                    {
+                        notificacao.Titulo = "Convite aceito";
+                        notificacao.Mensagem = "Você aceitou o convite para participar deste grupo.";
+                        notificacao.ReferenciaTipo = "ConviteGrupoRespondidoAceito";
+                        notificacao.Lida = true;
+                        notificacao.DataLeitura = DateTime.UtcNow;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = "Convite aceito com sucesso."
                     });
                 }
-            }
-
-            convite.Status = StatusConviteGrupo.Aceito;
-            convite.DataResposta = agora;
-
-            notificacao.Titulo = "Convite aceito";
-            notificacao.Mensagem = $"Você aceitou o convite para participar do grupo {(grupo?.Nome ?? "Grupo")}.";
-            notificacao.Lida = true;
-            notificacao.DataLeitura = agora;
-            notificacao.LinkDestino = null;
-            notificacao.ReferenciaTipo = "ConviteGrupoRespondidoAceito";
-
-            if (convite.RemetenteUsuarioId > 0 && convite.RemetenteUsuarioId != idUsuario.Value)
-            {
-                _context.Notificacoes.Add(new Notificacao
+                catch
                 {
-                    UsuarioId = convite.RemetenteUsuarioId,
-                    Tipo = TipoNotificacao.Sistema,
-                    Titulo = "Convite aceito",
-                    Mensagem = $"{(usuarioDestino?.NomeCompleto ?? usuarioDestino?.NomeUsuario ?? "O usuário")} aceitou o convite para participar do grupo {(grupo?.Nome ?? "Grupo")}.",
-                    Lida = false,
-                    DataCriacao = agora,
-                    DataLeitura = null,
-                    LinkDestino = "/Menu/Notifications",
-                    ReferenciaId = convite.Id,
-                    ReferenciaTipo = "RespostaConviteGrupoAceito"
-                });
-            }
-
-            await _context.SaveChangesAsync();
-
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (DbUpdateException ex)
+        {
             return new JsonResult(new
             {
-                success = true,
-                message = "Convite aceito com sucesso."
+                success = false,
+                message = ex.InnerException?.Message ?? ex.Message
             });
         }
         catch (Exception ex)
         {
-            var detalhe = ex.InnerException?.Message ?? ex.Message;
-
-            return StatusCode(StatusCodes.Status500InternalServerError, new
+            return new JsonResult(new
             {
                 success = false,
-                message = $"Ocorreu um erro interno ao aceitar o convite. Detalhe: {detalhe}"
+                message = ex.InnerException?.Message ?? ex.Message
             });
         }
     }
 
-    public async Task<IActionResult> OnPostRecusarConviteAsync([FromBody] AcaoConviteRequest? request)
+    public async Task<IActionResult> OnPostRecusarConviteAsync([FromBody] ResponderConviteRequest request)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
+
+        var convite = await _context.ConvitesGrupo
+            .FirstOrDefaultAsync(c => c.Id == request.ConviteId && c.DestinatarioUsuarioId == idUsuario.Value);
+
+        if (convite == null)
+            return new JsonResult(new { success = false, message = "Convite não encontrado." });
+
+        if (convite.Status != StatusConviteGrupo.Pendente)
+            return new JsonResult(new { success = false, message = "Este convite não está mais pendente." });
+
+        convite.Status = StatusConviteGrupo.Recusado;
+        convite.DataResposta = DateTime.UtcNow;
+
+        var notificacao = await _context.Notificacoes
+        .FirstOrDefaultAsync(n =>
+            n.UsuarioId == idUsuario.Value &&
+            n.ReferenciaId == convite.Id &&
+            n.ReferenciaTipo == "ConviteGrupo");
+
+        if (notificacao != null)
         {
-            return new JsonResult(new { success = false, message = "Usuário não autenticado." })
-            {
-                StatusCode = StatusCodes.Status401Unauthorized
-            };
-        }
-
-        if (request == null || request.NotificacaoId <= 0 || request.ConviteId <= 0)
-            return BadRequest(new { success = false, message = "Dados inválidos." });
-
-        try
-        {
-            var notificacao = await _context.Notificacoes
-                .FirstOrDefaultAsync(n => n.Id == request.NotificacaoId && n.UsuarioId == idUsuario.Value);
-
-            if (notificacao == null)
-                return NotFound(new { success = false, message = "Notificação não encontrada." });
-
-            var convite = await _context.ConvitesGrupo
-                .FirstOrDefaultAsync(c =>
-                    c.Id == request.ConviteId &&
-                    c.DestinatarioUsuarioId == idUsuario.Value);
-
-            if (convite == null)
-                return NotFound(new { success = false, message = "Convite não encontrado." });
-
-            if (convite.Status != StatusConviteGrupo.Pendente)
-                return BadRequest(new { success = false, message = "Esse convite já foi respondido." });
-
-            var usuarioDestino = await _context.Usuarios
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == idUsuario.Value);
-
-            var grupo = await _context.Grupos
-                .AsNoTracking()
-                .FirstOrDefaultAsync(g => g.Id == convite.GrupoId);
-
-            var agora = DateTime.Now;
-
-            convite.Status = StatusConviteGrupo.Recusado;
-            convite.DataResposta = agora;
-
             notificacao.Titulo = "Convite recusado";
-            notificacao.Mensagem = $"Você recusou o convite para participar do grupo {(grupo?.Nome ?? "Grupo")}.";
-            notificacao.Lida = true;
-            notificacao.DataLeitura = agora;
-            notificacao.LinkDestino = null;
+            notificacao.Mensagem = "Você recusou o convite para participar deste grupo.";
             notificacao.ReferenciaTipo = "ConviteGrupoRespondidoRecusado";
-
-            if (convite.RemetenteUsuarioId > 0 && convite.RemetenteUsuarioId != idUsuario.Value)
-            {
-                _context.Notificacoes.Add(new Notificacao
-                {
-                    UsuarioId = convite.RemetenteUsuarioId,
-                    Tipo = TipoNotificacao.Sistema,
-                    Titulo = "Convite recusado",
-                    Mensagem = $"{(usuarioDestino?.NomeCompleto ?? usuarioDestino?.NomeUsuario ?? "O usuário")} recusou o convite para participar do grupo {(grupo?.Nome ?? "Grupo")}.",
-                    Lida = false,
-                    DataCriacao = agora,
-                    DataLeitura = null,
-                    LinkDestino = "/Menu/Notifications",
-                    ReferenciaId = convite.Id,
-                    ReferenciaTipo = "RespostaConviteGrupoRecusado"
-                });
-            }
-
-            await _context.SaveChangesAsync();
-
-            return new JsonResult(new
-            {
-                success = true,
-                message = "Convite recusado com sucesso."
-            });
+            notificacao.Lida = true;
+            notificacao.DataLeitura = DateTime.UtcNow;
         }
-        catch (Exception ex)
+
+        await _context.SaveChangesAsync();
+
+        return new JsonResult(new
         {
-            var detalhe = ex.InnerException?.Message ?? ex.Message;
+            success = true,
+            message = "Convite recusado com sucesso."
+        });
+    }
 
-            return StatusCode(StatusCodes.Status500InternalServerError, new
-            {
-                success = false,
-                message = $"Ocorreu um erro interno ao recusar o convite. Detalhe: {detalhe}"
-            });
-        }
+    public class ResponderConviteRequest
+    {
+        public int ConviteId { get; set; }
     }
 
     private int? GetUsuarioLogadoId()

@@ -71,10 +71,10 @@ public class MenuModel : PageModel
 }
 
         var vinculosUsuario = await _context.UsuariosGrupos
-            .AsNoTracking()
-            .Where(ug => ug.UsuarioId == idUsuario.Value)
-            .Include(ug => ug.Grupo)
-            .ToListAsync();
+        .AsNoTracking()
+        .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
+        .Include(ug => ug.Grupo)
+        .ToListAsync();
 
         if (!vinculosUsuario.Any())
             return Page();
@@ -100,15 +100,15 @@ public class MenuModel : PageModel
             .ToListAsync();
 
         var membrosPorGrupo = await _context.UsuariosGrupos
-            .AsNoTracking()
-            .Where(ug => grupoIds.Contains(ug.GrupoId))
-            .GroupBy(ug => ug.GrupoId)
-            .Select(g => new
-            {
-                GrupoId = g.Key,
-                TotalMembros = g.Count()
-            })
-            .ToListAsync();
+        .AsNoTracking()
+        .Where(ug => grupoIds.Contains(ug.GrupoId) && ug.Ativo)
+        .GroupBy(ug => ug.GrupoId)
+        .Select(g => new
+        {
+            GrupoId = g.Key,
+            TotalMembros = g.Count()
+        })
+        .ToListAsync();
 
         var infosUsuarioGrupo = await _context.InfoUsuariosGrupos
             .AsNoTracking()
@@ -199,7 +199,7 @@ public class MenuModel : PageModel
             EtiquetaCor = corConvertida,
             CriadorId = idUsuario.Value,
             Usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value),
-            DataCriacao = DateTime.Now
+            DataCriacao = DateTime.UtcNow
         };
 
         _context.Grupos.Add(novoGrupo);
@@ -210,7 +210,7 @@ public class MenuModel : PageModel
             UsuarioId = idUsuario.Value,
             GrupoId = novoGrupo.Id,
             Permissao = PermissaoUsuario.Administracao,
-            DataAdicao = DateTime.Now,
+            DataAdicao = DateTime.UtcNow,
             Usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value),
             Grupo = novoGrupo
         };
@@ -221,7 +221,7 @@ public class MenuModel : PageModel
         {
             UsuarioId = idUsuario.Value,
             GrupoId = novoGrupo.Id,
-            DataAtualizacaoRegistro = DateTime.Now,
+            DataAtualizacaoRegistro = DateTime.UtcNow,
             Usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value),
             Grupo = novoGrupo
         };
@@ -284,7 +284,7 @@ public class MenuModel : PageModel
         foreach (var notificacao in notificacoesNaoLidas)
         {
             notificacao.Lida = true;
-            notificacao.DataLeitura = DateTime.Now;
+            notificacao.DataLeitura = DateTime.UtcNow;
         }
 
         await _context.SaveChangesAsync();

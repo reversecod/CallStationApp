@@ -31,6 +31,6 @@ namespace CallStationApp.Models
         public string? AnexoComentario { get; set; }
         
         [Column("data_comentario")]
-        public DateTime DataComentario { get; set; } = DateTime.Now;
+        public DateTime DataComentario { get; set; } = DateTime.UtcNow;
     }
 }

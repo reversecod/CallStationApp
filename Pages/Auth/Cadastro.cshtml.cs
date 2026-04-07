@@ -85,7 +85,7 @@ public class CadastroModel : PageModel
             NomeCompleto = NomeCompleto,
             NomeUsuario = NomeUsuario,
             Email = string.IsNullOrWhiteSpace(Email) ? null : Email,
-            DataCriacao = DateTime.Now
+            DataCriacao = DateTime.UtcNow
         };
         
         novoUsuario.Senha = _passwordHasher.HashPassword(novoUsuario, Senha);

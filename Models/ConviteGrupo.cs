@@ -31,7 +31,7 @@ namespace CallStationApp.Models
         public string? Mensagem { get; set; }
 
         [Column("data_criacao")]
-        public DateTime DataCriacao { get; set; } = DateTime.Now;
+        public DateTime DataCriacao { get; set; } = DateTime.UtcNow;
 
         [Column("data_resposta")]
         public DateTime? DataResposta { get; set; }

@@ -43,7 +43,7 @@ namespace CallStationApp.Models
         public StatusTarefa? Status { get; set; } = StatusTarefa.Pendente;
         
         [Column("data_criacao")]
-        public DateTime DataCriacao  { get; set; } = DateTime.Now;
+        public DateTime DataCriacao  { get; set; } = DateTime.UtcNow;
         
         [Column("data_conclusao")]
         public DateTime? DataConclusao { get; set; }

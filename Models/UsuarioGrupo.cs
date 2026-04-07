@@ -25,7 +25,20 @@ namespace CallStationApp.Models
         public PermissaoUsuario Permissao { get; set; } = PermissaoUsuario.Nenhuma;
 
         [Column("data_adicao")]
-        public DateTime DataAdicao { get; set; } = DateTime.Now;
+        public DateTime DataAdicao { get; set; } = DateTime.UtcNow;
+
+        [Required]
+        [Column("ativo")]
+        public bool Ativo { get; set; } = true;
+
+        [Column("data_remocao")]
+        public DateTime? DataRemocao { get; set; }
+
+        [Column("removido_por_usuario_id")]
+        public int? RemovidoPorUsuarioId { get; set; }
+
+        [ForeignKey(nameof(RemovidoPorUsuarioId))]
+        public Usuario? RemovidoPorUsuario { get; set; }
     }
 
     public enum PermissaoUsuario

@@ -1,7 +1,7 @@
 @page
 @model CallStationApp.Pages.Menu.HomeModel
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
-
+@using CallStationApp.Models
 @{
   ViewData["Title"] = "Home";
 }
@@ -181,23 +181,33 @@
       }
 
       .ticket-card {
-        display: flex;
-        align-items: center;
-        padding: 0.75rem 1.5rem;
-        border-radius: 5rem;
-        background: linear-gradient(to right, #1cae88, #78d64b);
-        /* Alterado de width: fit-content para uma largura maior */
-        min-width: 35rem; /* Largura mínima para alcançar a linha vermelha */
-        max-width: 40rem; /* Limite máximo para evitar overflow */
-        height: 6.25rem;
-        font-weight: bold;
-        font-size: 2rem;
-        color: white;
-        gap: 1rem;
-        box-shadow: 0 0.25rem 0.625rem rgba(0, 0, 0, 0.1);
-        animation: aparecer 0.3s ease-out;
-        cursor: pointer;
-      }
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 1.5rem;
+      border-radius: 5rem;
+      min-width: 35rem;
+      max-width: 40rem;
+      height: 6.25rem;
+      font-weight: bold;
+      font-size: 2rem;
+      color: white;
+      gap: 1rem;
+      box-shadow: 0 0.25rem 0.625rem rgba(0, 0, 0, 0.1);
+      animation: aparecer 0.3s ease-out;
+      cursor: pointer;
+    }
+
+    .ticket-aberto {
+      background: linear-gradient(to right, #1cae88, #78d64b);
+    }
+
+    .ticket-pendente {
+      background: linear-gradient(to right, #d6a800, #f2d43d);
+    }
+
+    .ticket-em-andamento {
+      background: linear-gradient(to right, #1677c8, #4ea3f1);
+    }
 
       @@keyframes aparecer {
         0% {
@@ -319,7 +329,7 @@
                 <li>
                     <a href="#" class="nav-link link-body-emphasis">
                         <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
-                        Products
+                        Histórico
                     </a>
                 </li>
                 <li>
@@ -367,11 +377,19 @@
                                     ? chamado.Titulo
                                     : $"Chamado {numeroLocal}";
 
-                            <div class="ticket-card" data-id="@chamado.Id" role="button">
+                            var classeStatus = chamado.Status switch
+                            {
+                                StatusChamado.Aberto => "ticket-aberto",
+                                StatusChamado.Pendente => "ticket-pendente",
+                                StatusChamado.EmAndamento => "ticket-em-andamento",
+                                _ => "ticket-aberto"
+                            };
+
+                            <div class="ticket-card @classeStatus" data-id="@chamado.Id" role="button">
                                 <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="eager" />
                                 <span class="ticket-text">
                                     @chamado.Status - @tituloOuNumero -
-                                    <span class="cronometro" data-criado-em="@chamado.DataCriacao.ToString("o")"></span>
+                                    <span class="cronometro" data-criado-em="@DateTime.SpecifyKind(chamado.DataCriacao, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")"></span>
                                 </span>
                             </div>
                         }

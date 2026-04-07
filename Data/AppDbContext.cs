@@ -134,6 +134,29 @@ namespace CallStationApp.Data
                     .HasColumnName("data_adicao")
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(ug => ug.Ativo)
+                    .HasColumnName("ativo")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(ug => ug.DataRemocao)
+                    .HasColumnName("data_remocao")
+                    .HasColumnType("datetime");
+
+                entity.Property(ug => ug.RemovidoPorUsuarioId)
+                    .HasColumnName("removido_por_usuario_id");
+
+                entity.HasOne(ug => ug.RemovidoPorUsuario)
+                    .WithMany()
+                    .HasForeignKey(ug => ug.RemovidoPorUsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(ug => new { ug.GrupoId, ug.Ativo })
+                    .HasDatabaseName("idx_ug_grupo_ativo");
+
+                entity.HasIndex(ug => new { ug.UsuarioId, ug.Ativo })
+                    .HasDatabaseName("idx_ug_usuario_ativo");
             });
 
             // ===== InfoUsuarioGrupo =====
@@ -334,9 +357,15 @@ namespace CallStationApp.Data
                     .HasColumnName("numero_chamado_usuario_grupo");
 
                 // ===== FK COMPOSTA (REGRA DO SISTEMA) =====
-                entity.HasOne<UsuarioGrupo>()
+                entity.HasOne<Usuario>()
                     .WithMany()
-                    .HasForeignKey(c => new { c.CriadorChamadoId, c.GrupoId });
+                    .HasForeignKey(c => c.CriadorChamadoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne<Grupo>()
+                    .WithMany()
+                    .HasForeignKey(c => c.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
 
                 // ===== ÍNDICES =====
                 entity.HasIndex(c => c.GrupoId).HasDatabaseName("idx_chamados_grupo");
@@ -450,9 +479,15 @@ namespace CallStationApp.Data
                     .IsRequired();
 
                 // ===== FK COMPOSTA (REGRA DO SISTEMA) =====
-                entity.HasOne<UsuarioGrupo>()
+                entity.HasOne<Usuario>()
                     .WithMany()
-                    .HasForeignKey(t => new { t.CriadorId, t.GrupoId });
+                    .HasForeignKey(t => t.CriadorId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne<Grupo>()
+                    .WithMany()
+                    .HasForeignKey(t => t.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
 
                 // ===== ÍNDICES =====
                 entity.HasIndex(t => t.GrupoId).HasDatabaseName("idx_tarefas_grupo");

@@ -39,6 +39,6 @@ namespace CallStationApp.Models
         public DateTime? DataAtualizacaoAtivo { get; set; }
 
         [Column("data_atualizacao_registro")]
-        public DateTime DataAtualizacaoRegistro { get; set; } = DateTime.Now;
+        public DateTime DataAtualizacaoRegistro { get; set; } = DateTime.UtcNow;
     }
 }

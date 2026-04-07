@@ -16,7 +16,10 @@ public class GrupoAuthorizationService
     {
         var membro = await _context.UsuariosGrupos
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.UsuarioId == usuarioId && x.GrupoId == grupoId);
+            .FirstOrDefaultAsync(x =>
+                x.UsuarioId == usuarioId &&
+                x.GrupoId == grupoId &&
+                x.Ativo);
 
         if (membro == null)
             return null;
