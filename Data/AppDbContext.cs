@@ -171,8 +171,8 @@ namespace CallStationApp.Data
                     .HasForeignKey(iu => new { iu.UsuarioId, iu.GrupoId });
 
                 entity.Property(iu => iu.Apelido)
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
+                    .HasColumnType("varchar(35)")
+                    .HasMaxLength(35);
 
                 entity.Property(iu => iu.DescricaoAtivo)
                     .HasColumnName("descricao_ativo")
@@ -282,8 +282,8 @@ namespace CallStationApp.Data
 
                 // ===== CAMPOS BÁSICOS =====
                 entity.Property(c => c.Titulo)
-                    .HasColumnType("varchar(50)")
-                    .HasMaxLength(50);
+                    .HasColumnType("varchar(35)")
+                    .HasMaxLength(35);
 
                 entity.Property(c => c.Descricao)
                     .HasColumnType("text");

@@ -388,7 +388,7 @@
                             <div class="ticket-card @classeStatus" data-id="@chamado.Id" role="button">
                                 <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="eager" />
                                 <span class="ticket-text">
-                                    @chamado.Status - @tituloOuNumero -
+                                    @tituloOuNumero -
                                     <span class="cronometro" data-criado-em="@DateTime.SpecifyKind(chamado.DataCriacao, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")"></span>
                                 </span>
                             </div>
@@ -431,7 +431,7 @@
 
                                 <div class="mb-2" id="wrapEditTitulo">
                                     <label for="editTitulo" class="form-label">Título</label>
-                                    <input type="text" class="form-control" id="editTitulo" maxlength="50">
+                                    <input type="text" class="form-control" id="editTitulo" maxlength="35">
                                 </div>
 
                                 <div class="mb-2" id="wrapEditDescricao">

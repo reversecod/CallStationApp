@@ -19,8 +19,8 @@ namespace CallStationApp.Models
         [ForeignKey(nameof(GrupoId))]
         public Grupo Grupo { get; set; } = null!;
 
-        [Column("apelido", TypeName = "varchar(100)")]
-        [StringLength(100, ErrorMessage = "O apelido não pode exceder 100 caracteres.")]
+        [Column("apelido", TypeName = "varchar(35)")]
+        [StringLength(35, ErrorMessage = "O apelido não pode exceder 35 caracteres.")]
         public string? Apelido { get; set; }
 
         [Column("descricao_ativo", TypeName = "varchar(500)")]

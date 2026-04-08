@@ -30,8 +30,8 @@ namespace CallStationApp.Models
         // =====================
         // CONTEÚDO
         // =====================
-        [Column("titulo", TypeName = "varchar(50)")]
-        [StringLength(50)]
+        [Column("titulo", TypeName = "varchar(35)")]
+        [StringLength(35)]
         public string? Titulo { get; set; }
 
         [Column("descricao", TypeName = "varchar(1000)")]
