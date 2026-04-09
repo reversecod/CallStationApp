@@ -176,7 +176,7 @@ async function carregarChamado(id) {
             return;
         }
 
-        preencherFormularioEdicao(data);
+        await preencherFormularioEdicao(data);
         aplicarPermissoesChamado(data.permissoes ?? {});
     } catch (error) {
         console.error("Erro ao carregar chamado:", error);
@@ -277,7 +277,65 @@ function configurarCampo(wrapperId, inputId, podeEditar) {
     }
 }
 
-function preencherFormularioEdicao(data) {
+function normalizarTextoParaClasse(valor) {
+    return String(valor ?? "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "");
+}
+
+function formatarStatusChamado(valor) {
+    switch (valor) {
+        case "EmAndamento":
+            return "Em andamento";
+        case "Concluido":
+            return "Concluido";
+        case "Reaberto":
+            return "Reaberto";
+        default:
+            return valor || "-";
+    }
+}
+
+function atualizarResumoChamado(data) {
+    const metaInfo = document.getElementById("chamadoMetaInfo");
+    const criadoPor = document.getElementById("chamadoCriadoPor");
+    const criadoPorWrap = document.getElementById("chamadoCriadoPorWrap");
+    const statusInfo = document.getElementById("chamadoStatusInfo");
+    const statusWrap = document.getElementById("chamadoStatusWrap");
+    const label = document.getElementById("chamadoSelecionadoLabel");
+
+    if (label) {
+        label.textContent = data.id ? `Chamado ${data.id}` : "Chamado";
+        label.className = "badge badge-chamado-selecionado";
+        label.classList.remove("d-none");
+    }
+
+    if (statusInfo && statusWrap) {
+        const statusClasse = `badge-status-${normalizarTextoParaClasse(data.status || "aberto")}`;
+        statusInfo.textContent = formatarStatusChamado(data.status);
+        statusInfo.className = `meta-badge ${statusClasse}`;
+        statusWrap.classList.remove("d-none");
+    }
+
+    if (metaInfo && criadoPor && criadoPorWrap) {
+        metaInfo.classList.remove("d-none");
+
+        if (data.criadorNomeUsuario && data.criadorPermissao) {
+            const permissaoClasse = `badge-permissao-${normalizarTextoParaClasse(data.criadorPermissao)}`;
+            criadoPor.textContent = data.criadorNomeUsuario;
+            criadoPor.className = `meta-badge ${permissaoClasse}`;
+            criadoPorWrap.classList.remove("d-none");
+        } else {
+            criadoPor.textContent = "-";
+            criadoPor.className = "meta-badge badge-permissao-nenhuma";
+            criadoPorWrap.classList.add("d-none");
+        }
+    }
+}
+
+async function preencherFormularioEdicao(data) {
     const msg = document.getElementById("mensagemSelecioneChamado");
     const form = document.getElementById("formEdicaoChamado");
     const label = document.getElementById("chamadoSelecionadoLabel");
@@ -289,10 +347,7 @@ function preencherFormularioEdicao(data) {
     if (msg) msg.classList.add("d-none");
     form.classList.remove("d-none");
 
-    if (label) {
-        label.textContent = data.id ? `Chamado ${data.id}` : "Chamado";
-        label.classList.remove("d-none");
-    }
+    atualizarResumoChamado(data);
 
     setValueIfExists("editId", data.id);
     setValueIfExists("editTitulo", data.titulo);
@@ -302,8 +357,8 @@ function preencherFormularioEdicao(data) {
     setValueIfExists("editGrupoId", data.grupoId);
     setValueIfExists("editSetorId", data.setorId);
     setValueIfExists("editOcorrenciaTipoId", data.ocorrenciaTipoId);
-    setValueIfExists("editOcorrenciaCategoriaId", data.ocorrenciaCategoriaId);
-    setValueIfExists("editOcorrenciaSubcategoriaId", data.ocorrenciaSubcategoriaId);
+    await carregarCategorias(data.ocorrenciaTipoId, data.ocorrenciaCategoriaId);
+    await carregarSubcategorias(data.ocorrenciaCategoriaId, data.ocorrenciaSubcategoriaId);
 
     if (anexoTexto) {
         anexoTexto.textContent = data.anexoChamado ? data.anexoChamado : "Nenhum";
@@ -343,19 +398,44 @@ function inicializarBotoesEdicao() {
     if (btnExcluir) {
         btnExcluir.addEventListener("click", excluirChamado);
     }
+
+    const selectTipo = document.getElementById("editOcorrenciaTipoId");
+    const selectCategoria = document.getElementById("editOcorrenciaCategoriaId");
+
+    if (selectTipo) {
+        selectTipo.addEventListener("change", async function () {
+            await carregarCategorias(this.value, null);
+            await carregarSubcategorias(null, null);
+        });
+    }
+
+    if (selectCategoria) {
+        selectCategoria.addEventListener("change", async function () {
+            await carregarSubcategorias(this.value, null);
+        });
+    }
 }
 
 function cancelarEdicaoChamado() {
     const form = document.getElementById("formEdicaoChamado");
     const msg = document.getElementById("mensagemSelecioneChamado");
     const label = document.getElementById("chamadoSelecionadoLabel");
+    const metaInfo = document.getElementById("chamadoMetaInfo");
+    const criadoPorWrap = document.getElementById("chamadoCriadoPorWrap");
+    const statusInfo = document.getElementById("chamadoStatusInfo");
+    const statusWrap = document.getElementById("chamadoStatusWrap");
 
     if (form) form.classList.add("d-none");
     if (msg) msg.classList.remove("d-none");
+    if (metaInfo) metaInfo.classList.add("d-none");
+    if (criadoPorWrap) criadoPorWrap.classList.add("d-none");
+    if (statusInfo) statusInfo.className = "meta-badge badge-status-aberto";
+    if (statusWrap) statusWrap.classList.add("d-none");
 
     if (label) {
         label.classList.add("d-none");
         label.textContent = "";
+        label.className = "badge badge-chamado-selecionado d-none";
     }
 
     chamadoSelecionadoId = null;
@@ -509,4 +589,78 @@ function toNullableInt(value) {
 function toNullableDate(value) {
     if (!value) return null;
     return value;
+}
+
+async function carregarCategorias(tipoId, categoriaSelecionada) {
+    const selectCategoria = document.getElementById("editOcorrenciaCategoriaId");
+    if (!selectCategoria) return;
+
+    selectCategoria.innerHTML = '<option value="">Selecione</option>';
+
+    if (!tipoId) {
+        return;
+    }
+
+    const grupoId = document.getElementById("grupoIdAtual")?.value;
+    if (!grupoId) return;
+
+    try {
+        const response = await fetch(`?handler=CategoriasPorTipo&grupoId=${encodeURIComponent(grupoId)}&tipoId=${encodeURIComponent(tipoId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao carregar categorias.");
+        }
+
+        data.categorias.forEach(categoria => {
+            const option = document.createElement("option");
+            option.value = categoria.id;
+            option.textContent = categoria.nome;
+            if (String(categoria.id) === String(categoriaSelecionada)) {
+                option.selected = true;
+            }
+
+            selectCategoria.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Erro ao carregar categorias:", error);
+        alert(error.message || "Erro ao carregar categorias.");
+    }
+}
+
+async function carregarSubcategorias(categoriaId, subcategoriaSelecionada) {
+    const selectSubcategoria = document.getElementById("editOcorrenciaSubcategoriaId");
+    if (!selectSubcategoria) return;
+
+    selectSubcategoria.innerHTML = '<option value="">Selecione</option>';
+
+    if (!categoriaId) {
+        return;
+    }
+
+    const grupoId = document.getElementById("grupoIdAtual")?.value;
+    if (!grupoId) return;
+
+    try {
+        const response = await fetch(`?handler=SubcategoriasPorCategoria&grupoId=${encodeURIComponent(grupoId)}&categoriaId=${encodeURIComponent(categoriaId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Erro ao carregar subcategorias.");
+        }
+
+        data.subcategorias.forEach(subcategoria => {
+            const option = document.createElement("option");
+            option.value = subcategoria.id;
+            option.textContent = subcategoria.nome;
+            if (String(subcategoria.id) === String(subcategoriaSelecionada)) {
+                option.selected = true;
+            }
+
+            selectSubcategoria.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Erro ao carregar subcategorias:", error);
+        alert(error.message || "Erro ao carregar subcategorias.");
+    }
 }

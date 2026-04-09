@@ -5,16 +5,10 @@ namespace CallStationApp.Models
 {
     public class Chamado
     {
-        // =====================
-        // ID TÉCNICO
-        // =====================
         [Key]
         [Column("id")]
         public int Id { get; set; }
 
-        // =====================
-        // IDS DE NEGÓCIO
-        // =====================
         [Required]
         [Column("numero_chamado_grupo")]
         public int NumeroChamadoGrupo { get; set; }
@@ -27,24 +21,18 @@ namespace CallStationApp.Models
         [Column("numero_chamado_usuario_grupo")]
         public int NumeroChamadoUsuarioGrupo { get; set; }
 
-        // =====================
-        // CONTEÚDO
-        // =====================
         [Column("titulo", TypeName = "varchar(35)")]
         [StringLength(35)]
         public string? Titulo { get; set; }
 
-        [Column("descricao", TypeName = "varchar(1000)")]
-        [StringLength(1000)]
+        [Column("descricao", TypeName = "varchar(500)")]
+        [StringLength(500)]
         public string? Descricao { get; set; }
 
-        [Column("solucao", TypeName = "varchar(1000)")]
-        [StringLength(1000)]
+        [Column("solucao", TypeName = "varchar(500)")]
+        [StringLength(500)]
         public string? Solucao { get; set; }
 
-        // =====================
-        // RELAÇÃO COM GRUPO / USUÁRIO
-        // =====================
         [Required]
         [Column("grupo_id")]
         public int GrupoId { get; set; }
@@ -53,9 +41,6 @@ namespace CallStationApp.Models
         [Column("criador_chamado_id")]
         public int CriadorChamadoId { get; set; }
 
-        // =====================
-        // CLASSIFICAÇÕES
-        // =====================
         [Column("ocorrencia_tipo_id")]
         public int? OcorrenciaTipoId { get; set; }
 
@@ -68,16 +53,10 @@ namespace CallStationApp.Models
         [Column("setor_id")]
         public int? SetorId { get; set; }
 
-        // =====================
-        // OUTROS CAMPOS
-        // =====================
         [Column("anexo_chamado", TypeName = "varchar(255)")]
         [StringLength(255)]
         public string? AnexoChamado { get; set; }
 
-        // =====================
-        // ENUMS
-        // =====================
         [Column("prioridade")]
         public PrioridadeChamado? Prioridade { get; set; }
 
@@ -91,9 +70,6 @@ namespace CallStationApp.Models
         [Column("status")]
         public StatusChamado Status { get; set; } = StatusChamado.Aberto;
 
-        // =====================
-        // DATAS
-        // =====================
         [Column("data_inicio_atendimento")]
         public DateTime? DataInicioAtendimento { get; set; }
 
@@ -109,11 +85,9 @@ namespace CallStationApp.Models
         [Column("prazo_conclusao")]
         public DateTime? PrazoConclusao { get; set; }
 
-        // =====================
-        // VISIBILIDADE
-        // =====================
         [Column("publico")]
         public bool Publico { get; set; } = false;
+
         public ICollection<HistoricoAlteracaoChamado> HistoricoAlteracoes { get; set; } = new List<HistoricoAlteracaoChamado>();
     }
 
@@ -121,41 +95,31 @@ namespace CallStationApp.Models
     {
         [Display(Name = "Aberto")]
         Aberto,
-
         [Display(Name = "Em Andamento")]
         EmAndamento,
-
         [Display(Name = "Pendente")]
         Pendente,
-
-        [Display(Name = "Concluído")]
+        [Display(Name = "Concluido")]
         Concluido,
-
         [Display(Name = "Fechado")]
         Fechado,
-
         [Display(Name = "Reaberto")]
         Reaberto,
-
         [Display(Name = "Cancelado")]
         Cancelado,
-
-        [Display(Name = "Excluído")]
+        [Display(Name = "Excluido")]
         Excluido
     }
 
     public enum UrgenciaChamado
     {
-        [Display(Name = "Não Urgente")]
+        [Display(Name = "Nao Urgente")]
         NaoUrgente,
-
-        [Display(Name = "Pouca Urgência")]
+        [Display(Name = "Pouca Urgencia")]
         PoucaUrgencia,
-
         [Display(Name = "Urgente")]
         Urgente,
-
-        [Display(Name = "Emergência")]
+        [Display(Name = "Emergencia")]
         Emergencia
     }
 
@@ -163,14 +127,11 @@ namespace CallStationApp.Models
     {
         [Display(Name = "Baixa Criticidade")]
         Baixa,
-
-        [Display(Name = "Média Criticidade")]
+        [Display(Name = "Media Criticidade")]
         Media,
-
         [Display(Name = "Alta Criticidade")]
         Alta,
-
-        [Display(Name = "Crítico")]
+        [Display(Name = "Critico")]
         Critico
     }
 
@@ -178,14 +139,11 @@ namespace CallStationApp.Models
     {
         [Display(Name = "Prioridade Baixa")]
         Baixa,
-
-        [Display(Name = "Prioridade Média")]
+        [Display(Name = "Prioridade Media")]
         Media,
-
         [Display(Name = "Prioridade Alta")]
         Alta,
-
-        [Display(Name = "Prioridade Crítica")]
+        [Display(Name = "Prioridade Critica")]
         Critica
     }
 }

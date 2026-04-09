@@ -27,7 +27,8 @@ public class HomeModel : PageModel
 
     [BindProperty(SupportsGet = true)]
     public int GrupoId { get; set; }
-
+    public string? NomeUsuarioLogado { get; set; }
+    public string? FotoUsuarioLogado { get; set; }
     public Grupo? GrupoAtual { get; set; }
     public List<Chamado> Chamados { get; set; } = new();
     public List<Setor> SetoresDisponiveis { get; set; } = new();
@@ -38,7 +39,7 @@ public class HomeModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return RedirectToPage("/Login");
+            return RedirectToPage("/Auth/Login");
 
         if (GrupoId <= 0)
             return RedirectToPage("/Menu/Menu");
@@ -57,6 +58,18 @@ public class HomeModel : PageModel
 
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
+        
+        NomeUsuarioLogado = await _context.Usuarios
+            .AsNoTracking()
+            .Where(u => u.Id == idUsuario.Value)
+            .Select(u => u.NomeUsuario) 
+            .FirstOrDefaultAsync();
+
+        FotoUsuarioLogado = await _context.Usuarios
+            .AsNoTracking()
+            .Where(u => u.Id == idUsuario.Value)
+            .Select(u => u.FotoUsuario)
+            .FirstOrDefaultAsync();
 
         IQueryable<Chamado> queryChamados = _context.Chamados
             .AsNoTracking()
@@ -125,6 +138,34 @@ public class HomeModel : PageModel
             });
         }
 
+        string? criadorNomeUsuario = null;
+        string? criadorPermissao = null;
+
+        if (contextoMembro.Permissao != PermissaoUsuario.Nenhuma)
+        {
+            var dadosCriador = await (
+                from usuario in _context.Usuarios.AsNoTracking()
+                join usuarioGrupo in _context.UsuariosGrupos.AsNoTracking()
+                    on new { UsuarioId = usuario.Id, GrupoId = chamado.GrupoId }
+                    equals new { usuarioGrupo.UsuarioId, usuarioGrupo.GrupoId }
+                join infoUsuarioGrupo in _context.InfoUsuariosGrupos.AsNoTracking()
+                    on new { UsuarioId = usuario.Id, GrupoId = chamado.GrupoId }
+                    equals new { infoUsuarioGrupo.UsuarioId, infoUsuarioGrupo.GrupoId } into infoJoin
+                from info in infoJoin.DefaultIfEmpty()
+                where usuario.Id == chamado.CriadorChamadoId
+                select new
+                {
+                    NomeExibicao = info != null && !string.IsNullOrWhiteSpace(info.Apelido)
+                        ? info.Apelido
+                        : usuario.NomeUsuario,
+                    Permissao = usuarioGrupo.Permissao
+                }
+            ).FirstOrDefaultAsync();
+
+            criadorNomeUsuario = dadosCriador?.NomeExibicao;
+            criadorPermissao = dadosCriador?.Permissao.ToString();
+        }
+
         return new JsonResult(new
         {
             success = true,
@@ -147,6 +188,8 @@ public class HomeModel : PageModel
             prazoResposta = chamado.PrazoResposta,
             prazoConclusao = chamado.PrazoConclusao,
             publico = chamado.Publico,
+            criadorNomeUsuario,
+            criadorPermissao,
             permissoes = new
             {
                 podeEditarTitulo = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Titulo, idUsuario.Value, chamado.CriadorChamadoId),
@@ -194,117 +237,123 @@ public class HomeModel : PageModel
             });
         }
 
-        var strategy = _context.Database.CreateExecutionStrategy();
+        const int maxTentativas = 3;
 
-        try
+        for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
         {
-            return await strategy.ExecuteAsync(async () =>
-            {
-                await using var transaction = await _context.Database.BeginTransactionAsync();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-                try
+            try
+            {
+                return await strategy.ExecuteAsync(async () =>
                 {
-                    var contadorGrupo = await _context.ChamadosContadorGrupo
-                        .FirstOrDefaultAsync(x => x.GrupoId == grupoId);
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                    if (contadorGrupo == null)
+                    try
                     {
-                        contadorGrupo = new ChamadoContadorGrupo
+                        var contadorGrupo = await _context.ChamadosContadorGrupo
+                            .FirstOrDefaultAsync(x => x.GrupoId == grupoId);
+
+                        if (contadorGrupo == null)
                         {
+                            contadorGrupo = new ChamadoContadorGrupo
+                            {
+                                GrupoId = grupoId,
+                                UltimoNumero = 0
+                            };
+
+                            _context.ChamadosContadorGrupo.Add(contadorGrupo);
+                        }
+
+                        contadorGrupo.UltimoNumero++;
+                        var numeroGrupo = contadorGrupo.UltimoNumero;
+
+                        var contadorUsuario = await _context.ChamadosContadorUsuario
+                            .FirstOrDefaultAsync(x => x.UsuarioId == idUsuario.Value);
+
+                        if (contadorUsuario == null)
+                        {
+                            contadorUsuario = new ChamadoContadorUsuario
+                            {
+                                UsuarioId = idUsuario.Value,
+                                UltimoNumero = 0
+                            };
+
+                            _context.ChamadosContadorUsuario.Add(contadorUsuario);
+                        }
+
+                        contadorUsuario.UltimoNumero++;
+                        var numeroUsuario = contadorUsuario.UltimoNumero;
+
+                        var contadorUsuarioGrupo = await _context.ChamadosContadorUsuarioGrupo
+                            .FirstOrDefaultAsync(x => x.UsuarioId == idUsuario.Value && x.GrupoId == grupoId);
+
+                        if (contadorUsuarioGrupo == null)
+                        {
+                            contadorUsuarioGrupo = new ChamadoContadorUsuarioGrupo
+                            {
+                                UsuarioId = idUsuario.Value,
+                                GrupoId = grupoId,
+                                UltimoNumero = 0
+                            };
+
+                            _context.ChamadosContadorUsuarioGrupo.Add(contadorUsuarioGrupo);
+                        }
+
+                        contadorUsuarioGrupo.UltimoNumero++;
+                        var numeroUsuarioGrupo = contadorUsuarioGrupo.UltimoNumero;
+
+                        var chamado = new Chamado
+                        {
+                            Titulo = "Novo chamado",
                             GrupoId = grupoId,
-                            UltimoNumero = 0
+                            CriadorChamadoId = idUsuario.Value,
+                            NumeroChamadoGrupo = numeroGrupo,
+                            NumeroChamadoUsuario = numeroUsuario,
+                            NumeroChamadoUsuarioGrupo = numeroUsuarioGrupo,
+                            Status = StatusChamado.Aberto,
+                            DataCriacao = DateTime.UtcNow,
+                            Publico = false
                         };
 
-                        _context.ChamadosContadorGrupo.Add(contadorGrupo);
-                    }
+                        _context.Chamados.Add(chamado);
 
-                    contadorGrupo.UltimoNumero++;
-                    var numeroGrupo = contadorGrupo.UltimoNumero;
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
 
-                    var contadorUsuario = await _context.ChamadosContadorUsuario
-                        .FirstOrDefaultAsync(x => x.UsuarioId == idUsuario.Value);
-
-                    if (contadorUsuario == null)
-                    {
-                        contadorUsuario = new ChamadoContadorUsuario
+                        return (IActionResult)new JsonResult(new
                         {
-                            UsuarioId = idUsuario.Value,
-                            UltimoNumero = 0
-                        };
-
-                        _context.ChamadosContadorUsuario.Add(contadorUsuario);
+                            success = true,
+                            id = chamado.Id,
+                            numeroGrupo = chamado.NumeroChamadoGrupo,
+                            criadoEm = chamado.DataCriacao
+                        });
                     }
-
-                    contadorUsuario.UltimoNumero++;
-                    var numeroUsuario = contadorUsuario.UltimoNumero;
-
-                    var contadorUsuarioGrupo = await _context.ChamadosContadorUsuarioGrupo
-                        .FirstOrDefaultAsync(x => x.UsuarioId == idUsuario.Value && x.GrupoId == grupoId);
-
-                    if (contadorUsuarioGrupo == null)
+                    catch
                     {
-                        contadorUsuarioGrupo = new ChamadoContadorUsuarioGrupo
-                        {
-                            UsuarioId = idUsuario.Value,
-                            GrupoId = grupoId,
-                            UltimoNumero = 0
-                        };
-
-                        _context.ChamadosContadorUsuarioGrupo.Add(contadorUsuarioGrupo);
+                        await transaction.RollbackAsync();
+                        throw;
                     }
-
-                    contadorUsuarioGrupo.UltimoNumero++;
-                    var numeroUsuarioGrupo = contadorUsuarioGrupo.UltimoNumero;
-
-                    var chamado = new Chamado
-                    {
-                        Titulo = "Novo chamado",
-                        GrupoId = grupoId,
-                        CriadorChamadoId = idUsuario.Value,
-                        NumeroChamadoGrupo = numeroGrupo,
-                        NumeroChamadoUsuario = numeroUsuario,
-                        NumeroChamadoUsuarioGrupo = numeroUsuarioGrupo,
-                        Status = StatusChamado.Aberto,
-                        DataCriacao = DateTime.UtcNow,
-                        Publico = false
-                    };
-
-                    _context.Chamados.Add(chamado);
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    return (IActionResult)new JsonResult(new
-                    {
-                        success = true,
-                        id = chamado.Id,
-                        numeroGrupo = chamado.NumeroChamadoGrupo,
-                        criadoEm = chamado.DataCriacao
-                    });
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            });
-        }
-        catch (DbUpdateException ex)
-        {
-            return BadRequest(new
+                });
+            }
+            catch (DbUpdateException ex) when (tentativa < maxTentativas)
             {
-                success = false,
-                message = ex.InnerException?.Message ?? ex.Message
-            });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new
+                _context.ChangeTracker.Clear();
+
+                if (!EhErroDuplicidade(ex))
+                    return BadRequest(new { success = false, message = ex.InnerException?.Message ?? ex.Message });
+            }
+            catch (DbUpdateException ex)
             {
-                success = false,
-                message = ex.InnerException?.Message ?? ex.Message
-            });
+                return BadRequest(new { success = false, message = ex.InnerException?.Message ?? ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.InnerException?.Message ?? ex.Message });
+            }
         }
+
+        return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
     }
 
     public async Task<IActionResult> OnPostExcluirChamadoAsync([FromBody] ExcluirChamadoRequest request)
@@ -562,7 +611,9 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        var novaPrioridade = ParseNullableEnum<PrioridadeChamado>(request.Prioridade);
+        if (!TryParseNullableEnum<PrioridadeChamado>(request.Prioridade, out var novaPrioridade))
+            return new JsonResult(new { success = false, message = "Prioridade invalida." });
+
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Prioridade, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Prioridade != novaPrioridade)
         {
@@ -570,7 +621,9 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        var novaCriticidade = ParseNullableEnum<CriticidadeChamado>(request.Criticidade);
+        if (!TryParseNullableEnum<CriticidadeChamado>(request.Criticidade, out var novaCriticidade))
+            return new JsonResult(new { success = false, message = "Criticidade invalida." });
+
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Criticidade, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Criticidade != novaCriticidade)
         {
@@ -578,7 +631,9 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        var novaUrgencia = ParseNullableEnum<UrgenciaChamado>(request.Urgencia);
+        if (!TryParseNullableEnum<UrgenciaChamado>(request.Urgencia, out var novaUrgencia))
+            return new JsonResult(new { success = false, message = "Urgencia invalida." });
+
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Urgencia, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Urgencia != novaUrgencia)
         {
@@ -675,12 +730,94 @@ public class HomeModel : PageModel
         return int.TryParse(claim, out var id) ? id : null;
     }
 
-    private static TEnum? ParseNullableEnum<TEnum>(string? valor) where TEnum : struct
+    public async Task<IActionResult> OnGetCategoriasPorTipoAsync(int tipoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return new JsonResult(new { success = false, message = "Usuario nao autenticado." });
+
+        if (GrupoId <= 0 || tipoId <= 0)
+            return new JsonResult(new { success = false, message = "Parametros invalidos." });
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
+        if (contextoMembro == null)
+            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+
+        var tipoValido = await _context.OcorrenciasTipo
+            .AsNoTracking()
+            .AnyAsync(t => t.Id == tipoId && t.GrupoId == GrupoId);
+
+        if (!tipoValido)
+            return new JsonResult(new { success = false, message = "Tipo de ocorrencia invalido." });
+
+        var categorias = await _context.OcorrenciasCategoria
+            .AsNoTracking()
+            .Where(c => c.TipoId == tipoId)
+            .OrderBy(c => c.CategoriaOcorrencia)
+            .Select(c => new { id = c.Id, nome = c.CategoriaOcorrencia })
+            .ToListAsync();
+
+        return new JsonResult(new { success = true, categorias });
+    }
+
+    public async Task<IActionResult> OnGetSubcategoriasPorCategoriaAsync(int categoriaId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return new JsonResult(new { success = false, message = "Usuario nao autenticado." });
+
+        if (GrupoId <= 0 || categoriaId <= 0)
+            return new JsonResult(new { success = false, message = "Parametros invalidos." });
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
+        if (contextoMembro == null)
+            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+
+        var categoriaValida = await (
+            from categoria in _context.OcorrenciasCategoria.AsNoTracking()
+            join tipo in _context.OcorrenciasTipo.AsNoTracking()
+                on categoria.TipoId equals tipo.Id
+            where categoria.Id == categoriaId && tipo.GrupoId == GrupoId
+            select categoria.Id
+        ).AnyAsync();
+
+        if (!categoriaValida)
+            return new JsonResult(new { success = false, message = "Categoria invalida." });
+
+        var subcategorias = await _context.OcorrenciasSubcategoria
+            .AsNoTracking()
+            .Where(sc => sc.CategoriaId == categoriaId)
+            .OrderBy(sc => sc.SubcategoriaOcorrencia)
+            .Select(sc => new { id = sc.Id, nome = sc.SubcategoriaOcorrencia })
+            .ToListAsync();
+
+        return new JsonResult(new { success = true, subcategorias });
+    }
+
+    private static bool TryParseNullableEnum<TEnum>(string? valor, out TEnum? resultado) where TEnum : struct
     {
         if (string.IsNullOrWhiteSpace(valor))
-            return null;
+        {
+            resultado = null;
+            return true;
+        }
 
-        return Enum.TryParse<TEnum>(valor, out var resultado) ? resultado : null;
+        if (Enum.TryParse<TEnum>(valor, out var valorEnum))
+        {
+            resultado = valorEnum;
+            return true;
+        }
+
+        resultado = null;
+        return false;
+    }
+
+    private static bool EhErroDuplicidade(DbUpdateException ex)
+    {
+        var mensagem = ex.InnerException?.Message ?? ex.Message;
+        return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
+               mensagem.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
+               mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 
     public class ExcluirChamadoRequest

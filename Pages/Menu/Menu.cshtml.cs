@@ -1,4 +1,4 @@
-ï»¿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -37,14 +37,14 @@ public class MenuModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return RedirectToPage("/Login");
+            return RedirectToPage("/Auth/Login");
 
         UsuarioLogado = await _context.Usuarios
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == idUsuario.Value);
 
         if (UsuarioLogado == null)
-            return RedirectToPage("/Login");
+            return RedirectToPage("/Auth/Login");
 
         if (ModelState.IsValid && UsuarioLogado != null)
 {
@@ -167,7 +167,7 @@ public class MenuModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "Nome do grupo Ã© obrigatÃ³rio."
+                message = "Nome do grupo é obrigatório."
             });
         }
 
@@ -179,11 +179,11 @@ public class MenuModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "VocÃª jÃ¡ possui um grupo com esse nome."
+                message = "Você já possui um grupo com esse nome."
             });
         }
 
-        // Como Grupo.EtiquetaCor nÃ£o Ã© nullable, define padrÃ£o
+        // Como Grupo.EtiquetaCor não é nullable, define padrão
         var corConvertida = EtiquetaCor.branco;
 
         if (!string.IsNullOrWhiteSpace(etiquetaCor) &&
@@ -242,7 +242,7 @@ public class MenuModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." });
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
         var notificacoes = await _context.Notificacoes
             .AsNoTracking()
@@ -275,7 +275,7 @@ public class MenuModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." });
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
         var notificacoesNaoLidas = await _context.Notificacoes
             .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
@@ -339,8 +339,8 @@ public class GrupoViewModel
     public string PermissaoLabel => Permissao switch
     {
         PermissaoUsuario.Administracao => "Administrador",
-        PermissaoUsuario.Tecnico => "TÃ©cnico",
+        PermissaoUsuario.Tecnico => "Técnico",
         PermissaoUsuario.Colaborador => "Colaborador",
-        _ => "Sem permissÃ£o"
+        _ => "Sem permissão"
     };
 }

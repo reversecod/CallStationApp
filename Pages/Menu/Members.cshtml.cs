@@ -96,6 +96,16 @@ public class MembersModel : PageModel
         if (GrupoId <= 0)
             return new JsonResult(new { success = false, message = "Grupo inválido." });
 
+        var solicitanteNoGrupo = await _context.UsuariosGrupos
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
+
+        if (solicitanteNoGrupo == null)
+            return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
+
+        if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
+            return new JsonResult(new { success = false, message = "Somente administradores podem buscar usuários." });
+
         termo = (termo ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(termo) || termo.Length < 2)

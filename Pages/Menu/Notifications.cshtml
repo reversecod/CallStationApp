@@ -78,6 +78,34 @@
             color: #475569;
         }
 
+        .notificacao-resumo {
+            color: #475569;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .btn-toggle-leitura {
+            border: 0;
+            border-radius: 999px;
+            padding: .35rem .7rem;
+            font-size: .78rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .btn-toggle-leitura.nao-lida {
+            background: #dc3545;
+            color: #fff;
+        }
+
+        .btn-toggle-leitura.lida {
+            background: #f8f9fa;
+            color: #212529;
+            border: 1px solid #dee2e6;
+        }
+
         .navbar-actions {
             display: flex;
             align-items: center;
@@ -243,14 +271,12 @@
                                     <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
                                         <span class="notificacao-tipo">@notificacao.Tipo</span>
 
-                                        @if (!notificacao.Lida)
-                                        {
-                                            <span class="badge text-bg-primary">Nova</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge text-bg-light border text-dark">Lida</span>
-                                        }
+                                        <button type="button"
+                                                class="btn-toggle-leitura @(notificacao.Lida ? "lida" : "nao-lida")"
+                                                data-notificacao-id="@notificacao.Id"
+                                                data-lida="@notificacao.Lida.ToString().ToLowerInvariant()">
+                                            @(notificacao.Lida ? "Lida" : "Nao lida")
+                                        </button>
                                     </div>
 
                                     <h2 class="h5 mb-1">@notificacao.Titulo</h2>
@@ -260,18 +286,29 @@
                                     <div>Criada em @notificacao.DataCriacao.ToString("dd/MM/yyyy HH:mm")</div>
                                     @if (notificacao.DataLeitura.HasValue)
                                     {
-                                        <div>Lida em @notificacao.DataLeitura.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                                        <div data-role="data-leitura">Lida em @notificacao.DataLeitura.Value.ToString("dd/MM/yyyy HH:mm")</div>
                                     }
                                 </div>
                             </div>
 
-                            <p class="notificacao-mensagem mb-0">
+                            <p class="notificacao-resumo mb-0">
                                 @notificacao.Mensagem
                             </p>
 
-                            @if (notificacao.PodeResponderConvite && notificacao.ReferenciaId.HasValue)
-                            {
-                                <div class="mt-3 d-flex gap-2">
+                            <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+                                @if (!string.IsNullOrWhiteSpace(notificacao.Mensagem))
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-secondary btn-ler-mensagem"
+                                            data-titulo="@notificacao.Titulo"
+                                            data-mensagem="@notificacao.Mensagem">
+                                        <i class="bi bi-envelope-open me-1"></i>
+                                        Ler mensagem
+                                    </button>
+                                }
+
+                                @if (notificacao.PodeResponderConvite && notificacao.ReferenciaId.HasValue)
+                                {
                                     <button type="button"
                                             class="btn btn-sm btn-primary btn-acao-convite"
                                             data-action-url="?handler=AceitarConvite"
@@ -289,29 +326,23 @@
                                         <i class="bi bi-x-lg me-1"></i>
                                         Recusar
                                     </button>
-                                </div>
-                            }
-                            else if (string.Equals(notificacao.ReferenciaTipo, "ConviteGrupoRespondidoAceito", StringComparison.Ordinal))
-                            {
-                                <div class="mt-3">
+                                }
+                                else if (string.Equals(notificacao.ReferenciaTipo, "ConviteGrupoRespondidoAceito", StringComparison.Ordinal))
+                                {
                                     <span class="status-solicitacao-tag aceita">Aceito</span>
-                                </div>
-                            }
-                            else if (string.Equals(notificacao.ReferenciaTipo, "ConviteGrupoRespondidoRecusado", StringComparison.Ordinal))
-                            {
-                                <div class="mt-3">
+                                }
+                                else if (string.Equals(notificacao.ReferenciaTipo, "ConviteGrupoRespondidoRecusado", StringComparison.Ordinal))
+                                {
                                     <span class="status-solicitacao-tag recusada">Recusado</span>
-                                </div>
-                            }
-                            else if (!string.Equals(notificacao.ReferenciaTipo, "ConviteGrupo", StringComparison.Ordinal) &&
-                                     !string.IsNullOrWhiteSpace(notificacao.LinkDestino))
-                            {
-                                <div class="mt-3">
+                                }
+                                else if (!string.Equals(notificacao.ReferenciaTipo, "ConviteGrupo", StringComparison.Ordinal) &&
+                                         !string.IsNullOrWhiteSpace(notificacao.LinkDestino))
+                                {
                                     <a href="@notificacao.LinkDestino" class="text-decoration-none">
                                         Abrir notificação <i class="bi bi-arrow-right-short"></i>
                                     </a>
-                                </div>
-                            }
+                                }
+                            </div>
                         </div>
                     </div>
                 }
@@ -331,6 +362,21 @@
         }
     </main>
 
+    <div class="modal fade" id="modalMensagemNotificacao" tabindex="-1" aria-labelledby="modalMensagemNotificacaoLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalMensagemNotificacaoLabel">Mensagem da notificação</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 id="modalMensagemTitulo" class="mb-3"></h6>
+                    <p id="modalMensagemConteudo" class="mb-0 text-break"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <input type="hidden"
            id="requestVerificationTokenNotifications"
            value="@(Antiforgery.GetAndStoreTokens(HttpContext).RequestToken)" />
@@ -342,6 +388,13 @@
             const tokenElement = document.getElementById('requestVerificationTokenNotifications');
             const btnMarcarTodasComoLidas = document.getElementById('btnMarcarTodasComoLidas');
             const botoesAcaoConvite = document.querySelectorAll('.btn-acao-convite');
+            const botoesToggleLeitura = document.querySelectorAll('.btn-toggle-leitura');
+            const botoesLerMensagem = document.querySelectorAll('.btn-ler-mensagem');
+            const badgeNotificacaoTopo = document.querySelector('.badge-notificacao');
+            const modalMensagemElement = document.getElementById('modalMensagemNotificacao');
+            const modalMensagemTitulo = document.getElementById('modalMensagemTitulo');
+            const modalMensagemConteudo = document.getElementById('modalMensagemConteudo');
+            const modalMensagem = modalMensagemElement ? bootstrap.Modal.getOrCreateInstance(modalMensagemElement) : null;
 
             if (!tokenElement || !tokenElement.value) {
                 console.error('Token antiforgery não encontrado.');
@@ -418,6 +471,87 @@
                 }
             }
 
+            function atualizarIndicadoresNaoLidos(totalNaoLidas) {
+                if (badgeNotificacaoTopo) {
+                    if (totalNaoLidas > 0) {
+                        badgeNotificacaoTopo.classList.remove('d-none');
+                        badgeNotificacaoTopo.textContent = totalNaoLidas > 9 ? '9+' : totalNaoLidas;
+                    } else {
+                        badgeNotificacaoTopo.classList.add('d-none');
+                        badgeNotificacaoTopo.textContent = '0';
+                    }
+                }
+
+                if (btnMarcarTodasComoLidas) {
+                    btnMarcarTodasComoLidas.disabled = totalNaoLidas === 0;
+                }
+            }
+
+            async function alternarLeitura(botao) {
+                const notificacaoId = Number.parseInt(botao.dataset.notificacaoId, 10);
+                if (Number.isNaN(notificacaoId) || notificacaoId <= 0) {
+                    alert('Notificação inválida.');
+                    return;
+                }
+
+                const card = botao.closest('.notificacao-card');
+                const containerData = card?.querySelector('.notificacao-data');
+
+                try {
+                    botao.disabled = true;
+
+                    const data = await enviarRequisicao('?handler=AlternarLeitura', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ notificacaoId })
+                    });
+
+                    const estaLida = !!data.lida;
+                    botao.textContent = estaLida ? 'Lida' : 'Nao lida';
+                    botao.dataset.lida = String(estaLida);
+                    botao.classList.toggle('lida', estaLida);
+                    botao.classList.toggle('nao-lida', !estaLida);
+
+                    if (card) {
+                        card.classList.toggle('nao-lida', !estaLida);
+                    }
+
+                    if (containerData) {
+                        const leituraExistente = containerData.querySelector('[data-role=\"data-leitura\"]');
+
+                        if (estaLida && data.dataLeitura) {
+                            const dataLeitura = new Date(data.dataLeitura).toLocaleString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+
+                            if (leituraExistente) {
+                                leituraExistente.textContent = `Lida em ${dataLeitura}`;
+                            } else {
+                                const novaLinha = document.createElement('div');
+                                novaLinha.dataset.role = 'data-leitura';
+                                novaLinha.textContent = `Lida em ${dataLeitura}`;
+                                containerData.appendChild(novaLinha);
+                            }
+                        } else if (!estaLida && leituraExistente) {
+                            leituraExistente.remove();
+                        }
+                    }
+
+                    atualizarIndicadoresNaoLidos(data.totalNaoLidas ?? 0);
+                } catch (error) {
+                    console.error(error);
+                    alert(error.message || 'Não foi possível alterar o status da notificação.');
+                } finally {
+                    botao.disabled = false;
+                }
+            }
+
             if (btnMarcarTodasComoLidas) {
                 btnMarcarTodasComoLidas.addEventListener('click', async function () {
                     const textoOriginal = this.innerHTML;
@@ -428,7 +562,28 @@
 
                         await enviarRequisicao('?handler=MarcarTodasComoLidas');
 
-                        window.location.reload();
+                        document.querySelectorAll('.btn-toggle-leitura').forEach(botao => {
+                            botao.textContent = 'Lida';
+                            botao.dataset.lida = 'true';
+                            botao.classList.remove('nao-lida');
+                            botao.classList.add('lida');
+                        });
+
+                        document.querySelectorAll('.notificacao-card').forEach(card => {
+                            card.classList.remove('nao-lida');
+                        });
+
+                        document.querySelectorAll('.notificacao-data').forEach(containerData => {
+                            if (!containerData.querySelector('[data-role=\"data-leitura\"]')) {
+                                const novaLinha = document.createElement('div');
+                                novaLinha.dataset.role = 'data-leitura';
+                                novaLinha.textContent = `Lida em ${new Date().toLocaleString('pt-BR')}`;
+                                containerData.appendChild(novaLinha);
+                            }
+                        });
+
+                        atualizarIndicadoresNaoLidos(0);
+                        this.innerHTML = textoOriginal;
                     } catch (error) {
                         console.error(error);
                         alert(error.message || 'Não foi possível marcar as notificações como lidas.');
@@ -443,7 +598,26 @@
                     executarAcaoConvite(this);
                 });
             });
+
+            botoesToggleLeitura.forEach(botao => {
+                botao.addEventListener('click', function () {
+                    alternarLeitura(this);
+                });
+            });
+
+            botoesLerMensagem.forEach(botao => {
+                botao.addEventListener('click', function () {
+                    if (!modalMensagem || !modalMensagemTitulo || !modalMensagemConteudo) {
+                        return;
+                    }
+
+                    modalMensagemTitulo.textContent = this.dataset.titulo || 'Mensagem';
+                    modalMensagemConteudo.textContent = this.dataset.mensagem || 'Sem conteúdo.';
+                    modalMensagem.show();
+                });
+            });
         })();
     </script>
 </body>
 </html>
+

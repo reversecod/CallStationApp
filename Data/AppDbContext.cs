@@ -87,8 +87,8 @@ namespace CallStationApp.Data
 
                 entity.Property(g => g.Nome)
                     .IsRequired()
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
+                    .HasColumnType("varchar(35)")
+                    .HasMaxLength(35);
 
                 entity.Property(g => g.DescricaoGrupo)
                     .HasColumnName("descricao_grupo")
@@ -176,7 +176,8 @@ namespace CallStationApp.Data
 
                 entity.Property(iu => iu.DescricaoAtivo)
                     .HasColumnName("descricao_ativo")
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 entity.Property(iu => iu.IdentificadorInterno)
                     .HasColumnName("identificador_interno")
@@ -185,7 +186,8 @@ namespace CallStationApp.Data
 
                 entity.Property(iu => iu.Observacao)
                     .HasColumnName("observacao")
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 entity.Property(iu => iu.DataAtualizacaoAtivo)
                     .HasColumnName("data_atualizacao_ativo")
@@ -204,13 +206,13 @@ namespace CallStationApp.Data
             // ===== OcorrenciaTipo =====
             modelBuilder.Entity<OcorrenciaTipo>(entity =>
             {
-                entity.ToTable("Ocorrencias_Tipo");
+                entity.ToTable("Ocorrencias_tipo");
 
                 entity.Property(ot => ot.TipoOcorrencia)
                     .IsRequired()
                     .HasColumnName("tipo_ocorrencia")
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
 
                 entity.Property(ot => ot.GrupoId)
                     .IsRequired();
@@ -286,10 +288,12 @@ namespace CallStationApp.Data
                     .HasMaxLength(35);
 
                 entity.Property(c => c.Descricao)
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 entity.Property(c => c.Solucao)
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 entity.Property(c => c.AnexoChamado)
                     .HasColumnName("anexo_chamado")
@@ -389,7 +393,7 @@ namespace CallStationApp.Data
             // ===== HistoricoStatusChamado =====
             modelBuilder.Entity<HistoricoStatusChamado>(entity =>
             {
-                entity.ToTable("Historico_Status_Chamados");
+                entity.ToTable("Historico_status_chamados");
 
                 entity.Property(h => h.StatusAnterior)
                     .IsRequired()
@@ -416,7 +420,8 @@ namespace CallStationApp.Data
 
                 entity.Property(cc => cc.Mensagem)
                     .IsRequired()
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 entity.Property(cc => cc.AnexoComentario)
                     .HasColumnName("anexo_comentario")
@@ -445,7 +450,8 @@ namespace CallStationApp.Data
 
                 entity.Property(t => t.Descricao)
                     .IsRequired()
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 // ===== ENUMS =====
                 entity.Property(t => t.Status)
@@ -502,10 +508,12 @@ namespace CallStationApp.Data
 
                 entity.Property(f => f.Avaliacao)
                     .IsRequired()
+                    .HasColumnName("nota")
                     .HasColumnType("int");
 
                 entity.Property(f => f.Comentario)
-                    .HasColumnType("text");
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
 
                 entity.Property(f => f.TempoResposta)
                     .HasColumnName("tempo_resposta")
@@ -605,7 +613,7 @@ namespace CallStationApp.Data
             });
             modelBuilder.Entity<HistoricoAlteracaoChamado>(entity =>
             {
-                entity.ToTable("historico_alteracoes_chamado");
+                entity.ToTable("Historico_alteracoes_chamado");
 
                 entity.HasKey(e => e.Id);
 
