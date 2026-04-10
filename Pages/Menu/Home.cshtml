@@ -556,20 +556,13 @@
             <div class="row mt-3">
                 <div class="col-12 col-md-6 mb-3">
                     <div id="chamados-container">
-                        @{
-                            var numeroSequencial = 0;
-                        }
-
                         @foreach (var chamado in Model.Chamados)
                         {
-                            numeroSequencial++;
-                            var numeroLocal = numeroSequencial;
-
                             var tituloOuNumero =
                                 !string.IsNullOrWhiteSpace(chamado.Titulo) &&
                                 !string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
                                     ? chamado.Titulo
-                                    : $"Chamado {numeroLocal}";
+                                    : $"Chamado {chamado.NumeroChamadoGrupo}";
 
                             var classeStatus = chamado.Status switch
                             {
@@ -602,6 +595,41 @@
                             <input type="hidden" id="requestVerificationToken"
                                    value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
                         </div>
+
+                        @if (Model.TemPaginaAnterior || Model.TemProximaPagina)
+                        {
+                            <div class="d-flex justify-content-between align-items-center px-3 pt-2">
+                                @if (Model.TemPaginaAnterior)
+                                {
+                                    <a asp-page="/Menu/Home"
+                                       asp-route-grupoId="@Model.GrupoId"
+                                       asp-route-page="@(Model.PaginaAtual - 1)"
+                                       class="btn btn-outline-secondary btn-sm">
+                                        Anterior
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span></span>
+                                }
+
+                                <span class="text-muted small">Página @Model.PaginaAtual</span>
+
+                                @if (Model.TemProximaPagina)
+                                {
+                                    <a asp-page="/Menu/Home"
+                                       asp-route-grupoId="@Model.GrupoId"
+                                       asp-route-page="@(Model.PaginaAtual + 1)"
+                                       class="btn btn-outline-secondary btn-sm">
+                                        Próxima
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span></span>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -643,12 +671,12 @@
 
                                 <div class="mb-2" id="wrapEditDescricao">
                                     <label for="editDescricao" class="form-label">Descrição</label>
-                                    <textarea class="form-control" id="editDescricao" rows="3" maxlength="1000"></textarea>
+                                    <textarea class="form-control" id="editDescricao" rows="3" maxlength="500"></textarea>
                                 </div>
 
                                 <div class="mb-2" id="wrapEditSolucao">
                                     <label for="editSolucao" class="form-label">Solução</label>
-                                    <textarea class="form-control" id="editSolucao" rows="3" maxlength="1000"></textarea>
+                                    <textarea class="form-control" id="editSolucao" rows="3" maxlength="500"></textarea>
                                 </div>
 
                                 <div class="mb-2" id="wrapEditSetorId">

@@ -157,6 +157,12 @@ namespace CallStationApp.Data
 
                 entity.HasIndex(ug => new { ug.UsuarioId, ug.Ativo })
                     .HasDatabaseName("idx_ug_usuario_ativo");
+
+                entity.HasIndex(ug => new { ug.UsuarioId, ug.GrupoId, ug.Ativo })
+                    .HasDatabaseName("idx_ug_usuario_grupo_ativo");
+
+                entity.HasIndex(ug => new { ug.GrupoId, ug.Ativo, ug.Permissao })
+                    .HasDatabaseName("idx_ug_grupo_ativo_permissao");
             });
 
             // ===== InfoUsuarioGrupo =====
@@ -376,6 +382,12 @@ namespace CallStationApp.Data
                 entity.HasIndex(c => c.Status).HasDatabaseName("idx_chamados_status");
                 entity.HasIndex(c => c.CriadorChamadoId).HasDatabaseName("idx_chamados_criador");
                 entity.HasIndex(c => c.DataCriacao).HasDatabaseName("idx_chamados_data_criacao");
+                entity.HasIndex(c => new { c.GrupoId, c.Status, c.DataCriacao })
+                    .HasDatabaseName("idx_chamados_grupo_status_data");
+                entity.HasIndex(c => new { c.GrupoId, c.Publico, c.DataCriacao })
+                    .HasDatabaseName("idx_chamados_grupo_publico_data");
+                entity.HasIndex(c => new { c.GrupoId, c.CriadorChamadoId, c.DataCriacao })
+                    .HasDatabaseName("idx_chamados_grupo_criador_data");
 
                 entity.HasIndex(c => new { c.GrupoId, c.NumeroChamadoGrupo })
                     .IsUnique()

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -14,26 +15,46 @@ public class HomeModel : PageModel
     private readonly AppDbContext _context;
     private readonly IWebHostEnvironment _environment;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly IMemoryCache _memoryCache;
+    private const int TamanhoPaginaChamados = 20;
+    private static readonly TimeSpan CacheCatalogoTtl = TimeSpan.FromMinutes(10);
 
     public HomeModel(
         AppDbContext context,
         IWebHostEnvironment environment,
-        GrupoAuthorizationService grupoAuthorizationService)
+        GrupoAuthorizationService grupoAuthorizationService,
+        IMemoryCache memoryCache)
     {
         _context = context;
         _environment = environment;
         _grupoAuthorizationService = grupoAuthorizationService;
+        _memoryCache = memoryCache;
     }
 
     [BindProperty(SupportsGet = true)]
     public int GrupoId { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "page")]
+    public int PaginaAtual { get; set; } = 1;
+
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public Grupo? GrupoAtual { get; set; }
-    public List<Chamado> Chamados { get; set; } = new();
+    public List<ChamadoListItemViewModel> Chamados { get; set; } = new();
     public List<Setor> SetoresDisponiveis { get; set; } = new();
     public List<OcorrenciaTipo> TiposOcorrenciaDisponiveis { get; set; } = new();
     public bool PodeCriarChamado { get; set; }
+    public bool TemPaginaAnterior => PaginaAtual > 1;
+    public bool TemProximaPagina { get; set; }
+
+    public class ChamadoListItemViewModel
+    {
+        public int Id { get; set; }
+        public int NumeroChamadoGrupo { get; set; }
+        public string? Titulo { get; set; }
+        public StatusChamado Status { get; set; }
+        public DateTime DataCriacao { get; set; }
+    }
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -58,18 +79,19 @@ public class HomeModel : PageModel
 
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
-        
-        NomeUsuarioLogado = await _context.Usuarios
+
+        var usuarioLogado = await _context.Usuarios
             .AsNoTracking()
             .Where(u => u.Id == idUsuario.Value)
-            .Select(u => u.NomeUsuario) 
+            .Select(u => new
+            {
+                u.NomeUsuario,
+                u.FotoUsuario
+            })
             .FirstOrDefaultAsync();
 
-        FotoUsuarioLogado = await _context.Usuarios
-            .AsNoTracking()
-            .Where(u => u.Id == idUsuario.Value)
-            .Select(u => u.FotoUsuario)
-            .FirstOrDefaultAsync();
+        NomeUsuarioLogado = usuarioLogado?.NomeUsuario;
+        FotoUsuarioLogado = usuarioLogado?.FotoUsuario;
 
         IQueryable<Chamado> queryChamados = _context.Chamados
             .AsNoTracking()
@@ -88,20 +110,27 @@ public class HomeModel : PageModel
         }
 
         Chamados = await queryChamados
-            .OrderBy(c => c.DataCriacao)
+            .OrderByDescending(c => c.DataCriacao)
+            .Skip((Math.Max(PaginaAtual, 1) - 1) * TamanhoPaginaChamados)
+            .Take(TamanhoPaginaChamados + 1)
+            .Select(c => new ChamadoListItemViewModel
+            {
+                Id = c.Id,
+                NumeroChamadoGrupo = c.NumeroChamadoGrupo,
+                Titulo = c.Titulo,
+                Status = c.Status,
+                DataCriacao = c.DataCriacao
+            })
             .ToListAsync();
 
-        SetoresDisponiveis = await _context.Setores
-            .AsNoTracking()
-            .Where(s => s.GrupoId == GrupoId)
-            .OrderBy(s => s.NomeSetor)
-            .ToListAsync();
+        TemProximaPagina = Chamados.Count > TamanhoPaginaChamados;
+        if (TemProximaPagina)
+        {
+            Chamados.RemoveAt(Chamados.Count - 1);
+        }
 
-        TiposOcorrenciaDisponiveis = await _context.OcorrenciasTipo
-            .AsNoTracking()
-            .Where(t => t.GrupoId == GrupoId)
-            .OrderBy(t => t.TipoOcorrencia)
-            .ToListAsync();
+        SetoresDisponiveis = await ObterSetoresDisponiveisAsync(GrupoId);
+        TiposOcorrenciaDisponiveis = await ObterTiposOcorrenciaDisponiveisAsync(GrupoId);
 
         return Page();
     }
@@ -474,7 +503,12 @@ public class HomeModel : PageModel
             });
         }
 
-        if (request.SetorId.HasValue)
+        var setorFoiAlterado = chamado.SetorId != request.SetorId;
+        var tipoFoiAlterado = chamado.OcorrenciaTipoId != request.OcorrenciaTipoId;
+        var categoriaFoiAlterada = chamado.OcorrenciaCategoriaId != request.OcorrenciaCategoriaId;
+        var subcategoriaFoiAlterada = chamado.OcorrenciaSubcategoriaId != request.OcorrenciaSubcategoriaId;
+
+        if (setorFoiAlterado && request.SetorId.HasValue)
         {
             var setorValido = await _context.Setores
                 .AsNoTracking()
@@ -490,7 +524,7 @@ public class HomeModel : PageModel
             }
         }
 
-        if (request.OcorrenciaTipoId.HasValue)
+        if (tipoFoiAlterado && request.OcorrenciaTipoId.HasValue)
         {
             var tipoValido = await _context.OcorrenciasTipo
                 .AsNoTracking()
@@ -506,7 +540,7 @@ public class HomeModel : PageModel
             }
         }
 
-        if (request.OcorrenciaCategoriaId.HasValue)
+        if ((categoriaFoiAlterada || tipoFoiAlterado) && request.OcorrenciaCategoriaId.HasValue)
         {
             if (!request.OcorrenciaTipoId.HasValue)
             {
@@ -533,7 +567,7 @@ public class HomeModel : PageModel
             }
         }
 
-        if (request.OcorrenciaSubcategoriaId.HasValue)
+        if ((subcategoriaFoiAlterada || categoriaFoiAlterada) && request.OcorrenciaSubcategoriaId.HasValue)
         {
             if (!request.OcorrenciaCategoriaId.HasValue)
             {
@@ -750,12 +784,7 @@ public class HomeModel : PageModel
         if (!tipoValido)
             return new JsonResult(new { success = false, message = "Tipo de ocorrencia invalido." });
 
-        var categorias = await _context.OcorrenciasCategoria
-            .AsNoTracking()
-            .Where(c => c.TipoId == tipoId)
-            .OrderBy(c => c.CategoriaOcorrencia)
-            .Select(c => new { id = c.Id, nome = c.CategoriaOcorrencia })
-            .ToListAsync();
+        var categorias = await ObterCategoriasPorTipoAsync(tipoId);
 
         return new JsonResult(new { success = true, categorias });
     }
@@ -784,14 +813,71 @@ public class HomeModel : PageModel
         if (!categoriaValida)
             return new JsonResult(new { success = false, message = "Categoria invalida." });
 
-        var subcategorias = await _context.OcorrenciasSubcategoria
-            .AsNoTracking()
-            .Where(sc => sc.CategoriaId == categoriaId)
-            .OrderBy(sc => sc.SubcategoriaOcorrencia)
-            .Select(sc => new { id = sc.Id, nome = sc.SubcategoriaOcorrencia })
-            .ToListAsync();
+        var subcategorias = await ObterSubcategoriasPorCategoriaAsync(categoriaId);
 
         return new JsonResult(new { success = true, subcategorias });
+    }
+
+    private Task<List<Setor>> ObterSetoresDisponiveisAsync(int grupoId)
+    {
+        return _memoryCache.GetOrCreateAsync(
+            $"catalogo:setores:{grupoId}",
+            async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
+                return await _context.Setores
+                    .AsNoTracking()
+                    .Where(s => s.GrupoId == grupoId)
+                    .OrderBy(s => s.NomeSetor)
+                    .ToListAsync();
+            })!;
+    }
+
+    private Task<List<OcorrenciaTipo>> ObterTiposOcorrenciaDisponiveisAsync(int grupoId)
+    {
+        return _memoryCache.GetOrCreateAsync(
+            $"catalogo:tipos:{grupoId}",
+            async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
+                return await _context.OcorrenciasTipo
+                    .AsNoTracking()
+                    .Where(t => t.GrupoId == grupoId)
+                    .OrderBy(t => t.TipoOcorrencia)
+                    .ToListAsync();
+            })!;
+    }
+
+    private Task<List<object>> ObterCategoriasPorTipoAsync(int tipoId)
+    {
+        return _memoryCache.GetOrCreateAsync(
+            $"catalogo:categorias:{tipoId}",
+            async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
+                return await _context.OcorrenciasCategoria
+                    .AsNoTracking()
+                    .Where(c => c.TipoId == tipoId)
+                    .OrderBy(c => c.CategoriaOcorrencia)
+                    .Select(c => (object)new { id = c.Id, nome = c.CategoriaOcorrencia })
+                    .ToListAsync();
+            })!;
+    }
+
+    private Task<List<object>> ObterSubcategoriasPorCategoriaAsync(int categoriaId)
+    {
+        return _memoryCache.GetOrCreateAsync(
+            $"catalogo:subcategorias:{categoriaId}",
+            async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
+                return await _context.OcorrenciasSubcategoria
+                    .AsNoTracking()
+                    .Where(sc => sc.CategoriaId == categoriaId)
+                    .OrderBy(sc => sc.SubcategoriaOcorrencia)
+                    .Select(sc => (object)new { id = sc.Id, nome = sc.SubcategoriaOcorrencia })
+                    .ToListAsync();
+            })!;
     }
 
     private static bool TryParseNullableEnum<TEnum>(string? valor, out TEnum? resultado) where TEnum : struct

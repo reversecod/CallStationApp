@@ -27,6 +27,7 @@ public class NotificationsModel : PageModel
         public string Tipo { get; set; } = string.Empty;
         public string Titulo { get; set; } = string.Empty;
         public string Mensagem { get; set; } = string.Empty;
+        public string MensagemModal { get; set; } = string.Empty;
         public bool Lida { get; set; }
         public DateTime DataCriacao { get; set; }
         public DateTime? DataLeitura { get; set; }
@@ -89,12 +90,36 @@ public class NotificationsModel : PageModel
             })
             .ToListAsync();
 
+        var conviteIds = Notificacoes
+            .Where(n => n.ReferenciaId.HasValue &&
+                        string.Equals(n.ReferenciaTipo, "ConviteGrupo", StringComparison.Ordinal))
+            .Select(n => n.ReferenciaId!.Value)
+            .Distinct()
+            .ToList();
+
+        var mensagensConvitePorId = conviteIds.Count == 0
+            ? new Dictionary<int, string?>()
+            : await _context.ConvitesGrupo
+                .AsNoTracking()
+                .Where(c => conviteIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Mensagem);
+
         foreach (var notificacao in Notificacoes)
         {
             notificacao.PodeResponderConvite =
                 notificacao.ReferenciaId.HasValue &&
                 string.Equals(notificacao.ReferenciaTipo, "ConviteGrupo", StringComparison.Ordinal) &&
                 convitesPendentesSet.Contains(notificacao.ReferenciaId.Value);
+
+            notificacao.MensagemModal = notificacao.Mensagem;
+
+            if (notificacao.ReferenciaId.HasValue &&
+                string.Equals(notificacao.ReferenciaTipo, "ConviteGrupo", StringComparison.Ordinal) &&
+                mensagensConvitePorId.TryGetValue(notificacao.ReferenciaId.Value, out var mensagemConvite) &&
+                !string.IsNullOrWhiteSpace(mensagemConvite))
+            {
+                notificacao.MensagemModal = mensagemConvite;
+            }
         }
 
         TotalNaoLidas = Notificacoes.Count(n => !n.Lida);
@@ -224,6 +249,18 @@ public class NotificationsModel : PageModel
                     if (convite.Status != StatusConviteGrupo.Pendente)
                         return (IActionResult)new JsonResult(new { success = false, message = "Este convite nÃ£o estÃ¡ mais pendente." });
 
+                    var usuarioDestinatario = await _context.Usuarios
+                        .AsNoTracking()
+                        .Where(u => u.Id == idUsuario.Value)
+                        .Select(u => u.NomeUsuario)
+                        .FirstOrDefaultAsync();
+
+                    var nomeGrupo = await _context.Grupos
+                        .AsNoTracking()
+                        .Where(g => g.Id == convite.GrupoId)
+                        .Select(g => g.Nome)
+                        .FirstOrDefaultAsync();
+
                     var vinculoExistente = await _context.UsuariosGrupos
                         .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value &&
                                                    ug.GrupoId == convite.GrupoId);
@@ -298,6 +335,19 @@ public class NotificationsModel : PageModel
                         notificacao.DataLeitura = DateTime.UtcNow;
                     }
 
+                    _context.Notificacoes.Add(new Notificacao
+                    {
+                        UsuarioId = convite.RemetenteUsuarioId,
+                        Tipo = TipoNotificacao.ConviteGrupo,
+                        Titulo = "Convite aceito",
+                        Mensagem = $"{usuarioDestinatario ?? "Um usuário"} aceitou seu convite para o grupo {nomeGrupo ?? "selecionado"}.",
+                        Lida = false,
+                        DataCriacao = DateTime.UtcNow,
+                        ReferenciaId = convite.Id,
+                        ReferenciaTipo = "ConviteGrupoRespondidoAceito",
+                        LinkDestino = "/Menu/Notifications"
+                    });
+
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -338,6 +388,9 @@ public class NotificationsModel : PageModel
         if (idUsuario == null)
             return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." });
 
+        if (request == null || request.ConviteId <= 0)
+            return new JsonResult(new { success = false, message = "Convite invÃ¡lido." });
+
         var convite = await _context.ConvitesGrupo
             .FirstOrDefaultAsync(c => c.Id == request.ConviteId && c.DestinatarioUsuarioId == idUsuario.Value);
 
@@ -346,6 +399,18 @@ public class NotificationsModel : PageModel
 
         if (convite.Status != StatusConviteGrupo.Pendente)
             return new JsonResult(new { success = false, message = "Este convite nÃ£o estÃ¡ mais pendente." });
+
+        var usuarioDestinatario = await _context.Usuarios
+            .AsNoTracking()
+            .Where(u => u.Id == idUsuario.Value)
+            .Select(u => u.NomeUsuario)
+            .FirstOrDefaultAsync();
+
+        var nomeGrupo = await _context.Grupos
+            .AsNoTracking()
+            .Where(g => g.Id == convite.GrupoId)
+            .Select(g => g.Nome)
+            .FirstOrDefaultAsync();
 
         convite.Status = StatusConviteGrupo.Recusado;
         convite.DataResposta = DateTime.UtcNow;
@@ -364,6 +429,19 @@ public class NotificationsModel : PageModel
             notificacao.Lida = true;
             notificacao.DataLeitura = DateTime.UtcNow;
         }
+
+        _context.Notificacoes.Add(new Notificacao
+        {
+            UsuarioId = convite.RemetenteUsuarioId,
+            Tipo = TipoNotificacao.ConviteGrupo,
+            Titulo = "Convite recusado",
+            Mensagem = $"{usuarioDestinatario ?? "Um usuário"} recusou seu convite para o grupo {nomeGrupo ?? "selecionado"}.",
+            Lida = false,
+            DataCriacao = DateTime.UtcNow,
+            ReferenciaId = convite.Id,
+            ReferenciaTipo = "ConviteGrupoRespondidoRecusado",
+            LinkDestino = "/Menu/Notifications"
+        });
 
         await _context.SaveChangesAsync();
 

@@ -1,9 +1,9 @@
+Ôªøusing CallStationApp.Data;
+using CallStationApp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
-using CallStationApp.Data;
-using CallStationApp.Models;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -20,18 +20,6 @@ public class MenuModel : PageModel
     public Usuario? UsuarioLogado { get; set; }
     public List<GrupoViewModel> Grupos { get; set; } = new();
     public int TotalNotificacoesNaoLidas { get; set; }
-    public List<NotificacaoViewModel> Notificacoes { get; set; } = new();
-
-    public class NotificacaoViewModel
-    {
-        public int Id { get; set; }
-        public string Tipo { get; set; } = string.Empty;
-        public string Titulo { get; set; } = string.Empty;
-        public string Mensagem { get; set; } = string.Empty;
-        public bool Lida { get; set; }
-        public DateTime DataCriacao { get; set; }
-        public string? LinkDestino { get; set; }
-    }
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -46,35 +34,28 @@ public class MenuModel : PageModel
         if (UsuarioLogado == null)
             return RedirectToPage("/Auth/Login");
 
-        if (ModelState.IsValid && UsuarioLogado != null)
-{
-    TotalNotificacoesNaoLidas = await _context.Notificacoes
-        .AsNoTracking()
-        .CountAsync(n => n.UsuarioId == UsuarioLogado.Id && !n.Lida);
-
-    Notificacoes = await _context.Notificacoes
-        .AsNoTracking()
-        .Where(n => n.UsuarioId == UsuarioLogado.Id)
-        .OrderByDescending(n => n.DataCriacao)
-        .Take(20)
-        .Select(n => new NotificacaoViewModel
-        {
-            Id = n.Id,
-            Tipo = n.Tipo.ToString(),
-            Titulo = n.Titulo,
-            Mensagem = n.Mensagem,
-            Lida = n.Lida,
-            DataCriacao = n.DataCriacao,
-            LinkDestino = n.LinkDestino
-        })
-        .ToListAsync();
-}
+        TotalNotificacoesNaoLidas = await _context.Notificacoes
+            .AsNoTracking()
+            .CountAsync(n => n.UsuarioId == UsuarioLogado.Id && !n.Lida);
 
         var vinculosUsuario = await _context.UsuariosGrupos
-        .AsNoTracking()
-        .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
-        .Include(ug => ug.Grupo)
-        .ToListAsync();
+            .AsNoTracking()
+            .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
+            .Select(ug => new
+            {
+                ug.GrupoId,
+                ug.Permissao,
+                ug.DataAdicao,
+                Grupo = new
+                {
+                    ug.Grupo!.Nome,
+                    ug.Grupo.DescricaoGrupo,
+                    ug.Grupo.FotoGrupo,
+                    ug.Grupo.EtiquetaCor,
+                    ug.Grupo.CriadorId
+                }
+            })
+            .ToListAsync();
 
         if (!vinculosUsuario.Any())
             return Page();
@@ -100,15 +81,15 @@ public class MenuModel : PageModel
             .ToListAsync();
 
         var membrosPorGrupo = await _context.UsuariosGrupos
-        .AsNoTracking()
-        .Where(ug => grupoIds.Contains(ug.GrupoId) && ug.Ativo)
-        .GroupBy(ug => ug.GrupoId)
-        .Select(g => new
-        {
-            GrupoId = g.Key,
-            TotalMembros = g.Count()
-        })
-        .ToListAsync();
+            .AsNoTracking()
+            .Where(ug => grupoIds.Contains(ug.GrupoId) && ug.Ativo)
+            .GroupBy(ug => ug.GrupoId)
+            .Select(g => new
+            {
+                GrupoId = g.Key,
+                TotalMembros = g.Count()
+            })
+            .ToListAsync();
 
         var infosUsuarioGrupo = await _context.InfoUsuariosGrupos
             .AsNoTracking()
@@ -120,7 +101,6 @@ public class MenuModel : PageModel
         var dictInfos = infosUsuarioGrupo.ToDictionary(x => x.GrupoId);
 
         Grupos = vinculosUsuario
-            .Where(ug => ug.Grupo != null)
             .Select(ug =>
             {
                 dictChamados.TryGetValue(ug.GrupoId, out var chamadoInfo);
@@ -130,7 +110,7 @@ public class MenuModel : PageModel
                 return new GrupoViewModel
                 {
                     GrupoId = ug.GrupoId,
-                    Nome = ug.Grupo!.Nome,
+                    Nome = ug.Grupo.Nome,
                     Descricao = ug.Grupo.DescricaoGrupo,
                     FotoGrupo = ug.Grupo.FotoGrupo,
                     EtiquetaCor = ug.Grupo.EtiquetaCor,
@@ -167,7 +147,7 @@ public class MenuModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "Nome do grupo È obrigatÛrio."
+                message = "Nome do grupo √© obrigat√≥rio."
             });
         }
 
@@ -179,11 +159,10 @@ public class MenuModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "VocÍ j· possui um grupo com esse nome."
+                message = "Voc√™ j√° possui um grupo com esse nome."
             });
         }
 
-        // Como Grupo.EtiquetaCor n„o È nullable, define padr„o
         var corConvertida = EtiquetaCor.branco;
 
         if (!string.IsNullOrWhiteSpace(etiquetaCor) &&
@@ -192,13 +171,15 @@ public class MenuModel : PageModel
             corConvertida = corEnum;
         }
 
+        var usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value);
+
         var novoGrupo = new Grupo
         {
             Nome = nome,
             DescricaoGrupo = descricao,
             EtiquetaCor = corConvertida,
             CriadorId = idUsuario.Value,
-            Usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value),
+            Usuario = usuario,
             DataCriacao = DateTime.UtcNow
         };
 
@@ -211,7 +192,7 @@ public class MenuModel : PageModel
             GrupoId = novoGrupo.Id,
             Permissao = PermissaoUsuario.Administracao,
             DataAdicao = DateTime.UtcNow,
-            Usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value),
+            Usuario = usuario,
             Grupo = novoGrupo
         };
 
@@ -222,7 +203,7 @@ public class MenuModel : PageModel
             UsuarioId = idUsuario.Value,
             GrupoId = novoGrupo.Id,
             DataAtualizacaoRegistro = DateTime.UtcNow,
-            Usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value),
+            Usuario = usuario,
             Grupo = novoGrupo
         };
 
@@ -242,13 +223,13 @@ public class MenuModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "Usu·rio n„o autenticado." });
+            return new JsonResult(new { success = false, message = "Usu√°rio n√£o autenticado." });
 
         var notificacoes = await _context.Notificacoes
             .AsNoTracking()
             .Where(n => n.UsuarioId == idUsuario.Value)
             .OrderByDescending(n => n.DataCriacao)
-            .Take(30)
+            .Take(12)
             .Select(n => new
             {
                 id = n.Id,
@@ -261,7 +242,9 @@ public class MenuModel : PageModel
             })
             .ToListAsync();
 
-        var naoLidas = notificacoes.Count(x => !x.lida);
+        var naoLidas = await _context.Notificacoes
+            .AsNoTracking()
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
 
         return new JsonResult(new
         {
@@ -275,7 +258,7 @@ public class MenuModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "Usu·rio n„o autenticado." });
+            return new JsonResult(new { success = false, message = "Usu√°rio n√£o autenticado." });
 
         var notificacoesNaoLidas = await _context.Notificacoes
             .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
@@ -339,8 +322,8 @@ public class GrupoViewModel
     public string PermissaoLabel => Permissao switch
     {
         PermissaoUsuario.Administracao => "Administrador",
-        PermissaoUsuario.Tecnico => "TÈcnico",
+        PermissaoUsuario.Tecnico => "T√©cnico",
         PermissaoUsuario.Colaborador => "Colaborador",
-        _ => "Sem permiss„o"
+        _ => "Sem permiss√£o"
     };
 }

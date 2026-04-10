@@ -47,6 +47,7 @@ CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
 CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 
 builder.Services.AddScoped<GrupoAuthorizationService>();
+builder.Services.AddMemoryCache();
 
 // SERVIÇOS
 builder.Services.AddRazorPages();
