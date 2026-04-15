@@ -8,6 +8,11 @@ let painelTemplates = null;
 let colunaTemplatesAtual = null;
 let templatesAtuais = [];
 let snapshotBoardAntesDrag = null;
+let cartaoAtualEstado = {
+    membros: [],
+    chamados: [],
+    compartilharGrupo: false
+};
 
 function mostrarToast(mensagem, tipo = "danger") {
     let container = document.getElementById("toastContainer");
@@ -56,16 +61,22 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("cartaoCorCapa")?.addEventListener("change", atualizarCorCapaModal);
 
     document.getElementById("btnFocoDatas")?.addEventListener("click", () => focarSecao("secaoDatas"));
-    document.getElementById("btnFocoMembros")?.addEventListener("click", () => modalMembrosCartao?.show());
+    document.getElementById("btnFocoMembros")?.addEventListener("click", abrirModalMembrosCartao);
     document.getElementById("btnFocoChamados")?.addEventListener("click", abrirModalChamadosCartao);
+    document.getElementById("btnSalvarMembrosCartao")?.addEventListener("click", salvarMembrosCartao);
+    document.getElementById("btnSalvarChamadosCartao")?.addEventListener("click", salvarChamadosCartao);
+    document.getElementById("cartaoGrupoTodoModal")?.addEventListener("change", atualizarMembrosModalGrupoTodo);
     document.getElementById("cartaoMembros")?.addEventListener("change", () => {
         atualizarResumoMembros();
         carregarChamadosPermitidos();
     });
     document.getElementById("cartaoChamados")?.addEventListener("change", atualizarResumoChamados);
     document.getElementById("cartaoCompartilharGrupo")?.addEventListener("change", () => {
-        document.getElementById("cartaoPrivacidadeBadge").textContent =
-            document.getElementById("cartaoCompartilharGrupo")?.checked ? "Grupo" : "Privado";
+        const compartilharGrupo = !!document.getElementById("cartaoCompartilharGrupo")?.checked;
+        document.getElementById("cartaoPrivacidadeBadge").textContent = compartilharGrupo ? "Grupo" : "Privado";
+        cartaoAtualEstado.compartilharGrupo = compartilharGrupo;
+        atualizarEstadoModalCartao();
+        atualizarResumoMembros();
         carregarChamadosPermitidos();
     });
 
@@ -229,6 +240,12 @@ function abrirModalCartaoNovo(colunaId) {
     document.getElementById("cartaoAtividade").innerHTML = '<div class="text-muted small">Sem atividade carregada.</div>';
     selecionarMultiplos("cartaoMembros", []);
     substituirOpcoesChamados([]);
+    cartaoAtualEstado = {
+        membros: [],
+        chamados: [],
+        compartilharGrupo: false
+    };
+    atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados();
     ocultarSalvarComoTemplate();
@@ -273,6 +290,12 @@ async function abrirModalCartaoExistente(id) {
     selecionarMultiplos("cartaoMembros", data.membros || []);
     substituirOpcoesChamados(data.chamadosOpcoes || []);
     selecionarMultiplos("cartaoChamados", data.chamados || []);
+    cartaoAtualEstado = {
+        membros: data.membros || [],
+        chamados: data.chamados || [],
+        compartilharGrupo: !!data.compartilharGrupo
+    };
+    atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados(data.chamadosVinculados || []);
     renderizarAtividade(data.atividade || []);
@@ -722,9 +745,191 @@ function normalizarCorTemplate(cor) {
     return /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(cor || "") ? cor : "#64748b";
 }
 
+async function abrirModalMembrosCartao() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) {
+        mostrarToast("Salve o cartao antes de editar os membros.");
+        return;
+    }
+
+    const grupoTodo = document.getElementById("cartaoGrupoTodoModal");
+    if (grupoTodo) {
+        grupoTodo.checked = !!cartaoAtualEstado.compartilharGrupo;
+    }
+
+    try {
+        const response = await fetch(`?handler=MembrosCartao&grupoId=${encodeURIComponent(getGrupoId())}`);
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+
+        const data = await response.json();
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel carregar os membros.");
+            return;
+        }
+
+        renderizarMembrosCartao(data.membros || []);
+        atualizarMembrosModalGrupoTodo();
+        modalMembrosCartao?.show();
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel carregar os membros.");
+    }
+}
+
+function atualizarMembrosModalGrupoTodo() {
+    const grupoTodo = !!document.getElementById("cartaoGrupoTodoModal")?.checked;
+    document.querySelectorAll("[data-membro-cartao]").forEach(input => {
+        input.disabled = grupoTodo;
+    });
+}
+
+function renderizarMembrosCartao(membros) {
+    const lista = document.getElementById("cartaoMembrosLista");
+    const select = document.getElementById("cartaoMembros");
+    if (!lista || !select) return;
+
+    select.innerHTML = "";
+    lista.innerHTML = membros.length
+        ? membros.map(membro => {
+            const id = Number(membro.usuarioId);
+            const selecionado = cartaoAtualEstado.membros.map(Number).includes(id);
+            const nome = `${membro.nomeExibicao} (${membro.permissao})`;
+            return `
+                <label class="list-group-item d-flex gap-2 align-items-center">
+                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-membro-cartao ${selecionado ? "checked" : ""}>
+                    <span>${escapeHtml(nome)}</span>
+                </label>
+            `;
+        }).join("")
+        : '<div class="list-group-item text-muted">Nenhum membro ativo encontrado.</div>';
+
+    membros.forEach(membro => {
+        const option = document.createElement("option");
+        option.value = membro.usuarioId;
+        option.textContent = `${membro.nomeExibicao} (${membro.permissao})`;
+        option.selected = cartaoAtualEstado.membros.map(Number).includes(Number(membro.usuarioId));
+        select.appendChild(option);
+    });
+}
+
+async function salvarMembrosCartao() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) return;
+
+    const grupoTodo = !!document.getElementById("cartaoGrupoTodoModal")?.checked;
+    const membrosIds = grupoTodo
+        ? []
+        : [...document.querySelectorAll("[data-membro-cartao]:checked")]
+            .map(input => Number(input.value))
+            .filter(Number.isFinite);
+
+    try {
+        const data = await fetchJson("?handler=SalvarMembrosCartao", {
+            cartaoId,
+            grupoId: getGrupoId(),
+            membrosIds,
+            grupoTodo
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel salvar os membros.");
+            return;
+        }
+
+        cartaoAtualEstado.membros = membrosIds;
+        cartaoAtualEstado.compartilharGrupo = grupoTodo;
+        atualizarEstadoModalCartao();
+        document.getElementById("cartaoCompartilharGrupo").checked = grupoTodo;
+        document.getElementById("cartaoPrivacidadeBadge").textContent = grupoTodo ? "Grupo" : "Privado";
+        selecionarMultiplos("cartaoMembros", membrosIds);
+        atualizarResumoMembros();
+        modalMembrosCartao?.hide();
+        mostrarToast("Membros atualizados com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel salvar os membros.");
+    }
+}
+
 async function abrirModalChamadosCartao() {
-    await carregarChamadosPermitidos();
-    modalChamadosCartao?.show();
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) {
+        mostrarToast("Salve o cartao antes de vincular chamados.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`?handler=ChamadosVisivelParaTodos&cartaoId=${encodeURIComponent(cartaoId)}&grupoId=${encodeURIComponent(getGrupoId())}`);
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+
+        const data = await response.json();
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel carregar os chamados.");
+            return;
+        }
+
+        renderizarChamadosCartao(data.chamados || []);
+        modalChamadosCartao?.show();
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel carregar os chamados.");
+    }
+}
+
+function renderizarChamadosCartao(chamados) {
+    const lista = document.getElementById("cartaoChamadosLista");
+    const select = document.getElementById("cartaoChamados");
+    if (!lista || !select) return;
+
+    select.innerHTML = "";
+    lista.innerHTML = chamados.length
+        ? chamados.map(chamado => {
+            const id = Number(chamado.id);
+            const titulo = `#${chamado.numeroChamadoGrupo} - ${chamado.titulo}`;
+            return `
+                <label class="list-group-item d-flex gap-2 align-items-center">
+                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-chamado-cartao ${chamado.vinculado ? "checked" : ""}>
+                    <span>${escapeHtml(titulo)}</span>
+                </label>
+            `;
+        }).join("")
+        : '<div class="list-group-item text-muted">Nenhum chamado visivel para todos os membros.</div>';
+
+    chamados.forEach(chamado => {
+        const option = document.createElement("option");
+        option.value = chamado.id;
+        option.textContent = `#${chamado.numeroChamadoGrupo} - ${chamado.titulo}`;
+        option.selected = !!chamado.vinculado;
+        select.appendChild(option);
+    });
+}
+
+async function salvarChamadosCartao() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) return;
+
+    const chamadosIds = [...document.querySelectorAll("[data-chamado-cartao]:checked")]
+        .map(input => Number(input.value))
+        .filter(Number.isFinite);
+
+    try {
+        const data = await fetchJson("?handler=SalvarChamadosCartao", {
+            cartaoId,
+            grupoId: getGrupoId(),
+            chamadosIds
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel salvar os chamados.");
+            return;
+        }
+
+        cartaoAtualEstado.chamados = chamadosIds;
+        atualizarEstadoModalCartao();
+        selecionarMultiplos("cartaoChamados", chamadosIds);
+        atualizarResumoChamados();
+        modalChamadosCartao?.hide();
+        mostrarToast("Chamados atualizados com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel salvar os chamados.");
+    }
 }
 
 async function carregarChamadosPermitidos() {
@@ -774,6 +979,11 @@ function substituirOpcoesChamados(chamados) {
 function atualizarResumoMembros() {
     const resumo = document.getElementById("cartaoMembrosResumo");
     if (!resumo) return;
+
+    if (cartaoAtualEstado.compartilharGrupo) {
+        resumo.textContent = "Visivel para todo o grupo.";
+        return;
+    }
 
     const selecionados = [...document.getElementById("cartaoMembros")?.selectedOptions || []]
         .map(option => option.textContent.trim());
@@ -917,6 +1127,15 @@ function formatDateTimeLocal(value) {
 
 function focarSecao(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function atualizarEstadoModalCartao() {
+    const modal = document.getElementById("modalCartao");
+    if (!modal) return;
+
+    modal.dataset.membros = (cartaoAtualEstado.membros || []).join(",");
+    modal.dataset.chamados = (cartaoAtualEstado.chamados || []).join(",");
+    modal.dataset.compartilharGrupo = String(!!cartaoAtualEstado.compartilharGrupo);
 }
 
 function getBoard() {

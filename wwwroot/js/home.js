@@ -1,6 +1,7 @@
 const cronometrosAtivos = [];
 let chamadoSelecionadoId = null;
 let modalSelecionarListaTarefa = null;
+let salvandoEdicaoChamado = false;
 
 function mostrarToast(mensagem, tipo = "danger") {
     let container = document.getElementById("toastContainer");
@@ -40,6 +41,8 @@ function escapeHtml(value) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    mostrarToastPendente();
+
     const modalListaElement = document.getElementById("modalSelecionarListaTarefa");
     if (modalListaElement && window.bootstrap) {
         modalSelecionarListaTarefa = new bootstrap.Modal(modalListaElement);
@@ -96,9 +99,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     inicializarDropTarefas();
     inicializarBotoesEdicao();
+    inicializarLimpezaSelecaoChamado();
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
 });
+
+function mostrarToastPendente() {
+    const mensagem = sessionStorage.getItem("toastChamadoMensagem");
+    const tipo = sessionStorage.getItem("toastChamadoTipo") || "success";
+
+    if (!mensagem) {
+        return;
+    }
+
+    sessionStorage.removeItem("toastChamadoMensagem");
+    sessionStorage.removeItem("toastChamadoTipo");
+    mostrarToast(mensagem, tipo);
+}
 
 function inicializarDropTarefas() {
     const navTarefas = document.getElementById("navTarefasDrop");
@@ -574,9 +591,31 @@ function inicializarBotoesEdicao() {
     const btnSalvar = document.getElementById("btnSalvarEdicao");
     const btnCancelar = document.getElementById("btnCancelarEdicao");
     const btnExcluir = document.getElementById("btnExcluirChamado");
+    const form = document.getElementById("formEdicaoChamado");
 
     if (btnSalvar) {
         btnSalvar.addEventListener("click", salvarEdicaoChamado);
+    }
+
+    if (form) {
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            salvarEdicaoChamado();
+        });
+
+        form.addEventListener("keydown", event => {
+            if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+                return;
+            }
+
+            const target = event.target;
+            if (target?.matches?.("button, input[type='file']")) {
+                return;
+            }
+
+            event.preventDefault();
+            salvarEdicaoChamado();
+        });
     }
 
     if (btnCancelar) {
@@ -602,6 +641,16 @@ function inicializarBotoesEdicao() {
             await carregarSubcategorias(this.value, null);
         });
     }
+}
+
+function inicializarLimpezaSelecaoChamado() {
+    document.querySelector(".sidebar")?.addEventListener("click", () => {
+        if (!chamadoSelecionadoId) {
+            return;
+        }
+
+        cancelarEdicaoChamado();
+    });
 }
 
 function cancelarEdicaoChamado() {
@@ -682,6 +731,10 @@ async function excluirChamado() {
 }
 
 async function salvarEdicaoChamado() {
+    if (salvandoEdicaoChamado) {
+        return;
+    }
+
     if (!chamadoSelecionadoId) {
         mostrarToast("Nenhum chamado selecionado.");
         return;
@@ -728,6 +781,12 @@ async function salvarEdicaoChamado() {
         formData.append("AnexoArquivo", fileInput.files[0]);
     }
 
+    salvandoEdicaoChamado = true;
+    const btnSalvar = document.getElementById("btnSalvarEdicao");
+    if (btnSalvar) {
+        btnSalvar.disabled = true;
+    }
+
     try {
         const response = await fetch("?handler=SalvarChamado", {
             method: "POST",
@@ -748,12 +807,17 @@ async function salvarEdicaoChamado() {
             return;
         }
 
-        mostrarToast("Chamado atualizado com sucesso.", "success");
-        atualizarCardChamadoAposSalvar(payload);
-        await carregarChamado(chamadoSelecionadoId);
+        sessionStorage.setItem("toastChamadoMensagem", "Chamado atualizado com sucesso.");
+        sessionStorage.setItem("toastChamadoTipo", "success");
+        cancelarEdicaoChamado();
+        window.location.reload();
     } catch (error) {
         console.error("Erro ao salvar chamado:", error);
         mostrarToast("Erro ao salvar chamado: " + error.message);
+        salvandoEdicaoChamado = false;
+        if (btnSalvar) {
+            btnSalvar.disabled = false;
+        }
     }
 }
 

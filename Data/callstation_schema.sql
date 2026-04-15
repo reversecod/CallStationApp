@@ -6,7 +6,7 @@ use CallStation;
 CREATE TABLE Usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nome_completo VARCHAR(100) NOT NULL,
-    nome_usuario VARCHAR(100) NOT NULL UNIQUE,
+    nome_usuario VARCHAR(20) NOT NULL UNIQUE,
     email VARCHAR(100) UNIQUE,
     senha VARCHAR(255) NOT NULL,
     foto_usuario VARCHAR(255),

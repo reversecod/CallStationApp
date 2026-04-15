@@ -359,16 +359,22 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <select id="cartaoMembros" class="form-select" multiple size="10">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="cartaoGrupoTodoModal">
+                    <label class="form-check-label" for="cartaoGrupoTodoModal">Visível para todo o grupo</label>
+                </div>
+                <select id="cartaoMembros" class="form-select d-none" multiple size="10">
                     @foreach (var membro in Model.Membros)
                     {
                         <option value="@membro.UsuarioId">@membro.NomeExibicao (@membro.Permissao)</option>
                     }
                 </select>
+                <div id="cartaoMembrosLista" class="list-group"></div>
                 <div class="form-text">A tarefa privada fica visivel somente para os membros selecionados.</div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aplicar</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnSalvarMembrosCartao">Aplicar</button>
             </div>
         </div>
     </div>
@@ -382,11 +388,13 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <select id="cartaoChamados" class="form-select" multiple size="10"></select>
+                <select id="cartaoChamados" class="form-select d-none" multiple size="10"></select>
+                <div id="cartaoChamadosLista" class="list-group"></div>
                 <div class="form-text">A lista mostra apenas chamados visiveis para todos os membros da tarefa.</div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aplicar</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnSalvarChamadosCartao">Aplicar</button>
             </div>
         </div>
     </div>

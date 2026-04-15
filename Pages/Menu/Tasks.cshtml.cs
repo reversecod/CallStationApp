@@ -174,7 +174,7 @@ public class TasksModel : PageModel
             .Select(x => x.UsuarioId)
             .ToListAsync();
 
-        await DesvincularChamadosSemPermissaoAsync(cartao, usuarioId.Value);
+        await DesvincularchamadosSemPermissaoAsync(cartao.Id, grupoId, membros, usuarioId.Value);
 
         var chamados = await (
             from vinculo in _context.CartoesTarefasChamados.AsNoTracking()
@@ -303,6 +303,70 @@ public class TasksModel : PageModel
         return new JsonResult(new { success = true, chamados });
     }
 
+    public async Task<IActionResult> OnGetMembrosCartaoAsync(int grupoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, grupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var membros = await ObterMembrosAsync(grupoId);
+        return new JsonResult(new { success = true, membros });
+    }
+
+    public async Task<IActionResult> OnGetChamadosVisivelParaTodosAsync(int cartaoId, int grupoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, grupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var cartao = await _context.CartoesTarefas
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == cartaoId && c.GrupoId == grupoId);
+
+        if (cartao == null)
+            return NotFound(new { success = false, message = "Cartao nao encontrado." });
+
+        var membrosAtuais = await _context.CartoesTarefasUsuarios
+            .AsNoTracking()
+            .Where(x => x.CartaoTarefaId == cartao.Id)
+            .Select(x => x.UsuarioId)
+            .ToListAsync();
+
+        if (!PodeVerCartao(cartao, usuarioId.Value, membrosAtuais))
+            return Forbid();
+
+        var usuariosComAcesso = await ObterUsuariosComAcessoCartaoAsync(cartao);
+        var chamadosPermitidos = await ObterChamadosPermitidosAsync(grupoId, usuariosComAcesso, limitar: false);
+        var chamadosIds = chamadosPermitidos.Select(c => c.Id).ToList();
+
+        var vinculados = chamadosIds.Any()
+            ? await _context.CartoesTarefasChamados
+                .AsNoTracking()
+                .Where(x => x.CartaoTarefaId == cartao.Id && x.Ativo && chamadosIds.Contains(x.ChamadoId))
+                .Select(x => x.ChamadoId)
+                .ToListAsync()
+            : new List<int>();
+
+        var vinculadosSet = vinculados.ToHashSet();
+        var chamados = chamadosPermitidos.Select(c => new
+        {
+            c.Id,
+            c.NumeroChamadoGrupo,
+            c.Titulo,
+            vinculado = vinculadosSet.Contains(c.Id)
+        });
+
+        return new JsonResult(new { success = true, chamados });
+    }
+
     public async Task<IActionResult> OnPostSalvarCartaoAsync([FromBody] SalvarCartaoRequest request)
     {
         var usuarioId = GetUsuarioLogadoId();
@@ -380,6 +444,190 @@ public class TasksModel : PageModel
         }
 
         return BadRequest(new { success = false, message = "Não foi possível salvar o cartão no momento." });
+    }
+
+    public async Task<IActionResult> OnPostSalvarMembrosCartaoAsync([FromBody] SalvarMembrosCartaoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var membrosIds = request.MembrosIds?.Distinct().ToList() ?? new List<int>();
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var cartao = await _context.CartoesTarefas
+                        .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
+
+                    if (cartao == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+
+                    var atuais = await _context.CartoesTarefasUsuarios
+                        .Where(x => x.CartaoTarefaId == cartao.Id)
+                        .ToListAsync();
+
+                    var membrosAtuais = atuais.Select(x => x.UsuarioId).ToList();
+                    if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
+                        return (IActionResult)Forbid();
+
+                    var idsSolicitados = request.GrupoTodo ? new List<int>() : membrosIds;
+                    var idsValidos = idsSolicitados.Any()
+                        ? await _context.UsuariosGrupos
+                            .AsNoTracking()
+                            .Where(x => x.Ativo && x.GrupoId == request.GrupoId && idsSolicitados.Contains(x.UsuarioId))
+                            .Select(x => x.UsuarioId)
+                            .Distinct()
+                            .ToListAsync()
+                        : new List<int>();
+
+                    if (idsValidos.Count != idsSolicitados.Count)
+                        return (IActionResult)BadRequest(new { success = false, message = "Um ou mais membros sao invalidos." });
+
+                    var idsDesejados = idsValidos
+                        .Append(cartao.CriadorId)
+                        .Distinct()
+                        .ToHashSet();
+
+                    cartao.Privado = !request.GrupoTodo;
+                    cartao.DataAtualizacao = DateTime.UtcNow;
+
+                    _context.CartoesTarefasUsuarios.RemoveRange(
+                        atuais.Where(x => x.UsuarioId != cartao.CriadorId && !idsDesejados.Contains(x.UsuarioId)));
+
+                    foreach (var id in idsDesejados.Where(id => atuais.All(x => x.UsuarioId != id)))
+                    {
+                        _context.CartoesTarefasUsuarios.Add(new CartaoTarefaUsuario
+                        {
+                            CartaoTarefaId = cartao.Id,
+                            UsuarioId = id,
+                            TipoParticipacao = TipoParticipacaoCartaoTarefa.Participante,
+                            Permissao = PermissaoCartaoTarefa.Editor,
+                            DataAdicao = DateTime.UtcNow,
+                            AdicionadoPorUsuarioId = usuarioId.Value
+                        });
+                    }
+
+                    RegistrarHistorico(cartao.Id, usuarioId.Value, "Membros atualizados");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao salvar membros do cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel salvar os membros no momento." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostSalvarChamadosCartaoAsync([FromBody] SalvarChamadosCartaoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var chamadosIds = request.ChamadosIds?.Distinct().ToList() ?? new List<int>();
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var cartao = await _context.CartoesTarefas
+                        .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
+
+                    if (cartao == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+
+                    var membrosAtuais = await _context.CartoesTarefasUsuarios
+                        .AsNoTracking()
+                        .Where(x => x.CartaoTarefaId == cartao.Id)
+                        .Select(x => x.UsuarioId)
+                        .ToListAsync();
+
+                    if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
+                        return (IActionResult)Forbid();
+
+                    var usuariosComAcesso = await ObterUsuariosComAcessoCartaoAsync(cartao);
+                    var chamadosPermitidos = chamadosIds.Any()
+                        ? (await ObterChamadosPermitidosAsync(request.GrupoId, usuariosComAcesso, chamadosIds)).Select(c => c.Id).ToHashSet()
+                        : new HashSet<int>();
+
+                    if (chamadosPermitidos.Count != chamadosIds.Count)
+                        return (IActionResult)BadRequest(new { success = false, message = "Um ou mais chamados nao podem ser vinculados a esta tarefa." });
+
+                    var atuais = await _context.CartoesTarefasChamados
+                        .Where(x => x.CartaoTarefaId == cartao.Id)
+                        .ToListAsync();
+
+                    foreach (var vinculo in atuais)
+                    {
+                        var deveFicarAtivo = chamadosPermitidos.Contains(vinculo.ChamadoId);
+                        if (vinculo.Ativo != deveFicarAtivo)
+                        {
+                            vinculo.Ativo = deveFicarAtivo;
+                            vinculo.DataDesvinculo = deveFicarAtivo ? null : DateTime.UtcNow;
+                            vinculo.DesvinculadoPorUsuarioId = deveFicarAtivo ? null : usuarioId.Value;
+                        }
+                    }
+
+                    foreach (var chamadoId in chamadosPermitidos.Where(id => atuais.All(x => x.ChamadoId != id)))
+                    {
+                        _context.CartoesTarefasChamados.Add(new CartaoTarefaChamado
+                        {
+                            CartaoTarefaId = cartao.Id,
+                            ChamadoId = chamadoId,
+                            TipoRelacao = TipoRelacaoCartaoChamado.Relacionada,
+                            Ativo = true,
+                            DataVinculo = DateTime.UtcNow,
+                            VinculadoPorUsuarioId = usuarioId.Value
+                        });
+                    }
+
+                    RegistrarHistorico(cartao.Id, usuarioId.Value, "Chamados vinculados atualizados");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao salvar chamados do cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel salvar os chamados no momento." });
+        }
     }
 
     public async Task<IActionResult> OnPostReordenarCartoesAsync([FromBody] ReordenarCartoesRequest request)
@@ -1257,12 +1505,14 @@ public class TasksModel : PageModel
                 .ToListAsync();
         }
 
-        return await _context.CartoesTarefasUsuarios
+        var usuarios = await _context.CartoesTarefasUsuarios
             .AsNoTracking()
             .Where(x => x.CartaoTarefaId == cartao.Id)
             .Select(x => x.UsuarioId)
             .Distinct()
             .ToListAsync();
+
+        return usuarios.Append(cartao.CriadorId).Distinct().ToList();
     }
 
     private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosPermitidosParaCartaoAsync(CartaoTarefa cartao)
@@ -1271,7 +1521,7 @@ public class TasksModel : PageModel
         return await ObterChamadosPermitidosAsync(cartao.GrupoId, usuariosComAcesso);
     }
 
-    private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosPermitidosAsync(int grupoId, List<int> usuariosIds, IEnumerable<int>? chamadosIds = null)
+    private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosPermitidosAsync(int grupoId, List<int> usuariosIds, IEnumerable<int>? chamadosIds = null, bool limitar = true)
     {
         usuariosIds = usuariosIds.Distinct().ToList();
         if (!usuariosIds.Any())
@@ -1295,9 +1545,14 @@ public class TasksModel : PageModel
         if (idsFiltro is { Count: > 0 })
             query = query.Where(c => idsFiltro.Contains(c.Id));
 
-        var chamados = await query
-            .OrderByDescending(c => c.DataCriacao)
-            .Take(idsFiltro is { Count: > 0 } ? idsFiltro.Count : 200)
+        IQueryable<Chamado> chamadosQuery = query.OrderByDescending(c => c.DataCriacao);
+
+        if (idsFiltro is { Count: > 0 })
+            chamadosQuery = chamadosQuery.Take(idsFiltro.Count);
+        else if (limitar)
+            chamadosQuery = chamadosQuery.Take(200);
+
+        var chamados = await chamadosQuery
             .Select(c => new
             {
                 c.Id,
@@ -1309,7 +1564,7 @@ public class TasksModel : PageModel
             .ToListAsync();
 
         return chamados
-            .Where(chamado => membros.All(membro => UsuarioPodeVerChamado(membro.Permissao, membro.UsuarioId, chamado.Publico, chamado.CriadorChamadoId)))
+            .Where(chamado => membros.All(membro => GrupoPermissionService.PodeVerChamado(membro.Permissao, chamado.Publico, membro.UsuarioId, chamado.CriadorChamadoId)))
             .Select(chamado => new ChamadoOpcaoViewModel
             {
                 Id = chamado.Id,
@@ -1319,18 +1574,36 @@ public class TasksModel : PageModel
             .ToList();
     }
 
-    private async Task DesvincularChamadosSemPermissaoAsync(CartaoTarefa cartao, int usuarioId)
+    private async Task DesvincularchamadosSemPermissaoAsync(int cartaoId, int grupoId, List<int> membros, int usuarioId)
     {
+        var cartao = await _context.CartoesTarefas
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == cartaoId && c.GrupoId == grupoId);
+
+        if (cartao == null)
+            return;
+
         var vinculos = await _context.CartoesTarefasChamados
-            .Where(x => x.CartaoTarefaId == cartao.Id && x.Ativo)
+            .Where(x => x.CartaoTarefaId == cartaoId && x.Ativo)
             .ToListAsync();
 
         if (!vinculos.Any())
             return;
 
+        var usuariosComAcesso = cartao.Privado
+            ? membros.Append(cartao.CriadorId).Distinct().ToList()
+            : await _context.UsuariosGrupos
+                .AsNoTracking()
+                .Where(x => x.GrupoId == grupoId && x.Ativo)
+                .Select(x => x.UsuarioId)
+                .ToListAsync();
+
+        if (!usuariosComAcesso.Any())
+            return;
+
         var idsPermitidos = (await ObterChamadosPermitidosAsync(
-                cartao.GrupoId,
-                await ObterUsuariosComAcessoCartaoAsync(cartao),
+                grupoId,
+                usuariosComAcesso,
                 vinculos.Select(x => x.ChamadoId)))
             .Select(x => x.Id)
             .ToHashSet();
@@ -1345,7 +1618,21 @@ public class TasksModel : PageModel
         }
 
         if (alterou)
+        {
+            RegistrarHistorico(cartaoId, usuarioId, "Chamados desvinculados por permissao");
             await _context.SaveChangesAsync();
+        }
+    }
+
+    private async Task DesvincularChamadosSemPermissaoAsync(CartaoTarefa cartao, int usuarioId)
+    {
+        var membros = await _context.CartoesTarefasUsuarios
+            .AsNoTracking()
+            .Where(x => x.CartaoTarefaId == cartao.Id)
+            .Select(x => x.UsuarioId)
+            .ToListAsync();
+
+        await DesvincularchamadosSemPermissaoAsync(cartao.Id, cartao.GrupoId, membros, usuarioId);
     }
 
     private static bool UsuarioPodeVerChamado(PermissaoUsuario permissao, int usuarioId, bool chamadoPublico, int criadorChamadoId)
@@ -1532,6 +1819,21 @@ public class TasksModel : PageModel
         public string? CorCapa { get; set; }
         public bool CompartilharGrupo { get; set; }
         public List<int> MembrosIds { get; set; } = new();
+        public List<int> ChamadosIds { get; set; } = new();
+    }
+
+    public class SalvarMembrosCartaoRequest
+    {
+        public int CartaoId { get; set; }
+        public int GrupoId { get; set; }
+        public List<int> MembrosIds { get; set; } = new();
+        public bool GrupoTodo { get; set; }
+    }
+
+    public class SalvarChamadosCartaoRequest
+    {
+        public int CartaoId { get; set; }
+        public int GrupoId { get; set; }
         public List<int> ChamadosIds { get; set; } = new();
     }
 

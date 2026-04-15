@@ -15,8 +15,8 @@ namespace CallStationApp.Models
         public required string NomeCompleto { get; set; }
 
         [Required(ErrorMessage = "O nome de usuário é obrigatório.")]
-        [StringLength(100, ErrorMessage = "O nome de usuário não pode exceder 100 caracteres.")]
-        [Column("nome_usuario", TypeName = "varchar(100)")]
+        [StringLength(20, ErrorMessage = "O nome de usuário não pode exceder 20 caracteres.")]
+        [Column("nome_usuario", TypeName = "varchar(20)")]
         public required string NomeUsuario { get; set; }
 
         [EmailAddress(ErrorMessage = "O e-mail informado não é válido.")]

@@ -67,8 +67,8 @@ namespace CallStationApp.Data
                 entity.Property(u => u.NomeUsuario)
                     .IsRequired()
                     .HasColumnName("nome_usuario")
-                    .HasColumnType("varchar(100)")
-                    .HasMaxLength(100);
+                    .HasColumnType("varchar(20)")
+                    .HasMaxLength(20);
 
                 entity.Property(u => u.Email)
                     .HasColumnType("varchar(100)")

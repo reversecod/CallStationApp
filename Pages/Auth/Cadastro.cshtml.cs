@@ -41,12 +41,22 @@ public class CadastroModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        NomeCompleto = NomeCompleto?.Trim();
+        NomeUsuario = NomeUsuario?.Trim();
+        Email = Email?.Trim();
+
         if (string.IsNullOrWhiteSpace(NomeCompleto) ||
             string.IsNullOrWhiteSpace(NomeUsuario) ||
             string.IsNullOrWhiteSpace(Senha) ||
             string.IsNullOrWhiteSpace(ConfirmarSenha))
         {
             ErrorMessage = "Todos os campos obrigatórios devem ser preenchidos.";
+            return Page();
+        }
+
+        if (NomeUsuario.Length > 20)
+        {
+            ErrorMessage = "O nome de usuário deve ter no máximo 20 caracteres.";
             return Page();
         }
         
