@@ -11,10 +11,12 @@ namespace CallStationApp.Pages.Menu;
 public class MenuModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<MenuModel> _logger;
 
-    public MenuModel(AppDbContext context)
+    public MenuModel(AppDbContext context, ILogger<MenuModel> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public Usuario? UsuarioLogado { get; set; }
@@ -171,52 +173,81 @@ public class MenuModel : PageModel
             corConvertida = corEnum;
         }
 
-        var usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value);
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-        var novoGrupo = new Grupo
+        try
         {
-            Nome = nome,
-            DescricaoGrupo = descricao,
-            EtiquetaCor = corConvertida,
-            CriadorId = idUsuario.Value,
-            Usuario = usuario,
-            DataCriacao = DateTime.UtcNow
-        };
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        _context.Grupos.Add(novoGrupo);
-        await _context.SaveChangesAsync();
+                try
+                {
+                    var usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value);
 
-        var usuarioGrupo = new UsuarioGrupo
+                    var novoGrupo = new Grupo
+                    {
+                        Nome = nome,
+                        DescricaoGrupo = descricao,
+                        EtiquetaCor = corConvertida,
+                        CriadorId = idUsuario.Value,
+                        Usuario = usuario,
+                        DataCriacao = DateTime.UtcNow
+                    };
+
+                    _context.Grupos.Add(novoGrupo);
+
+                    _context.UsuariosGrupos.Add(new UsuarioGrupo
+                    {
+                        UsuarioId = idUsuario.Value,
+                        Grupo = novoGrupo,
+                        Permissao = PermissaoUsuario.Administracao,
+                        DataAdicao = DateTime.UtcNow,
+                        Usuario = usuario
+                    });
+
+                    _context.InfoUsuariosGrupos.Add(new InfoUsuarioGrupo
+                    {
+                        UsuarioId = idUsuario.Value,
+                        Grupo = novoGrupo,
+                        DataAtualizacaoRegistro = DateTime.UtcNow,
+                        Usuario = usuario
+                    });
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        grupoId = novoGrupo.Id,
+                        redirectUrl = Url.Page("/Menu/Home", new { grupoId = novoGrupo.Id })
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
-            UsuarioId = idUsuario.Value,
-            GrupoId = novoGrupo.Id,
-            Permissao = PermissaoUsuario.Administracao,
-            DataAdicao = DateTime.UtcNow,
-            Usuario = usuario,
-            Grupo = novoGrupo
-        };
-
-        _context.UsuariosGrupos.Add(usuarioGrupo);
-
-        var infoUsuarioGrupo = new InfoUsuarioGrupo
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Você já possui um grupo com esse nome."
+            });
+        }
+        catch (Exception ex)
         {
-            UsuarioId = idUsuario.Value,
-            GrupoId = novoGrupo.Id,
-            DataAtualizacaoRegistro = DateTime.UtcNow,
-            Usuario = usuario,
-            Grupo = novoGrupo
-        };
-
-        _context.InfoUsuariosGrupos.Add(infoUsuarioGrupo);
-
-        await _context.SaveChangesAsync();
-
-        return new JsonResult(new
-        {
-            success = true,
-            grupoId = novoGrupo.Id,
-            redirectUrl = Url.Page("/Menu/Home", new { grupoId = novoGrupo.Id })
-        });
+            _logger.LogError(ex, "Erro ao criar grupo para o usuario {UsuarioId}.", idUsuario.Value);
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Não foi possível criar o grupo no momento."
+            });
+        }
     }
 
     public async Task<IActionResult> OnGetListarNotificacoesAsync()
@@ -279,6 +310,13 @@ public class MenuModel : PageModel
     {
         var claim = User.FindFirst("Id")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private static bool EhErroDuplicidade(DbUpdateException ex)
+    {
+        var mensagem = ex.InnerException?.Message ?? ex.Message;
+        return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
+               mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 }
 

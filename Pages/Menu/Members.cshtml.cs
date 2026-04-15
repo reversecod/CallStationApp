@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -11,10 +12,12 @@ namespace CallStationApp.Pages.Menu;
 public class MembersModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<MembersModel> _logger;
 
-    public MembersModel(AppDbContext context)
+    public MembersModel(AppDbContext context, ILogger<MembersModel> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -210,7 +213,9 @@ public class MembersModel : PageModel
                         RemetenteUsuarioId = idUsuario.Value,
                         DestinatarioUsuarioId = request.DestinatarioUsuarioId,
                         Status = StatusConviteGrupo.Pendente,
-                        Mensagem = string.IsNullOrWhiteSpace(request.Mensagem) ? null : request.Mensagem.Trim(),
+                        Mensagem = string.IsNullOrWhiteSpace(request.Mensagem)
+                            ? null
+                            : request.Mensagem.Trim()[..Math.Min(request.Mensagem.Trim().Length, 255)],
                         DataCriacao = agora
                     };
 
@@ -248,20 +253,30 @@ public class MembersModel : PageModel
                 }
             });
         }
-        catch (DbUpdateException ex)
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
             return new JsonResult(new
             {
                 success = false,
-                message = ex.InnerException?.Message ?? ex.Message
+                message = "Já existe uma solicitação pendente para este usuário."
+            });
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Erro de banco ao enviar convite no grupo {GrupoId}.", GrupoId);
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Não foi possível enviar o convite no momento."
             });
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Erro ao enviar convite no grupo {GrupoId}.", GrupoId);
             return new JsonResult(new
             {
                 success = false,
-                message = ex.InnerException?.Message ?? ex.Message
+                message = "Não foi possível enviar o convite no momento."
             });
         }
     }
@@ -339,66 +354,89 @@ public class MembersModel : PageModel
         if (GrupoId <= 0)
             return new JsonResult(new { success = false, message = "Grupo inválido." });
 
-        var solicitanteNoGrupo = await _context.UsuariosGrupos
-            .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
-
-        if (solicitanteNoGrupo == null)
-            return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
-
-        if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
-            return new JsonResult(new { success = false, message = "Somente administradores podem alterar permissões." });
-
-        var membroAlvo = await _context.UsuariosGrupos
-            .FirstOrDefaultAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
-
-        if (membroAlvo == null)
-            return new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
-
         if (!Enum.TryParse<PermissaoUsuario>(request.NovaPermissao, out var novaPermissao))
             return new JsonResult(new { success = false, message = "Permissão inválida." });
 
-        if (membroAlvo.UsuarioId == idUsuario.Value && novaPermissao != PermissaoUsuario.Administracao)
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
         {
-            return new JsonResult(new
+            return await strategy.ExecuteAsync(async () =>
             {
-                success = false,
-                message = "Você não pode remover sua própria permissão de administrador."
+                await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+                try
+                {
+                    var solicitanteNoGrupo = await _context.UsuariosGrupos
+                        .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
+
+                    if (solicitanteNoGrupo == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
+
+                    if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Somente administradores podem alterar permissões." });
+
+                    var membroAlvo = await _context.UsuariosGrupos
+                        .FirstOrDefaultAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
+
+                    if (membroAlvo == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
+
+                    if (membroAlvo.UsuarioId == idUsuario.Value && novaPermissao != PermissaoUsuario.Administracao)
+                    {
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = false,
+                            message = "Você não pode remover sua própria permissão de administrador."
+                        });
+                    }
+
+                    if (membroAlvo.Permissao == novaPermissao)
+                    {
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = false,
+                            message = "O membro já possui essa permissão."
+                        });
+                    }
+
+                    var totalAdministradores = await _context.UsuariosGrupos
+                        .CountAsync(ug => ug.GrupoId == GrupoId && ug.Ativo && ug.Permissao == PermissaoUsuario.Administracao);
+
+                    if (membroAlvo.Permissao == PermissaoUsuario.Administracao &&
+                        novaPermissao != PermissaoUsuario.Administracao &&
+                        totalAdministradores <= 1)
+                    {
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = false,
+                            message = "O grupo precisa ter pelo menos um administrador."
+                        });
+                    }
+
+                    membroAlvo.Permissao = novaPermissao;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = "Permissão alterada com sucesso."
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             });
         }
-
-        if (membroAlvo.Permissao == novaPermissao)
+        catch (Exception ex)
         {
-            return new JsonResult(new
-            {
-                success = false,
-                message = "O membro já possui essa permissão."
-            });
+            _logger.LogError(ex, "Erro ao alterar permissao do usuario {UsuarioAlvoId} no grupo {GrupoId}.", request.UsuarioId, GrupoId);
+            return new JsonResult(new { success = false, message = "Não foi possível alterar a permissão no momento." });
         }
-
-        var totalAdministradores = await _context.UsuariosGrupos
-            .CountAsync(ug => ug.GrupoId == GrupoId && ug.Ativo && ug.Permissao == PermissaoUsuario.Administracao);
-
-        if (membroAlvo.Permissao == PermissaoUsuario.Administracao &&
-            novaPermissao != PermissaoUsuario.Administracao &&
-            totalAdministradores <= 1)
-        {
-            return new JsonResult(new
-            {
-                success = false,
-                message = "O grupo precisa ter pelo menos um administrador."
-            });
-        }
-
-        membroAlvo.Permissao = novaPermissao;
-        await _context.SaveChangesAsync();
-
-        return new JsonResult(new
-        {
-            success = true,
-            message = "Permissão alterada com sucesso."
-        });
     }
-
     public async Task<IActionResult> OnPostRemoverMembroAsync([FromBody] RemoverMembroRequest request)
     {
         var idUsuario = GetUsuarioLogadoId();
@@ -411,44 +449,74 @@ public class MembersModel : PageModel
         if (request == null || request.UsuarioId <= 0)
             return new JsonResult(new { success = false, message = "Usuário inválido." });
 
-        var solicitanteNoGrupo = await _context.UsuariosGrupos
-            .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-        if (solicitanteNoGrupo == null)
-            return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-        if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
-            return new JsonResult(new { success = false, message = "Somente administradores podem remover membros." });
+                try
+                {
+                    var solicitanteNoGrupo = await _context.UsuariosGrupos
+                        .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
 
-        var membroAlvo = await _context.UsuariosGrupos
-            .FirstOrDefaultAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
+                    if (solicitanteNoGrupo == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
 
-        if (membroAlvo == null)
-            return new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
+                    if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Somente administradores podem remover membros." });
 
-        if (membroAlvo.UsuarioId == idUsuario.Value)
-            return new JsonResult(new { success = false, message = "Você não pode remover a si mesmo do grupo por esta ação." });
+                    var membroAlvo = await _context.UsuariosGrupos
+                        .FirstOrDefaultAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
 
-        var totalAdministradores = await _context.UsuariosGrupos
-            .CountAsync(ug => ug.GrupoId == GrupoId && ug.Ativo && ug.Permissao == PermissaoUsuario.Administracao);
+                    if (membroAlvo == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
 
-        if (membroAlvo.Permissao == PermissaoUsuario.Administracao && totalAdministradores <= 1)
-            return new JsonResult(new { success = false, message = "Não é possível remover o último administrador do grupo." });
+                    if (membroAlvo.UsuarioId == idUsuario.Value)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você não pode remover a si mesmo do grupo por esta ação." });
 
-        membroAlvo.Ativo = false;
-        membroAlvo.Permissao = PermissaoUsuario.Nenhuma;
-        membroAlvo.DataRemocao = DateTime.UtcNow;
-        membroAlvo.RemovidoPorUsuarioId = idUsuario.Value;
+                    var totalAdministradores = await _context.UsuariosGrupos
+                        .CountAsync(ug => ug.GrupoId == GrupoId && ug.Ativo && ug.Permissao == PermissaoUsuario.Administracao);
 
-        await _context.SaveChangesAsync();
+                    if (membroAlvo.Permissao == PermissaoUsuario.Administracao && totalAdministradores <= 1)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Não é possível remover o último administrador do grupo." });
 
-        return new JsonResult(new { success = true, message = "Membro removido do grupo com sucesso." });
+                    membroAlvo.Ativo = false;
+                    membroAlvo.Permissao = PermissaoUsuario.Nenhuma;
+                    membroAlvo.DataRemocao = DateTime.UtcNow;
+                    membroAlvo.RemovidoPorUsuarioId = idUsuario.Value;
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, message = "Membro removido do grupo com sucesso." });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao remover usuario {UsuarioAlvoId} do grupo {GrupoId}.", request.UsuarioId, GrupoId);
+            return new JsonResult(new { success = false, message = "Não foi possível remover o membro no momento." });
+        }
     }
-
     private int? GetUsuarioLogadoId()
     {
         var claim = User.FindFirst("Id")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private static bool EhErroDuplicidade(DbUpdateException ex)
+    {
+        var mensagem = ex.InnerException?.Message ?? ex.Message;
+        return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
+               mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 
     public class MembroGrupoViewModel

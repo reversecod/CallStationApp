@@ -1,4 +1,4 @@
-﻿using CallStationApp.Data;
+using CallStationApp.Data;
 using CallStationApp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +11,12 @@ namespace CallStationApp.Pages.Menu;
 public class NotificationsModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<NotificationsModel> _logger;
 
-    public NotificationsModel(AppDbContext context)
+    public NotificationsModel(AppDbContext context, ILogger<NotificationsModel> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public Usuario? UsuarioLogado { get; set; }
@@ -132,7 +134,7 @@ public class NotificationsModel : PageModel
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
         {
-            return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." })
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." })
             {
                 StatusCode = StatusCodes.Status401Unauthorized
             };
@@ -147,7 +149,7 @@ public class NotificationsModel : PageModel
             return new JsonResult(new
             {
                 success = true,
-                message = "NÃ£o hÃ¡ notificaÃ§Ãµes pendentes."
+                message = "Não há notificações pendentes."
             });
         }
 
@@ -164,7 +166,7 @@ public class NotificationsModel : PageModel
         return new JsonResult(new
         {
             success = true,
-            message = "NotificaÃ§Ãµes marcadas como lidas com sucesso.",
+            message = "Notificações marcadas como lidas com sucesso.",
             totalNaoLidas = 0
         });
     }
@@ -174,7 +176,7 @@ public class NotificationsModel : PageModel
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
         {
-            return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." })
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." })
             {
                 StatusCode = StatusCodes.Status401Unauthorized
             };
@@ -182,7 +184,7 @@ public class NotificationsModel : PageModel
 
         if (request == null || request.NotificacaoId <= 0)
         {
-            return new JsonResult(new { success = false, message = "NotificaÃ§Ã£o invÃ¡lida." })
+            return new JsonResult(new { success = false, message = "Notificação inválida." })
             {
                 StatusCode = StatusCodes.Status400BadRequest
             };
@@ -193,7 +195,7 @@ public class NotificationsModel : PageModel
 
         if (notificacao == null)
         {
-            return new JsonResult(new { success = false, message = "NotificaÃ§Ã£o nÃ£o encontrada." })
+            return new JsonResult(new { success = false, message = "Notificação não encontrada." })
             {
                 StatusCode = StatusCodes.Status404NotFound
             };
@@ -215,8 +217,8 @@ public class NotificationsModel : PageModel
             dataLeitura = notificacao.DataLeitura,
             totalNaoLidas,
             message = notificacao.Lida
-                ? "NotificaÃ§Ã£o marcada como lida."
-                : "NotificaÃ§Ã£o marcada como nÃ£o lida."
+                ? "Notificação marcada como lida."
+                : "Notificação marcada como não lida."
         });
     }
 
@@ -224,10 +226,10 @@ public class NotificationsModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." });
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
         if (request == null || request.ConviteId <= 0)
-            return new JsonResult(new { success = false, message = "Convite invÃ¡lido." });
+            return new JsonResult(new { success = false, message = "Convite inválido." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -244,10 +246,10 @@ public class NotificationsModel : PageModel
                                                   c.DestinatarioUsuarioId == idUsuario.Value);
 
                     if (convite == null)
-                        return (IActionResult)new JsonResult(new { success = false, message = "Convite nÃ£o encontrado." });
+                        return (IActionResult)new JsonResult(new { success = false, message = "Convite não encontrado." });
 
                     if (convite.Status != StatusConviteGrupo.Pendente)
-                        return (IActionResult)new JsonResult(new { success = false, message = "Este convite nÃ£o estÃ¡ mais pendente." });
+                        return (IActionResult)new JsonResult(new { success = false, message = "Este convite não está mais pendente." });
 
                     var usuarioDestinatario = await _context.Usuarios
                         .AsNoTracking()
@@ -279,7 +281,7 @@ public class NotificationsModel : PageModel
                         if (notificacaoExistenteAtivo != null)
                         {
                             notificacaoExistenteAtivo.Titulo = "Convite cancelado";
-                            notificacaoExistenteAtivo.Mensagem = "Este convite foi cancelado porque vocÃª jÃ¡ faz parte deste grupo.";
+                            notificacaoExistenteAtivo.Mensagem = "Este convite foi cancelado porque você já faz parte deste grupo.";
                             notificacaoExistenteAtivo.ReferenciaTipo = "ConviteGrupoCancelado";
                             notificacaoExistenteAtivo.Lida = true;
                             notificacaoExistenteAtivo.DataLeitura = DateTime.UtcNow;
@@ -291,7 +293,7 @@ public class NotificationsModel : PageModel
                         return (IActionResult)new JsonResult(new
                         {
                             success = false,
-                            message = "VocÃª jÃ¡ faz parte deste grupo."
+                            message = "Você já faz parte deste grupo."
                         });
                     }
 
@@ -329,7 +331,7 @@ public class NotificationsModel : PageModel
                     if (notificacao != null)
                     {
                         notificacao.Titulo = "Convite aceito";
-                        notificacao.Mensagem = "VocÃª aceitou o convite para participar deste grupo.";
+                        notificacao.Mensagem = "Você aceitou o convite para participar deste grupo.";
                         notificacao.ReferenciaTipo = "ConviteGrupoRespondidoAceito";
                         notificacao.Lida = true;
                         notificacao.DataLeitura = DateTime.UtcNow;
@@ -366,18 +368,20 @@ public class NotificationsModel : PageModel
         }
         catch (DbUpdateException ex)
         {
+            _logger.LogError(ex, "Erro de banco ao aceitar convite {ConviteId}.", request.ConviteId);
             return new JsonResult(new
             {
                 success = false,
-                message = ex.InnerException?.Message ?? ex.Message
+                message = "Não foi possível aceitar o convite no momento."
             });
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Erro ao aceitar convite {ConviteId}.", request.ConviteId);
             return new JsonResult(new
             {
                 success = false,
-                message = ex.InnerException?.Message ?? ex.Message
+                message = "Não foi possível aceitar o convite no momento."
             });
         }
     }
@@ -386,19 +390,19 @@ public class NotificationsModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "UsuÃ¡rio nÃ£o autenticado." });
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
         if (request == null || request.ConviteId <= 0)
-            return new JsonResult(new { success = false, message = "Convite invÃ¡lido." });
+            return new JsonResult(new { success = false, message = "Convite inválido." });
 
         var convite = await _context.ConvitesGrupo
             .FirstOrDefaultAsync(c => c.Id == request.ConviteId && c.DestinatarioUsuarioId == idUsuario.Value);
 
         if (convite == null)
-            return new JsonResult(new { success = false, message = "Convite nÃ£o encontrado." });
+            return new JsonResult(new { success = false, message = "Convite não encontrado." });
 
         if (convite.Status != StatusConviteGrupo.Pendente)
-            return new JsonResult(new { success = false, message = "Este convite nÃ£o estÃ¡ mais pendente." });
+            return new JsonResult(new { success = false, message = "Este convite não está mais pendente." });
 
         var usuarioDestinatario = await _context.Usuarios
             .AsNoTracking()
@@ -424,7 +428,7 @@ public class NotificationsModel : PageModel
         if (notificacao != null)
         {
             notificacao.Titulo = "Convite recusado";
-            notificacao.Mensagem = "VocÃª recusou o convite para participar deste grupo.";
+            notificacao.Mensagem = "Você recusou o convite para participar deste grupo.";
             notificacao.ReferenciaTipo = "ConviteGrupoRespondidoRecusado";
             notificacao.Lida = true;
             notificacao.DataLeitura = DateTime.UtcNow;

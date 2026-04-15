@@ -22,7 +22,22 @@ namespace CallStationApp.Data
         public DbSet<Chamado> Chamados { get; set; }
         public DbSet<HistoricoStatusChamado> HistoricoStatusChamados { get; set; }
         public DbSet<ComentarioChamado> ComentariosChamados { get; set; }
-        public DbSet<Tarefa> Tarefas { get; set; }
+        public DbSet<QuadroTarefa> QuadrosTarefas { get; set; }
+        public DbSet<QuadroTarefaUsuario> QuadrosTarefasUsuarios { get; set; }
+        public DbSet<ColunaQuadro> ColunasQuadro { get; set; }
+        public DbSet<CartaoTarefaContadorGrupo> CartaoTarefaContadorGrupo { get; set; }
+        public DbSet<TemplateCartaoTarefa> TemplatesCartoesTarefas { get; set; }
+        public DbSet<CartaoTarefa> CartoesTarefas { get; set; }
+        public DbSet<CartaoTarefaUsuario> CartoesTarefasUsuarios { get; set; }
+        public DbSet<ComentarioTarefa> ComentariosTarefas { get; set; }
+        public DbSet<AnexoTarefa> AnexosTarefas { get; set; }
+        public DbSet<ChecklistTarefa> ChecklistsTarefas { get; set; }
+        public DbSet<ChecklistItemTarefa> ChecklistItensTarefas { get; set; }
+        public DbSet<EtiquetaTarefa> EtiquetasTarefas { get; set; }
+        public DbSet<CartaoTarefaEtiqueta> CartoesTarefasEtiquetas { get; set; }
+        public DbSet<CartaoTarefaChamado> CartoesTarefasChamados { get; set; }
+        public DbSet<HistoricoTarefa> HistoricoTarefas { get; set; }
+        public DbSet<DependenciaTarefa> DependenciasTarefas { get; set; }
         public DbSet<FeedbackChamado> FeedbacksChamados { get; set; }
         public DbSet<ConviteGrupo> ConvitesGrupo { get; set; }
         public DbSet<Notificacao> Notificacoes { get; set; }
@@ -449,68 +464,243 @@ namespace CallStationApp.Data
                 entity.HasIndex(c => new { c.UsuarioId }).HasDatabaseName("idx_comentario_usuario_chamado");
             });
 
-            // ===== Tarefa =====
-            modelBuilder.Entity<Tarefa>(entity =>
+            // ===== Quadros e tarefas =====
+            modelBuilder.Entity<QuadroTarefa>(entity =>
             {
-                entity.ToTable("Tarefas");
+                entity.ToTable("Quadros_tarefas");
 
-                // ===== CAMPOS BÁSICOS =====
-                entity.Property(t => t.Titulo)
-                    .IsRequired()
-                    .HasColumnType("varchar(50)")
-                    .HasMaxLength(50);
+                entity.Property(q => q.Nome).IsRequired().HasColumnType("varchar(100)").HasMaxLength(100);
+                entity.Property(q => q.Descricao).HasColumnType("varchar(300)").HasMaxLength(300);
+                entity.Property(q => q.Cor).HasColumnType("varchar(20)").HasMaxLength(20);
+                entity.Property(q => q.Ativo).HasColumnType("boolean").HasDefaultValue(true);
+                entity.Property(q => q.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.Property(t => t.Descricao)
-                    .IsRequired()
-                    .HasColumnType("varchar(500)")
-                    .HasMaxLength(500);
+                entity.HasIndex(q => new { q.GrupoId, q.Nome }).IsUnique().HasDatabaseName("uq_quadros_tarefas_grupo_nome");
+                entity.HasIndex(q => new { q.GrupoId, q.Ativo }).HasDatabaseName("idx_quadros_tarefas_grupo_ativo");
 
-                // ===== ENUMS =====
-                entity.Property(t => t.Status)
+                entity.HasOne(q => q.Grupo).WithMany().HasForeignKey(q => q.GrupoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(q => q.CriadoPorUsuario).WithMany().HasForeignKey(q => q.CriadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<QuadroTarefaUsuario>(entity =>
+            {
+                entity.ToTable("Quadros_tarefas_usuarios");
+                entity.HasKey(q => new { q.QuadroId, q.UsuarioId });
+
+                entity.Property(q => q.Permissao)
                     .HasConversion<string>()
-                    .HasColumnType("ENUM('Pendente','EmAndamento','Concluida','Cancelada')")
-                    .HasDefaultValue(StatusTarefa.Pendente);
+                    .HasColumnType("ENUM('Visualizador','Editor','Administrador')")
+                    .HasDefaultValue(PermissaoQuadroTarefa.Visualizador);
 
-                entity.Property(t => t.Criticidade)
-                    .HasConversion<string>()
-                    .HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
+                entity.Property(q => q.DataAdicao).HasColumnName("data_adicao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.Property(t => t.Urgencia)
-                    .HasConversion<string>()
-                    .HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
+                entity.HasIndex(q => new { q.UsuarioId, q.Permissao }).HasDatabaseName("idx_quadros_tarefas_usuarios_usuario_permissao");
 
-                // ===== DATAS =====
-                entity.Property(t => t.DataCriacao)
-                    .HasColumnName("data_criacao")
-                    .HasColumnType("datetime")
-                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasOne(q => q.Quadro).WithMany().HasForeignKey(q => q.QuadroId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(q => q.Usuario).WithMany().HasForeignKey(q => q.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(q => q.AdicionadoPorUsuario).WithMany().HasForeignKey(q => q.AdicionadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
 
-                entity.Property(t => t.DataConclusao)
-                    .HasColumnName("data_conclusao")
-                    .HasColumnType("datetime");
+            modelBuilder.Entity<ColunaQuadro>(entity =>
+            {
+                entity.ToTable("Colunas_quadro");
 
-                // ===== CAMPOS OBRIGATÓRIOS DO FLUXO =====
-                entity.Property(t => t.GrupoId)
-                    .IsRequired();
+                entity.Property(c => c.Nome).IsRequired().HasColumnType("varchar(60)").HasMaxLength(60);
+                entity.Property(c => c.Posicao).HasPrecision(18, 6);
+                entity.Property(c => c.Cor).HasColumnType("varchar(20)").HasMaxLength(20);
+                entity.Property(c => c.Ativa).HasColumnType("boolean").HasDefaultValue(true);
+                entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.Property(t => t.CriadorId)
-                    .IsRequired();
+                entity.HasIndex(c => new { c.QuadroId, c.Posicao }).IsUnique().HasDatabaseName("uq_colunas_quadro_posicao");
+                entity.HasIndex(c => new { c.QuadroId, c.Nome }).IsUnique().HasDatabaseName("uq_colunas_quadro_nome");
+                entity.HasIndex(c => new { c.QuadroId, c.Ativa, c.Posicao }).HasDatabaseName("idx_colunas_quadro_quadro_ativa_posicao");
 
-                // ===== FK COMPOSTA (REGRA DO SISTEMA) =====
-                entity.HasOne<Usuario>()
-                    .WithMany()
-                    .HasForeignKey(t => t.CriadorId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Quadro).WithMany().HasForeignKey(c => c.QuadroId).OnDelete(DeleteBehavior.Restrict);
+            });
 
-                entity.HasOne<Grupo>()
-                    .WithMany()
-                    .HasForeignKey(t => t.GrupoId)
-                    .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<CartaoTarefaContadorGrupo>(entity =>
+            {
+                entity.ToTable("Cartao_tarefa_contador_grupo");
+                entity.HasKey(c => c.GrupoId);
+                entity.Property(c => c.UltimoNumero).HasColumnName("ultimo_numero").HasDefaultValue(0);
+                entity.HasOne(c => c.Grupo).WithMany().HasForeignKey(c => c.GrupoId).OnDelete(DeleteBehavior.Restrict);
+            });
 
-                // ===== ÍNDICES =====
-                entity.HasIndex(t => t.GrupoId).HasDatabaseName("idx_tarefas_grupo");
-                entity.HasIndex(t => t.CriadorId).HasDatabaseName("idx_tarefas_criador");
-                entity.HasIndex(t => t.Status).HasDatabaseName("idx_tarefas_status");
+            modelBuilder.Entity<TemplateCartaoTarefa>(entity =>
+            {
+                entity.ToTable("Templates_cartoes_tarefas");
+                entity.Property(t => t.Nome).IsRequired().HasColumnType("varchar(100)").HasMaxLength(100);
+                entity.Property(t => t.Descricao).HasColumnType("text");
+                entity.Property(t => t.Prioridade).HasConversion<string>().HasColumnType("ENUM('Baixa','Media','Alta','Critica')");
+                entity.Property(t => t.Criticidade).HasConversion<string>().HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
+                entity.Property(t => t.Urgencia).HasConversion<string>().HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
+                entity.Property(t => t.CorCapa).HasColumnName("cor_capa").HasColumnType("varchar(20)").HasMaxLength(20);
+                entity.Property(t => t.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(t => t.DataAtualizacao).HasColumnName("data_atualizacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(t => t.Ativo).HasColumnType("boolean").HasDefaultValue(true);
+                entity.HasIndex(t => new { t.GrupoId, t.Nome }).IsUnique().HasDatabaseName("uq_templates_cartoes_tarefas_grupo_nome");
+                entity.HasIndex(t => new { t.GrupoId, t.Ativo }).HasDatabaseName("idx_templates_cartoes_tarefas_grupo_ativo");
+                entity.HasOne(t => t.Grupo).WithMany().HasForeignKey(t => t.GrupoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(t => t.CriadoPorUsuario).WithMany().HasForeignKey(t => t.CriadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CartaoTarefa>(entity =>
+            {
+                entity.ToTable("Cartoes_tarefas");
+
+                entity.Property(c => c.Titulo).IsRequired().HasColumnType("varchar(150)").HasMaxLength(150);
+                entity.Property(c => c.Descricao).HasColumnType("text");
+                entity.Property(c => c.Prioridade).HasConversion<string>().HasColumnType("ENUM('Baixa','Media','Alta','Critica')");
+                entity.Property(c => c.Criticidade).HasConversion<string>().HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
+                entity.Property(c => c.Urgencia).HasConversion<string>().HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
+                entity.Property(c => c.Status).HasConversion<string>().HasColumnType("ENUM('Ativa','Concluida','Arquivada','Cancelada')").HasDefaultValue(StatusCartaoTarefa.Ativa);
+                entity.Property(c => c.CorCapa).HasColumnName("cor_capa").HasColumnType("varchar(20)").HasMaxLength(20);
+                entity.Property(c => c.ImagemCapa).HasColumnName("imagem_capa").HasColumnType("varchar(255)").HasMaxLength(255);
+                entity.Property(c => c.OrdemColuna).HasColumnName("ordem_coluna").HasPrecision(18, 6);
+                entity.Property(c => c.PercentualConclusao).HasColumnName("percentual_conclusao").HasPrecision(5, 2).HasDefaultValue(0.00m);
+                entity.Property(c => c.Bloqueada).HasColumnType("boolean").HasDefaultValue(false);
+                entity.Property(c => c.MotivoBloqueio).HasColumnName("motivo_bloqueio").HasColumnType("varchar(255)").HasMaxLength(255);
+                entity.Property(c => c.Privado).HasColumnType("boolean").HasDefaultValue(true);
+                entity.Property(c => c.CriadoRapidamente).HasColumnName("criado_rapidamente").HasColumnType("boolean").HasDefaultValue(false);
+                entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(c => c.DataAtualizacao).HasColumnName("data_atualizacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(c => new { c.GrupoId, c.NumeroCartaoGrupo }).IsUnique().HasDatabaseName("uq_cartoes_tarefas_numero_grupo");
+                entity.HasIndex(c => new { c.QuadroId, c.ColunaId, c.OrdemColuna }).HasDatabaseName("idx_cartoes_tarefas_quadro_coluna_ordem");
+                entity.HasIndex(c => new { c.ResponsavelUsuarioId, c.Status, c.DataVencimento }).HasDatabaseName("idx_cartoes_tarefas_responsavel_status");
+                entity.HasIndex(c => new { c.GrupoId, c.Status, c.DataCriacao }).HasDatabaseName("idx_cartoes_tarefas_grupo_status");
+                entity.HasIndex(c => new { c.CriadorId, c.DataCriacao }).HasDatabaseName("idx_cartoes_tarefas_criador");
+                entity.HasIndex(c => c.PaiCartaoId).HasDatabaseName("idx_cartoes_tarefas_pai");
+
+                entity.HasOne(c => c.Quadro).WithMany().HasForeignKey(c => c.QuadroId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Coluna).WithMany().HasForeignKey(c => c.ColunaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Grupo).WithMany().HasForeignKey(c => c.GrupoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.PaiCartao).WithMany().HasForeignKey(c => c.PaiCartaoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Criador).WithMany().HasForeignKey(c => c.CriadorId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.ResponsavelUsuario).WithMany().HasForeignKey(c => c.ResponsavelUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CartaoTarefaUsuario>(entity =>
+            {
+                entity.ToTable("Cartoes_tarefas_usuarios");
+                entity.HasKey(c => new { c.CartaoTarefaId, c.UsuarioId });
+
+                entity.Property(c => c.TipoParticipacao).HasConversion<string>().HasColumnType("ENUM('Participante','Observador')").HasDefaultValue(TipoParticipacaoCartaoTarefa.Participante);
+                entity.Property(c => c.Permissao).HasConversion<string>().HasColumnType("ENUM('Visualizador','Editor')").HasDefaultValue(PermissaoCartaoTarefa.Visualizador);
+                entity.Property(c => c.DataAdicao).HasColumnName("data_adicao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(c => new { c.UsuarioId, c.Permissao }).HasDatabaseName("idx_cartoes_tarefas_usuarios_usuario_permissao");
+
+                entity.HasOne(c => c.CartaoTarefa).WithMany().HasForeignKey(c => c.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Usuario).WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.AdicionadoPorUsuario).WithMany().HasForeignKey(c => c.AdicionadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ComentarioTarefa>(entity =>
+            {
+                entity.ToTable("Comentarios_tarefas");
+                entity.Property(c => c.Mensagem).IsRequired().HasColumnType("text");
+                entity.Property(c => c.Editado).HasColumnType("boolean").HasDefaultValue(false);
+                entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(c => c.DataEdicao).HasColumnName("data_edicao").HasColumnType("datetime");
+                entity.HasIndex(c => new { c.CartaoTarefaId, c.DataCriacao }).HasDatabaseName("idx_comentarios_tarefas_cartao_data");
+                entity.HasOne(c => c.CartaoTarefa).WithMany().HasForeignKey(c => c.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Usuario).WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AnexoTarefa>(entity =>
+            {
+                entity.ToTable("Anexos_tarefas");
+                entity.Property(a => a.NomeArquivo).IsRequired().HasColumnName("nome_arquivo").HasColumnType("varchar(255)").HasMaxLength(255);
+                entity.Property(a => a.CaminhoArquivo).IsRequired().HasColumnName("caminho_arquivo").HasColumnType("varchar(500)").HasMaxLength(500);
+                entity.Property(a => a.TipoArquivo).HasColumnName("tipo_arquivo").HasColumnType("varchar(100)").HasMaxLength(100);
+                entity.Property(a => a.EhCapa).HasColumnName("eh_capa").HasColumnType("boolean").HasDefaultValue(false);
+                entity.Property(a => a.DataUpload).HasColumnName("data_upload").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(a => a.CartaoTarefaId).HasDatabaseName("idx_anexos_tarefas_cartao");
+                entity.HasOne(a => a.CartaoTarefa).WithMany().HasForeignKey(a => a.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(a => a.Usuario).WithMany().HasForeignKey(a => a.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ChecklistTarefa>(entity =>
+            {
+                entity.ToTable("Checklists_tarefas");
+                entity.Property(c => c.Titulo).IsRequired().HasColumnType("varchar(120)").HasMaxLength(120);
+                entity.Property(c => c.Posicao).HasPrecision(18, 6);
+                entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(c => new { c.CartaoTarefaId, c.Posicao }).HasDatabaseName("idx_checklists_tarefas_cartao_posicao");
+                entity.HasOne(c => c.CartaoTarefa).WithMany().HasForeignKey(c => c.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ChecklistItemTarefa>(entity =>
+            {
+                entity.ToTable("Checklist_itens_tarefas");
+                entity.Property(c => c.Descricao).IsRequired().HasColumnType("varchar(255)").HasMaxLength(255);
+                entity.Property(c => c.Concluido).HasColumnType("boolean").HasDefaultValue(false);
+                entity.Property(c => c.DataConclusao).HasColumnName("data_conclusao").HasColumnType("datetime");
+                entity.Property(c => c.Posicao).HasPrecision(18, 6);
+                entity.HasIndex(c => new { c.ChecklistId, c.Posicao }).HasDatabaseName("idx_checklist_itens_tarefas_checklist_posicao");
+                entity.HasOne(c => c.Checklist).WithMany().HasForeignKey(c => c.ChecklistId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.ConcluidoPorUsuario).WithMany().HasForeignKey(c => c.ConcluidoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<EtiquetaTarefa>(entity =>
+            {
+                entity.ToTable("Etiquetas_tarefas");
+                entity.Property(e => e.Nome).IsRequired().HasColumnType("varchar(50)").HasMaxLength(50);
+                entity.Property(e => e.Cor).IsRequired().HasColumnType("varchar(20)").HasMaxLength(20);
+                entity.Property(e => e.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(e => new { e.GrupoId, e.Nome }).IsUnique().HasDatabaseName("uq_etiquetas_tarefas_grupo_nome");
+                entity.HasOne(e => e.Grupo).WithMany().HasForeignKey(e => e.GrupoId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CartaoTarefaEtiqueta>(entity =>
+            {
+                entity.ToTable("Cartoes_tarefas_etiquetas");
+                entity.HasKey(e => new { e.CartaoTarefaId, e.EtiquetaId });
+                entity.HasOne(e => e.CartaoTarefa).WithMany().HasForeignKey(e => e.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.Etiqueta).WithMany().HasForeignKey(e => e.EtiquetaId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CartaoTarefaChamado>(entity =>
+            {
+                entity.ToTable("Cartoes_tarefas_chamados");
+                entity.HasKey(c => new { c.CartaoTarefaId, c.ChamadoId });
+
+                entity.Property(c => c.TipoRelacao).HasConversion<string>().HasColumnType("ENUM('Origem','Relacionada','BloqueadaPor','ResolveChamado')").HasDefaultValue(TipoRelacaoCartaoChamado.Relacionada);
+                entity.Property(c => c.Ativo).HasColumnType("boolean").HasDefaultValue(true);
+                entity.Property(c => c.DataVinculo).HasColumnName("data_vinculo").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(c => c.DataDesvinculo).HasColumnName("data_desvinculo").HasColumnType("datetime");
+
+                entity.HasIndex(c => new { c.ChamadoId, c.Ativo }).HasDatabaseName("idx_cartoes_tarefas_chamados_chamado_ativo");
+                entity.HasIndex(c => new { c.CartaoTarefaId, c.Ativo }).HasDatabaseName("idx_cartoes_tarefas_chamados_cartao_ativo");
+
+                entity.HasOne(c => c.CartaoTarefa).WithMany().HasForeignKey(c => c.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Chamado).WithMany().HasForeignKey(c => c.ChamadoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.VinculadoPorUsuario).WithMany().HasForeignKey(c => c.VinculadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.DesvinculadoPorUsuario).WithMany().HasForeignKey(c => c.DesvinculadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<HistoricoTarefa>(entity =>
+            {
+                entity.ToTable("Historico_tarefas");
+                entity.Property(h => h.TipoAcao).IsRequired().HasColumnType("varchar(50)").HasMaxLength(50);
+                entity.Property(h => h.CampoAlterado).HasColumnType("varchar(100)").HasMaxLength(100);
+                entity.Property(h => h.ValorAnterior).HasColumnType("text");
+                entity.Property(h => h.ValorNovo).HasColumnType("text");
+                entity.Property(h => h.DataAcao).HasColumnName("data_acao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasIndex(h => new { h.CartaoTarefaId, h.DataAcao }).HasDatabaseName("idx_historico_tarefas_cartao_data");
+                entity.HasIndex(h => h.UsuarioId).HasDatabaseName("idx_historico_tarefas_usuario");
+                entity.HasOne(h => h.CartaoTarefa).WithMany().HasForeignKey(h => h.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(h => h.Usuario).WithMany().HasForeignKey(h => h.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<DependenciaTarefa>(entity =>
+            {
+                entity.ToTable("Dependencias_tarefas");
+                entity.HasKey(d => new { d.CartaoTarefaId, d.CartaoDependenteId });
+                entity.Property(d => d.TipoDependencia).HasConversion<string>().HasColumnType("ENUM('Bloqueia','Relacionada')").HasDefaultValue(TipoDependenciaTarefa.Bloqueia);
+                entity.HasOne(d => d.CartaoTarefa).WithMany().HasForeignKey(d => d.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(d => d.CartaoDependente).WithMany().HasForeignKey(d => d.CartaoDependenteId).OnDelete(DeleteBehavior.Restrict);
             });
 
             // ===== FeedbackChamado =====

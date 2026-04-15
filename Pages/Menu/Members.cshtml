@@ -60,6 +60,11 @@
             height: 1rem;
         }
 
+        .sidebar .nav-link.active .icon-svg {
+            color: #111;
+            fill: #111;
+        }
+
         .page-header-card {
             border: 0;
             border-radius: 1rem;
@@ -196,7 +201,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="#" class="nav-link link-body-emphasis">
+                    <a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
                         <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#table"></use></svg>
                         Tarefas
                     </a>
@@ -210,12 +215,12 @@
                 <li>
                     <a href="#" class="nav-link link-body-emphasis">
                         <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
-                        Products
+                        Hist√≥rico
                     </a>
                 </li>
                 <li>
                     <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#people-circle"></use></svg>
+                        <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
                         Membros
                     </a>
                 </li>
@@ -227,11 +232,11 @@
                 <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle"
                    data-bs-toggle="dropdown" aria-expanded="false">
                     <img src="https://github.com/mdo.png" alt="" class="user-img rounded-circle me-2" loading="lazy">
-                    <strong>@(Model.NomeUsuarioLogado ?? "Usu·rio")</strong>
+                    <strong>@(Model.NomeUsuarioLogado ?? "Usu√°rio")</strong>
                 </a>
                 <ul class="dropdown-menu text-small shadow">
-                    <li><a class="dropdown-item" href="#">Nova organizaÁ„o...</a></li>
-                    <li><a class="dropdown-item" href="#">ConfiguraÁıes</a></li>
+                    <li><a class="dropdown-item" href="#">Nova organiza√ß√£o...</a></li>
+                    <li><a class="dropdown-item" href="#">Configura√ß√µes</a></li>
                     <li><a class="dropdown-item" href="#">Perfil</a></li>
                     <li><hr class="dropdown-divider" /></li>
                     <li>
@@ -296,7 +301,7 @@
                                     <div class="d-flex align-items-center gap-3 mb-4">
                                         @if (!string.IsNullOrWhiteSpace(foto))
                                         {
-                                            <img src="@foto" alt="Foto do usu·rio" class="member-avatar" loading="lazy" />
+                                            <img src="@foto" alt="Foto do usu√°rio" class="member-avatar" loading="lazy" />
                                         }
                                         else
                                         {
@@ -313,16 +318,16 @@
 
                                     <div class="mb-3">
                                         <div class="member-info-label">E-mail</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Email) ? "N„o informado" : membro.Email)</div>
+                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Email) ? "N√£o informado" : membro.Email)</div>
                                     </div>
 
                                     <div class="mb-3">
                                         <div class="member-info-label">Apelido no grupo</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Apelido) ? "N„o definido" : membro.Apelido)</div>
+                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Apelido) ? "N√£o definido" : membro.Apelido)</div>
                                     </div>
 
                                     <div class="mb-3">
-                                        <div class="member-info-label">Permiss„o</div>
+                                        <div class="member-info-label">Permiss√£o</div>
                                         <span class="badge badge-permissao @permissaoClasse">
                                             @membro.Permissao.ToString()
                                         </span>
@@ -330,12 +335,12 @@
 
                                     <div class="mb-3">
                                         <div class="member-info-label">Identificador interno</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.IdentificadorInterno) ? "N„o definido" : membro.IdentificadorInterno)</div>
+                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.IdentificadorInterno) ? "N√£o definido" : membro.IdentificadorInterno)</div>
                                     </div>
 
                                     <div class="mb-3">
-                                        <div class="member-info-label">ObservaÁ„o</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Observacao) ? "Sem observaÁıes" : membro.Observacao)</div>
+                                        <div class="member-info-label">Observa√ß√£o</div>
+                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Observacao) ? "Sem observa√ß√µes" : membro.Observacao)</div>
                                     </div>
 
                                     <div class="d-flex justify-content-between align-items-center pt-2 border-top">
@@ -348,7 +353,7 @@
                                             <div class="dropdown">
                                                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
                                                         data-bs-toggle="dropdown" aria-expanded="false">
-                                                    AÁıes
+                                                    A√ß√µes
                                                 </button>
                                                 <ul class="dropdown-menu dropdown-menu-end">
                                                     <li>
@@ -366,7 +371,7 @@
                                                                 data-usuario-id="@membro.UsuarioId"
                                                                 data-nome="@membro.NomeCompleto"
                                                                 data-permissao="@membro.Permissao">
-                                                            Alterar permiss„o
+                                                            Alterar permiss√£o
                                                         </button>
                                                     </li>
                                                     <li><hr class="dropdown-divider"></li>
@@ -395,7 +400,7 @@
                                 <i class="bi bi-people fs-1 text-muted"></i>
                                 <h4 class="mt-3">Nenhum membro encontrado</h4>
                                 <p class="text-muted mb-0">
-                                    Ainda n„o h· membros cadastrados neste grupo.
+                                    Ainda n√£o h√° membros cadastrados neste grupo.
                                 </p>
                             </div>
                         </div>
@@ -420,7 +425,7 @@
 
                         <div class="mb-3">
                             <label for="inputBuscarUsuario" class="form-label">
-                                Procurar por nome completo, nome de usu·rio ou e-mail
+                                Procurar por nome completo, nome de usu√°rio ou e-mail
                             </label>
                             <input type="text" class="form-control" id="inputBuscarUsuario"
                                    placeholder="Digite pelo menos 2 caracteres..." autocomplete="off" />
@@ -435,7 +440,7 @@
                         <div id="resultadoBuscaUsuarios" class="list-group"></div>
 
                         <div id="usuarioSelecionadoBox" class="alert alert-light border mt-3 d-none">
-                            <div class="fw-semibold mb-1">Usu·rio selecionado</div>
+                            <div class="fw-semibold mb-1">Usu√°rio selecionado</div>
                             <div id="usuarioSelecionadoTexto" class="small text-muted"></div>
                         </div>
 
@@ -447,7 +452,7 @@
                             Cancelar
                         </button>
                         <button type="button" class="btn btn-primary" id="btnEnviarConvite" disabled>
-                            Enviar solicitaÁ„o
+                            Enviar solicita√ß√£o
                         </button>
                     </div>
                 </div>
@@ -490,7 +495,7 @@
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="modalAlterarPermissaoLabel">Alterar permiss„o</h5>
+                        <h5 class="modal-title" id="modalAlterarPermissaoLabel">Alterar permiss√£o</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                     </div>
 
@@ -503,12 +508,12 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="selectNovaPermissao" class="form-label">Nova permiss„o</label>
+                            <label for="selectNovaPermissao" class="form-label">Nova permiss√£o</label>
                             <select id="selectNovaPermissao" class="form-select">
                                 <option value="Nenhuma">Nenhuma</option>
                                 <option value="Colaborador">Colaborador</option>
-                                <option value="Tecnico">TÈcnico</option>
-                                <option value="Administracao">AdministraÁ„o</option>
+                                <option value="Tecnico">T√©cnico</option>
+                                <option value="Administracao">Administra√ß√£o</option>
                             </select>
                         </div>
 
@@ -595,12 +600,12 @@
 
         function limparFeedbackConvite() {
             mensagemConviteFeedback.className = "mt-3 d-none";
-            mensagemConviteFeedback.innerHTML = "";
+            mensagemConviteFeedback.textContent = "";
         }
 
         function exibirFeedbackConvite(tipo, mensagem) {
             mensagemConviteFeedback.className = `alert alert-${tipo} mt-3`;
-            mensagemConviteFeedback.innerHTML = mensagem;
+            mensagemConviteFeedback.textContent = mensagem;
         }
 
         function limparSelecaoUsuario() {
@@ -614,10 +619,10 @@
             resultadoBuscaUsuarios.innerHTML = "";
 
             if (!usuarios || usuarios.length === 0) {
-                resultadoBuscaUsuarios.innerHTML = `
-                    <div class="list-group-item text-muted">
-                        Nenhum usu·rio encontrado.
-                    </div>`;
+                const vazio = document.createElement("div");
+                vazio.className = "list-group-item text-muted";
+                vazio.textContent = "Nenhum usu√°rio encontrado.";
+                resultadoBuscaUsuarios.appendChild(vazio);
                 return;
             }
 
@@ -626,18 +631,21 @@
                 item.type = "button";
                 item.className = "list-group-item list-group-item-action";
 
-                item.innerHTML = `
-                    <div class="fw-semibold">${usuario.nomeCompleto}</div>
-                    <div class="small text-muted">
-                        @@${usuario.nomeUsuario}${usuario.email ? " ï " + usuario.email : ""}
-                    </div>
-                `;
+                const nome = document.createElement("div");
+                nome.className = "fw-semibold";
+                nome.textContent = usuario.nomeCompleto || "";
+
+                const detalhe = document.createElement("div");
+                detalhe.className = "small text-muted";
+                detalhe.textContent = "@@" + (usuario.nomeUsuario || "") + (usuario.email ? " - " + usuario.email : "");
+
+                item.append(nome, detalhe);
 
                 item.addEventListener("click", () => {
                     usuarioSelecionadoId = usuario.id;
                     usuarioSelecionadoBox.classList.remove("d-none");
                     usuarioSelecionadoTexto.textContent =
-                        `${usuario.nomeCompleto} (@@${usuario.nomeUsuario}${usuario.email ? " - " + usuario.email : ""})`;
+                        (usuario.nomeCompleto || "") + " (@@" + (usuario.nomeUsuario || "") + (usuario.email ? " - " + usuario.email : "") + ")";
                     btnEnviarConvite.disabled = false;
                 });
 
@@ -676,13 +684,13 @@
                     const data = await response.json();
 
                     if (!data.success) {
-                        exibirFeedbackConvite("danger", data.message || "Erro ao buscar usu·rios.");
+                        exibirFeedbackConvite("danger", data.message || "Erro ao buscar usu√°rios.");
                         return;
                     }
 
                     renderizarResultados(data.usuarios);
                 } catch {
-                    exibirFeedbackConvite("danger", "Erro ao buscar usu·rios.");
+                    exibirFeedbackConvite("danger", "Erro ao buscar usu√°rios.");
                 }
             }, 300);
         });
@@ -691,7 +699,7 @@
             limparFeedbackConvite();
 
             if (!usuarioSelecionadoId) {
-                exibirFeedbackConvite("warning", "Selecione um usu·rio antes de enviar a solicitaÁ„o.");
+                exibirFeedbackConvite("warning", "Selecione um usu√°rio antes de enviar a solicita√ß√£o.");
                 return;
             }
 
@@ -713,18 +721,18 @@
                 const data = await response.json();
 
                 if (!data.success) {
-                    exibirFeedbackConvite("danger", data.message || "Erro ao enviar solicitaÁ„o.");
+                    exibirFeedbackConvite("danger", data.message || "Erro ao enviar solicita√ß√£o.");
                     btnEnviarConvite.disabled = false;
                     return;
                 }
 
-                exibirFeedbackConvite("success", data.message || "SolicitaÁ„o enviada com sucesso.");
+                exibirFeedbackConvite("success", data.message || "Solicita√ß√£o enviada com sucesso.");
                 inputBuscarUsuario.value = "";
                 inputMensagemConvite.value = "";
                 resultadoBuscaUsuarios.innerHTML = "";
                 limparSelecaoUsuario();
             } catch {
-                exibirFeedbackConvite("danger", "Erro ao enviar solicitaÁ„o.");
+                exibirFeedbackConvite("danger", "Erro ao enviar solicita√ß√£o.");
                 btnEnviarConvite.disabled = false;
             }
         });
@@ -819,15 +827,15 @@
                 const data = await response.json();
 
                 if (!data.success) {
-                    exibirFeedbackElemento(feedbackAlterarPermissao, "danger", data.message || "Erro ao alterar permiss„o.");
+                    exibirFeedbackElemento(feedbackAlterarPermissao, "danger", data.message || "Erro ao alterar permiss√£o.");
                     btnSalvarPermissao.disabled = false;
                     return;
                 }
 
-                exibirFeedbackElemento(feedbackAlterarPermissao, "success", data.message || "Permiss„o alterada com sucesso.");
+                exibirFeedbackElemento(feedbackAlterarPermissao, "success", data.message || "Permiss√£o alterada com sucesso.");
                 setTimeout(() => window.location.reload(), 700);
             } catch {
-                exibirFeedbackElemento(feedbackAlterarPermissao, "danger", "Erro ao alterar permiss„o.");
+                exibirFeedbackElemento(feedbackAlterarPermissao, "danger", "Erro ao alterar permiss√£o.");
                 btnSalvarPermissao.disabled = false;
             }
         });

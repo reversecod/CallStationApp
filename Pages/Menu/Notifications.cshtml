@@ -1,4 +1,4 @@
-﻿@page
+@page
 @model CallStationApp.Pages.Menu.NotificationsModel
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
@@ -275,7 +275,7 @@
                                                 class="btn-toggle-leitura @(notificacao.Lida ? "lida" : "nao-lida")"
                                                 data-notificacao-id="@notificacao.Id"
                                                 data-lida="@notificacao.Lida.ToString().ToLowerInvariant()">
-                                            @(notificacao.Lida ? "Lida" : "Nao lida")
+                                            @(notificacao.Lida ? "Lida" : "Não lida")
                                         </button>
                                     </div>
 
@@ -509,7 +509,7 @@
                     });
 
                     const estaLida = !!data.lida;
-                    botao.textContent = estaLida ? 'Lida' : 'Nao lida';
+                    botao.textContent = estaLida ? 'Lida' : 'Não lida';
                     botao.dataset.lida = String(estaLida);
                     botao.classList.toggle('lida', estaLida);
                     botao.classList.toggle('nao-lida', !estaLida);

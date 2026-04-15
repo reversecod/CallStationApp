@@ -61,8 +61,13 @@
             }
 
             .grupo-topbar {
-                height: 8px;
+                min-height: 96px;
                 width: 100%;
+                padding: 1.25rem;
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 1rem;
             }
 
             .grupo-avatar {
@@ -70,14 +75,22 @@
                 height: 56px;
                 border-radius: 1rem;
                 object-fit: cover;
-                background: #f1f5f9;
-                border: 1px solid #e5e7eb;
+                background: rgba(255,255,255,.88);
+                border: 2px solid rgba(255,255,255,.75);
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-size: 1.25rem;
                 font-weight: 700;
                 color: #334155;
+                box-shadow: 0 8px 18px rgba(15,23,42,.16);
+            }
+
+            .grupo-permissao {
+                background: rgba(255,255,255,.9);
+                border: 1px solid rgba(255,255,255,.8);
+                color: #111827;
+                box-shadow: 0 6px 16px rgba(15,23,42,.12);
             }
 
             .grupo-stat {
@@ -232,7 +245,7 @@
                             data-bs-toggle="modal"
                             data-bs-target="#modalNotificacoes"
                             id="btnAbrirNotificacoes"
-                            aria-label="NotificaÁıes">
+                            aria-label="Notifica√ß√µes">
                         <i class="bi bi-bell fs-5"></i>
 
                         @if (Model.TotalNotificacoesNaoLidas > 0)
@@ -250,16 +263,16 @@
                     <div class="dropdown">
                         <a class="nav-link text-white d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
                             <img src="@fotoUsuario" alt="Perfil" class="perfil-img" />
-                            <span>@(Model.UsuarioLogado?.NomeUsuario ?? "Usu·rio")</span>
+                            <span>@(Model.UsuarioLogado?.NomeUsuario ?? "Usu√°rio")</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li class="dropdown-header">
-                                <strong>@(Model.UsuarioLogado?.NomeCompleto ?? "Usu·rio")</strong><br />
+                                <strong>@(Model.UsuarioLogado?.NomeCompleto ?? "Usu√°rio")</strong><br />
                                 <small class="text-muted">Sua conta</small>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#">Meu perfil</a></li>
-                            <li><a class="dropdown-item" href="#">ConfiguraÁıes</a></li>
+                            <li><a class="dropdown-item" href="#">Configura√ß√µes</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
                         </ul>
@@ -275,7 +288,7 @@
                 <div>
                     <h1 class="h3 mb-2">Escolha um quadro para continuar</h1>
                     <p class="text-muted mb-0">
-                        Aqui ficam suas equipes, organizaÁıes ou quadros de trabalho.
+                        Aqui ficam suas equipes, organiza√ß√µes ou quadros de trabalho.
                     </p>
                 </div>
 
@@ -306,37 +319,35 @@
                                asp-route-grupoId="@grupo.GrupoId"
                                class="grupo-link">
                             <div class="grupo-card">
-                                <div class="grupo-topbar" style="background-color:@grupo.CorCss;"></div>
+                                <div class="grupo-topbar" style="background-color:@grupo.CorCss;">
+                                    @if (!string.IsNullOrWhiteSpace(grupo.FotoGrupo))
+                                    {
+                                        <img src="@grupo.FotoGrupo" alt="@grupo.Nome" class="grupo-avatar" />
+                                    }
+                                    else
+                                    {
+                                        <div class="grupo-avatar">@iniciais</div>
+                                    }
+
+                                    <span class="badge grupo-permissao">
+                                        <i class="bi @grupo.PermissaoIcone me-1"></i>
+                                        @grupo.PermissaoLabel
+                                    </span>
+                                </div>
 
                                 <div class="p-4">
-                                    <div class="d-flex justify-content-between align-items-start mb-3">
-                                        @if (!string.IsNullOrWhiteSpace(grupo.FotoGrupo))
-                                        {
-                                            <img src="@grupo.FotoGrupo" alt="@grupo.Nome" class="grupo-avatar" />
-                                        }
-                                        else
-                                        {
-                                            <div class="grupo-avatar">@iniciais</div>
-                                        }
-
-                                        <span class="badge text-bg-light border">
-                                            <i class="bi @grupo.PermissaoIcone me-1"></i>
-                                            @grupo.PermissaoLabel
-                                        </span>
-                                    </div>
-
                                     <h2 class="h5 mb-1">@grupo.Nome</h2>
 
                                     @if (!string.IsNullOrWhiteSpace(grupo.ApelidoNoGrupo))
                                     {
                                         <div class="small text-primary mb-2">
-                                            VocÍ neste grupo: @grupo.ApelidoNoGrupo
+                                            Voc√™ neste grupo: @grupo.ApelidoNoGrupo
                                         </div>
                                     }
 
                                     <p class="grupo-descricao small mb-3">
                                         @(string.IsNullOrWhiteSpace(grupo.Descricao)
-                                            ? "Sem descriÁ„o cadastrada."
+                                            ? "Sem descri√ß√£o cadastrada."
                                             : grupo.Descricao)
                                     </p>
 
@@ -385,7 +396,7 @@
                             </div>
                             <h3 class="h5">Criar novo grupo</h3>
                             <p class="text-muted small mb-0">
-                                Monte um novo espaÁo para chamados e tarefas.
+                                Monte um novo espa√ßo para chamados e tarefas.
                             </p>
                         </div>
                     </div>
@@ -398,9 +409,9 @@
                 <div class="mb-3">
                     <i class="bi bi-collection fs-1 text-secondary"></i>
                 </div>
-                <h2 class="h4">VocÍ ainda n„o participa de nenhum grupo</h2>
+                <h2 class="h4">Voc√™ ainda n√£o participa de nenhum grupo</h2>
                 <p class="text-muted mb-4">
-                    Crie seu primeiro quadro para comeÁar a organizar seus chamados e tarefas.
+                    Crie seu primeiro quadro para come√ßar a organizar seus chamados e tarefas.
                 </p>
                 <button class="btn btn-primary px-4"
                         data-bs-toggle="modal"
@@ -432,7 +443,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">DescriÁ„o</label>
+                            <label class="form-label">Descri√ß√£o</label>
                             <textarea name="descricao" class="form-control" rows="3" maxlength="200"></textarea>
                         </div>
 
@@ -471,7 +482,7 @@
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalNotificacoesLabel">
                         <i class="bi bi-bell me-2"></i>
-                        NotificaÁıes
+                        Notifica√ß√µes
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                 </div>
@@ -480,7 +491,7 @@
                     <div id="listaNotificacoes" class="notificacoes-lista">
                         <div class="text-center text-muted py-4">
                             <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
-                            Nenhuma notificaÁ„o no momento.
+                            Nenhuma notifica√ß√£o no momento.
                         </div>
                     </div>
                 </div>
@@ -488,7 +499,7 @@
                 <div class="modal-footer d-flex justify-content-between">
                 <a asp-page="/Menu/Notifications" class="btn btn-primary">
                     <i class="bi bi-clock-history me-2"></i>
-                    HistÛrico
+                    Hist√≥rico
                 </a>
 
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
@@ -509,38 +520,68 @@
             return data.toLocaleString('pt-BR');
         }
 
+        function exibirErroNotificacoes(mensagem) {
+            listaNotificacoes.innerHTML = "";
+            const erro = document.createElement("div");
+            erro.className = "text-center text-muted py-4";
+            erro.textContent = mensagem || "N√£o foi poss√≠vel carregar as notifica√ß√µes.";
+            listaNotificacoes.appendChild(erro);
+        }
+
         function renderizarNotificacoes(notificacoes) {
+            listaNotificacoes.innerHTML = "";
+
             if (!notificacoes || notificacoes.length === 0) {
-                listaNotificacoes.innerHTML = `
-                    <div class="text-center text-muted py-4">
-                        <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
-                        Nenhuma notificaÁ„o no momento.
-                    </div>
-                `;
+                const vazio = document.createElement("div");
+                vazio.className = "text-center text-muted py-4";
+
+                const icone = document.createElement("i");
+                icone.className = "bi bi-bell-slash fs-3 d-block mb-2";
+                vazio.append(icone, document.createTextNode("Nenhuma notifica√ß√£o no momento."));
+                listaNotificacoes.appendChild(vazio);
                 return;
             }
 
-            listaNotificacoes.innerHTML = notificacoes.map(n => `
-                <div class="notificacao-item ${n.lida ? '' : 'nao-lida'}">
-                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
-                        <div class="notificacao-titulo">${n.titulo}</div>
-                        <div class="notificacao-data">${formatarDataNotificacao(n.dataCriacao)}</div>
-                    </div>
+            notificacoes.forEach(n => {
+                const item = document.createElement("div");
+                item.className = `notificacao-item ${n.lida ? "" : "nao-lida"}`.trim();
 
-                    <div class="notificacao-mensagem mb-2">${n.mensagem}</div>
+                const topo = document.createElement("div");
+                topo.className = "d-flex justify-content-between align-items-start gap-3 mb-2";
 
-                    <a href="/Menu/Notifications" class="small text-decoration-none">Abrir</a>
-                </div>
-            `).join('');
+                const titulo = document.createElement("div");
+                titulo.className = "notificacao-titulo";
+                titulo.textContent = n.titulo || "";
+
+                const data = document.createElement("div");
+                data.className = "notificacao-data";
+                data.textContent = formatarDataNotificacao(n.dataCriacao);
+
+                const mensagem = document.createElement("div");
+                mensagem.className = "notificacao-mensagem mb-2";
+                mensagem.textContent = n.mensagem || "";
+
+                const link = document.createElement("a");
+                link.href = "/Menu/Notifications";
+                link.className = "small text-decoration-none";
+                link.textContent = "Abrir";
+
+                topo.append(titulo, data);
+                item.append(topo, mensagem, link);
+                listaNotificacoes.appendChild(item);
+            });
         }
 
         async function carregarNotificacoes() {
             try {
                 const response = await fetch('?handler=ListarNotificacoes');
+                if (!response.ok) throw new Error("Falha ao carregar notifica√ß√µes.");
+
                 const data = await response.json();
 
                 if (!data.success) {
-                    return;
+                    exibirErroNotificacoes(data.message || "N√£o foi poss√≠vel carregar as notifica√ß√µes.");
+                    return false;
                 }
 
                 renderizarNotificacoes(data.notificacoes);
@@ -553,6 +594,8 @@
                     badgeNotificacoes.textContent = '0';
                 }
             } catch {
+                exibirErroNotificacoes("N√£o foi poss√≠vel carregar as notifica√ß√µes.");
+                return false;
             }
         }
 
@@ -560,22 +603,26 @@
             try {
                 const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
 
-                await fetch('?handler=MarcarNotificacoesComoLidas', {
+                const response = await fetch('?handler=MarcarNotificacoesComoLidas', {
                     method: 'POST',
                     headers: {
                         'RequestVerificationToken': token
                     }
                 });
 
+                if (!response.ok) throw new Error("Falha ao marcar notifica√ß√µes.");
+
                 badgeNotificacoes.classList.add('d-none');
                 badgeNotificacoes.textContent = '0';
             } catch {
+                badgeNotificacoes.classList.remove('d-none');
             }
         }
 
         modalNotificacoes.addEventListener('show.bs.modal', async function () {
-            await carregarNotificacoes();
-            await marcarNotificacoesComoLidas();
+            if (await carregarNotificacoes()) {
+                await marcarNotificacoesComoLidas();
+            }
         });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
@@ -601,7 +648,7 @@
 
         if (!data.success) {
         mensagemGrupo.className = 'alert alert-danger';
-        mensagemGrupo.textContent = data.message ?? 'N„o foi possÌvel criar o grupo.';
+        mensagemGrupo.textContent = data.message ?? 'N√£o foi poss√≠vel criar o grupo.';
         return;
         }
 

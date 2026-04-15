@@ -1,7 +1,63 @@
 const cronometrosAtivos = [];
 let chamadoSelecionadoId = null;
+let modalSelecionarListaTarefa = null;
+
+function mostrarToast(mensagem, tipo = "danger") {
+    let container = document.getElementById("toastContainer");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toastContainer";
+        container.className = "toast-container position-fixed top-0 end-0 p-3";
+        container.style.zIndex = "2000";
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement("div");
+    toast.className = `toast align-items-center text-bg-${tipo} border-0`;
+    toast.role = "alert";
+    toast.ariaLive = "assertive";
+    toast.ariaAtomic = "true";
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${escapeHtml(String(mensagem || "Ocorreu um erro."))}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    const instance = bootstrap.Toast.getOrCreateInstance(toast, { delay: 4500 });
+    toast.addEventListener("hidden.bs.toast", () => toast.remove());
+    instance.show();
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
 
 document.addEventListener("DOMContentLoaded", () => {
+    const modalListaElement = document.getElementById("modalSelecionarListaTarefa");
+    if (modalListaElement && window.bootstrap) {
+        modalSelecionarListaTarefa = new bootstrap.Modal(modalListaElement);
+    }
+
+    document.getElementById("btnConfirmarListaTarefa")?.addEventListener("click", async () => {
+        const chamadoId = Number(document.getElementById("chamadoPendenteTarefaId")?.value);
+        const colunaId = Number(document.getElementById("selectListaTarefaDestino")?.value);
+
+        if (!chamadoId || !colunaId) {
+            mostrarToast("Selecione uma lista para criar a tarefa.");
+            return;
+        }
+
+        modalSelecionarListaTarefa?.hide();
+        await criarTarefaDeChamado(chamadoId, document.getElementById("navTarefasDrop")?.dataset.tasksUrl, colunaId);
+    });
+
     const botaoNovo = document.getElementById("btnNovoChamado");
     if (botaoNovo) {
         botaoNovo.addEventListener("click", criarNovoChamado);
@@ -22,12 +78,144 @@ document.addEventListener("DOMContentLoaded", () => {
 
             carregarChamado(id);
         });
+
+        containerChamados.addEventListener("dragstart", e => {
+            const card = e.target.closest(".ticket-card");
+            if (!card) return;
+
+            e.dataTransfer.effectAllowed = "copy";
+            e.dataTransfer.setData("text/plain", card.dataset.id);
+            card.classList.add("dragging");
+        });
+
+        containerChamados.addEventListener("dragend", e => {
+            const card = e.target.closest(".ticket-card");
+            if (card) card.classList.remove("dragging");
+        });
     }
 
+    inicializarDropTarefas();
     inicializarBotoesEdicao();
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
 });
+
+function inicializarDropTarefas() {
+    const navTarefas = document.getElementById("navTarefasDrop");
+    if (!navTarefas) return;
+
+    navTarefas.addEventListener("dragover", e => {
+        e.preventDefault();
+        navTarefas.classList.add("active");
+    });
+
+    navTarefas.addEventListener("dragleave", () => {
+        navTarefas.classList.remove("active");
+    });
+
+    navTarefas.addEventListener("drop", async e => {
+        e.preventDefault();
+        navTarefas.classList.remove("active");
+
+        const chamadoId = Number(e.dataTransfer.getData("text/plain"));
+        if (!chamadoId) return;
+
+        await prepararCriacaoTarefaDeChamado(chamadoId, navTarefas.dataset.tasksUrl);
+    });
+}
+
+async function prepararCriacaoTarefaDeChamado(chamadoId, redirectUrl) {
+    const grupoId = Number(document.getElementById("grupoIdAtual")?.value);
+    if (!grupoId) {
+        mostrarToast("Grupo atual nao encontrado.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`?handler=ListasTarefas&grupoId=${encodeURIComponent(grupoId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || `Erro HTTP: ${response.status}`);
+        }
+
+        const listas = data.listas || [];
+        if (listas.length === 0) {
+            mostrarToast("Crie uma lista em Tarefas antes de arrastar chamados.");
+            if (redirectUrl) {
+                window.location.href = redirectUrl;
+            }
+            return;
+        }
+
+        if (listas.length === 1) {
+            await criarTarefaDeChamado(chamadoId, redirectUrl, listas[0].id);
+            return;
+        }
+
+        abrirModalSelecionarListaTarefa(chamadoId, listas);
+    } catch (error) {
+        console.error("Erro ao carregar listas de tarefas:", error);
+        mostrarToast("Não foi possível carregar as listas: " + error.message);
+    }
+}
+
+function abrirModalSelecionarListaTarefa(chamadoId, listas) {
+    const chamadoInput = document.getElementById("chamadoPendenteTarefaId");
+    const select = document.getElementById("selectListaTarefaDestino");
+
+    if (!chamadoInput || !select || !modalSelecionarListaTarefa) {
+        mostrarToast("Não foi possível abrir a seleção de lista.");
+        return;
+    }
+
+    chamadoInput.value = chamadoId;
+    select.innerHTML = "";
+
+    listas.forEach(lista => {
+        const option = document.createElement("option");
+        option.value = lista.id;
+        option.textContent = lista.nome;
+        select.appendChild(option);
+    });
+
+    modalSelecionarListaTarefa.show();
+}
+
+async function criarTarefaDeChamado(chamadoId, redirectUrl, colunaId) {
+    const tokenInput = document.getElementById("requestVerificationToken");
+    const grupoIdInput = document.getElementById("grupoIdAtual");
+
+    if (!tokenInput || !grupoIdInput) {
+        mostrarToast("Dados da sessao nao encontrados.");
+        return;
+    }
+
+    try {
+        const response = await fetch("?handler=CriarTarefaDeChamado", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "RequestVerificationToken": tokenInput.value
+            },
+            body: JSON.stringify({
+                grupoId: Number(grupoIdInput.value),
+                chamadoId,
+                colunaId
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || `Erro HTTP: ${response.status}`);
+        }
+
+        window.location.href = data.redirectUrl || redirectUrl || "/Menu/Tasks";
+    } catch (error) {
+        console.error("Erro ao criar tarefa a partir do chamado:", error);
+        mostrarToast("Não foi possível criar a tarefa: " + error.message);
+    }
+}
 
 async function criarNovoChamado() {
     const tokenInput = document.getElementById("requestVerificationToken");
@@ -35,17 +223,17 @@ async function criarNovoChamado() {
     const container = document.getElementById("chamados-container");
 
     if (!tokenInput) {
-        alert("Token de verificação não encontrado.");
+        mostrarToast("Token de verificação não encontrado.");
         return;
     }
 
     if (!grupoIdInput || !grupoIdInput.value) {
-        alert("Grupo atual não encontrado.");
+        mostrarToast("Grupo atual não encontrado.");
         return;
     }
 
     if (!container) {
-        alert("Container de chamados não encontrado.");
+        mostrarToast("Container de chamados não encontrado.");
         return;
     }
 
@@ -108,7 +296,7 @@ async function criarNovoChamado() {
         }
 
         console.error("Erro na requisição de criação:", error);
-        alert("Falha ao criar chamado: " + error.message);
+        mostrarToast("Falha ao criar chamado: " + error.message);
     }
 }
 
@@ -156,7 +344,7 @@ async function carregarChamado(id) {
 
     const grupoId = document.getElementById("grupoIdAtual")?.value;
     if (!grupoId) {
-        alert("Grupo atual não encontrado.");
+        mostrarToast("Grupo atual não encontrado.");
         return;
     }
 
@@ -172,7 +360,7 @@ async function carregarChamado(id) {
         const data = await response.json();
 
         if (data.success === false) {
-            alert(data.message || "Não foi possível carregar o chamado.");
+            mostrarToast(data.message || "Não foi possível carregar o chamado.");
             return;
         }
 
@@ -180,7 +368,7 @@ async function carregarChamado(id) {
         aplicarPermissoesChamado(data.permissoes ?? {});
     } catch (error) {
         console.error("Erro ao carregar chamado:", error);
-        alert("Erro ao carregar chamado: " + error.message);
+        mostrarToast("Erro ao carregar chamado: " + error.message);
     }
 }
 
@@ -443,17 +631,17 @@ function cancelarEdicaoChamado() {
 
 async function excluirChamado() {
     if (!chamadoSelecionadoId) {
-        alert("Nenhum chamado selecionado.");
+        mostrarToast("Nenhum chamado selecionado.");
         return;
     }
 
-    if (!confirm("Tem certeza que deseja excluir este chamado? Ele será marcado como 'Cancelado' e removido da lista.")) {
+    if (!confirm("Tem certeza que deseja cancelar este chamado? Ele será removido da lista.")) {
         return;
     }
 
     const tokenInput = document.getElementById("requestVerificationToken");
     if (!tokenInput) {
-        alert("Token de verificação não encontrado.");
+        mostrarToast("Token de verificação não encontrado.");
         return;
     }
 
@@ -476,7 +664,7 @@ async function excluirChamado() {
         const data = await response.json();
 
         if (!data.success) {
-            alert(data.message || "Erro ao excluir chamado.");
+            mostrarToast(data.message || "Erro ao cancelar chamado.");
             return;
         }
 
@@ -486,22 +674,22 @@ async function excluirChamado() {
         }
 
         cancelarEdicaoChamado();
-        alert("Chamado excluído com sucesso.");
+        mostrarToast(data.message || "Chamado cancelado com sucesso.", "success");
     } catch (error) {
-        console.error("Erro ao excluir chamado:", error);
-        alert("Erro ao excluir chamado: " + error.message);
+        console.error("Erro ao cancelar chamado:", error);
+        mostrarToast("Erro ao cancelar chamado: " + error.message);
     }
 }
 
 async function salvarEdicaoChamado() {
     if (!chamadoSelecionadoId) {
-        alert("Nenhum chamado selecionado.");
+        mostrarToast("Nenhum chamado selecionado.");
         return;
     }
 
     const tokenInput = document.getElementById("requestVerificationToken");
     if (!tokenInput) {
-        alert("Token de verificação não encontrado.");
+        mostrarToast("Token de verificação não encontrado.");
         return;
     }
 
@@ -556,15 +744,46 @@ async function salvarEdicaoChamado() {
         const data = await response.json();
 
         if (!data.success) {
-            alert(data.message || "Erro ao salvar chamado.");
+            mostrarToast(data.message || "Erro ao salvar chamado.");
             return;
         }
 
-        alert("Chamado atualizado com sucesso.");
-        window.location.reload();
+        mostrarToast("Chamado atualizado com sucesso.", "success");
+        atualizarCardChamadoAposSalvar(payload);
+        await carregarChamado(chamadoSelecionadoId);
     } catch (error) {
         console.error("Erro ao salvar chamado:", error);
-        alert("Erro ao salvar chamado: " + error.message);
+        mostrarToast("Erro ao salvar chamado: " + error.message);
+    }
+}
+
+function atualizarCardChamadoAposSalvar(payload) {
+    const card = document.querySelector(`.ticket-card[data-id="${chamadoSelecionadoId}"]`);
+    if (!card) return;
+
+    if (payload.status === "Cancelado" || payload.status === "Excluido") {
+        card.remove();
+        cancelarEdicaoChamado();
+        return;
+    }
+
+    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-andamento");
+
+    const classeStatus = payload.status === "Pendente"
+        ? "ticket-pendente"
+        : payload.status === "EmAndamento"
+            ? "ticket-em-andamento"
+            : "ticket-aberto";
+
+    card.classList.add(classeStatus);
+
+    const texto = card.querySelector(".ticket-text");
+    const cronometro = card.querySelector(".cronometro");
+    const titulo = payload.titulo || `Chamado ${chamadoSelecionadoId}`;
+
+    if (texto && cronometro) {
+        texto.textContent = `${titulo} - `;
+        texto.appendChild(cronometro);
     }
 }
 
@@ -624,7 +843,7 @@ async function carregarCategorias(tipoId, categoriaSelecionada) {
         });
     } catch (error) {
         console.error("Erro ao carregar categorias:", error);
-        alert(error.message || "Erro ao carregar categorias.");
+        mostrarToast(error.message || "Erro ao carregar categorias.");
     }
 }
 
@@ -661,6 +880,7 @@ async function carregarSubcategorias(categoriaId, subcategoriaSelecionada) {
         });
     } catch (error) {
         console.error("Erro ao carregar subcategorias:", error);
-        alert(error.message || "Erro ao carregar subcategorias.");
+        mostrarToast(error.message || "Erro ao carregar subcategorias.");
     }
 }
+

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Data;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -16,6 +17,7 @@ public class HomeModel : PageModel
     private readonly IWebHostEnvironment _environment;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly IMemoryCache _memoryCache;
+    private readonly ILogger<HomeModel> _logger;
     private const int TamanhoPaginaChamados = 20;
     private static readonly TimeSpan CacheCatalogoTtl = TimeSpan.FromMinutes(10);
 
@@ -23,12 +25,14 @@ public class HomeModel : PageModel
         AppDbContext context,
         IWebHostEnvironment environment,
         GrupoAuthorizationService grupoAuthorizationService,
-        IMemoryCache memoryCache)
+        IMemoryCache memoryCache,
+        ILogger<HomeModel> logger)
     {
         _context = context;
         _environment = environment;
         _grupoAuthorizationService = grupoAuthorizationService;
         _memoryCache = memoryCache;
+        _logger = logger;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -370,19 +374,227 @@ public class HomeModel : PageModel
                 _context.ChangeTracker.Clear();
 
                 if (!EhErroDuplicidade(ex))
-                    return BadRequest(new { success = false, message = ex.InnerException?.Message ?? ex.Message });
+                {
+                    _logger.LogError(ex, "Erro de banco ao criar chamado no grupo {GrupoId}.", grupoId);
+                    return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
+                }
             }
             catch (DbUpdateException ex)
             {
-                return BadRequest(new { success = false, message = ex.InnerException?.Message ?? ex.Message });
+                _logger.LogError(ex, "Erro de banco ao criar chamado no grupo {GrupoId}.", grupoId);
+                return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = ex.InnerException?.Message ?? ex.Message });
+                _logger.LogError(ex, "Erro ao criar chamado no grupo {GrupoId}.", grupoId);
+                return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
             }
         }
 
         return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
+    }
+
+    public async Task<IActionResult> OnPostCriarTarefaDeChamadoAsync([FromBody] CriarTarefaDeChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.GrupoId <= 0 || request.ChamadoId <= 0)
+            return BadRequest(new { success = false, message = "Parametros invalidos." });
+
+        var contextoMembro = await _grupoAuthorizationService
+            .ObterContextoMembroAsync(idUsuario.Value, request.GrupoId);
+
+        if (contextoMembro == null)
+            return Forbid();
+
+        var chamado = await _context.Chamados
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == request.ChamadoId && c.GrupoId == request.GrupoId);
+
+        if (chamado == null)
+            return NotFound(new { success = false, message = "Chamado nao encontrado." });
+
+        if (!GrupoPermissionService.PodeVerChamado(
+                contextoMembro.Permissao,
+                chamado.Publico,
+                idUsuario.Value,
+                chamado.CriadorChamadoId))
+        {
+            return Forbid();
+        }
+
+        const int maxTentativas = 3;
+        for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            try
+            {
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    try
+                    {
+                        var quadro = await GarantirQuadroTarefasPadraoAsync(request.GrupoId, idUsuario.Value);
+                        var coluna = await ObterColunaTarefasDestinoAsync(quadro.Id, request.ColunaId);
+
+                        if (coluna == null)
+                        {
+                            return (IActionResult)BadRequest(new
+                            {
+                                success = false,
+                                message = "Crie uma lista em Tarefas antes de arrastar chamados."
+                            });
+                        }
+
+                        var contador = await _context.CartaoTarefaContadorGrupo.FirstOrDefaultAsync(c => c.GrupoId == request.GrupoId);
+
+                        if (contador == null)
+                        {
+                            contador = new CartaoTarefaContadorGrupo
+                            {
+                                GrupoId = request.GrupoId,
+                                UltimoNumero = 0
+                            };
+
+                            _context.CartaoTarefaContadorGrupo.Add(contador);
+                        }
+
+                        contador.UltimoNumero++;
+
+                        var ultimaOrdem = await _context.CartoesTarefas
+                            .Where(c => c.ColunaId == coluna.Id)
+                            .MaxAsync(c => (decimal?)c.OrdemColuna) ?? 0m;
+
+                        var tituloChamado = string.IsNullOrWhiteSpace(chamado.Titulo) ||
+                                             string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
+                            ? $"Chamado {chamado.NumeroChamadoGrupo}"
+                            : chamado.Titulo;
+
+                        var cartao = new CartaoTarefa
+                        {
+                            QuadroId = quadro.Id,
+                            ColunaId = coluna.Id,
+                            GrupoId = request.GrupoId,
+                            NumeroCartaoGrupo = contador.UltimoNumero,
+                            Titulo = tituloChamado,
+                            Descricao = chamado.Descricao,
+                            CriadorId = idUsuario.Value,
+                            Prioridade = chamado.Prioridade,
+                            Criticidade = chamado.Criticidade,
+                            Urgencia = chamado.Urgencia,
+                            Status = StatusCartaoTarefa.Ativa,
+                            OrdemColuna = ultimaOrdem + 1024m,
+                            PercentualConclusao = 0m,
+                            Privado = true,
+                            DataCriacao = DateTime.UtcNow,
+                            DataAtualizacao = DateTime.UtcNow
+                        };
+
+                        _context.CartoesTarefas.Add(cartao);
+
+                        _context.CartoesTarefasUsuarios.Add(new CartaoTarefaUsuario
+                        {
+                            CartaoTarefa = cartao,
+                            UsuarioId = idUsuario.Value,
+                            TipoParticipacao = TipoParticipacaoCartaoTarefa.Participante,
+                            Permissao = PermissaoCartaoTarefa.Editor,
+                            DataAdicao = DateTime.UtcNow,
+                            AdicionadoPorUsuarioId = idUsuario.Value
+                        });
+
+                        _context.CartoesTarefasChamados.Add(new CartaoTarefaChamado
+                        {
+                            CartaoTarefa = cartao,
+                            ChamadoId = chamado.Id,
+                            TipoRelacao = TipoRelacaoCartaoChamado.Origem,
+                            Ativo = true,
+                            DataVinculo = DateTime.UtcNow,
+                            VinculadoPorUsuarioId = idUsuario.Value
+                        });
+
+                        _context.HistoricoTarefas.Add(new HistoricoTarefa
+                        {
+                            CartaoTarefa = cartao,
+                            UsuarioId = idUsuario.Value,
+                            TipoAcao = "Cartao criado a partir de chamado",
+                            CampoAlterado = "chamado_id",
+                            ValorNovo = chamado.Id.ToString(),
+                            DataAcao = DateTime.UtcNow
+                        });
+
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = true,
+                            cartaoId = cartao.Id,
+                            redirectUrl = Url.Page("/Menu/Tasks", new { grupoId = request.GrupoId })
+                        });
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+            }
+            catch (DbUpdateException ex) when (tentativa < maxTentativas && EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                _logger.LogWarning(ex, "Duplicidade ao criar tarefa do chamado {ChamadoId} no grupo {GrupoId}.", request.ChamadoId, request.GrupoId);
+                return BadRequest(new { success = false, message = "Não foi possível criar a tarefa no momento. Tente novamente." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao criar tarefa do chamado {ChamadoId} no grupo {GrupoId}.", request.ChamadoId, request.GrupoId);
+                return BadRequest(new { success = false, message = "Não foi possível criar a tarefa no momento." });
+            }
+        }
+
+        return BadRequest(new { success = false, message = "Não foi possível criar a tarefa no momento. Tente novamente." });
+    }
+    public async Task<IActionResult> OnGetListasTarefasAsync(int grupoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (grupoId <= 0)
+            return BadRequest(new { success = false, message = "Grupo invalido." });
+
+        var contextoMembro = await _grupoAuthorizationService
+            .ObterContextoMembroAsync(idUsuario.Value, grupoId);
+
+        if (contextoMembro == null)
+            return Forbid();
+
+        var quadro = await _context.QuadrosTarefas
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.GrupoId == grupoId && q.Ativo);
+
+        if (quadro == null)
+            return new JsonResult(new { success = true, listas = Array.Empty<object>() });
+
+        var listas = await _context.ColunasQuadro
+            .AsNoTracking()
+            .Where(c => c.QuadroId == quadro.Id && c.Ativa)
+            .OrderBy(c => c.Posicao)
+            .Select(c => new
+            {
+                id = c.Id,
+                nome = c.Nome
+            })
+            .ToListAsync();
+
+        return new JsonResult(new { success = true, listas });
     }
 
     public async Task<IActionResult> OnPostExcluirChamadoAsync([FromBody] ExcluirChamadoRequest request)
@@ -418,7 +630,7 @@ public class HomeModel : PageModel
         idUsuario.Value,
         chamado.CriadorChamadoId))
         {
-            return new JsonResult(new { success = false, message = "Você não tem permissão para excluir este chamado." });
+            return new JsonResult(new { success = false, message = "Você não tem permissão para cancelar este chamado." });
         }
 
         chamado.Status = StatusChamado.Cancelado;
@@ -430,10 +642,11 @@ public class HomeModel : PageModel
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Erro ao cancelar chamado {ChamadoId}.", request.Id);
             return new JsonResult(new
             {
                 success = false,
-                message = ex.InnerException?.Message ?? ex.Message
+                message = "Nao foi possivel cancelar o chamado no momento."
             });
         }
     }
@@ -479,6 +692,9 @@ public class HomeModel : PageModel
 
             if (request.AnexoArquivo.Length > 5 * 1024 * 1024)
                 return new JsonResult(new { success = false, message = "Arquivo excede o limite de 5 MB." });
+
+            if (!await AssinaturaArquivoPermitidaAsync(request.AnexoArquivo, extensao))
+                return new JsonResult(new { success = false, message = "Conteudo do arquivo nao permitido." });
         }
 
         if (!GrupoPermissionService.PodeVerChamado(
@@ -675,12 +891,20 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Status, idUsuario.Value, chamado.CriadorChamadoId)
-            && !string.IsNullOrWhiteSpace(request.Status)
-            && Enum.TryParse<StatusChamado>(request.Status, out var novoStatus)
-            && chamado.Status != novoStatus)
+        StatusChamado? novoStatus = null;
+        if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            chamado.Status = novoStatus;
+            if (!Enum.TryParse<StatusChamado>(request.Status, out var statusConvertido))
+                return new JsonResult(new { success = false, message = "Status invalido." });
+
+            novoStatus = statusConvertido;
+        }
+
+        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Status, idUsuario.Value, chamado.CriadorChamadoId)
+            && novoStatus.HasValue
+            && chamado.Status != novoStatus.Value)
+        {
+            chamado.Status = novoStatus.Value;
             houveAlteracao = true;
         }
 
@@ -719,7 +943,14 @@ public class HomeModel : PageModel
             var uploadsRoot = Path.Combine(_environment.WebRootPath, "uploads", "chamados");
             Directory.CreateDirectory(uploadsRoot);
 
-            var extensao = Path.GetExtension(request.AnexoArquivo.FileName);
+            var extensao = Path.GetExtension(request.AnexoArquivo.FileName).ToLowerInvariant();
+            var extensoesPermitidas = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
+            if (!extensoesPermitidas.Contains(extensao))
+                return new JsonResult(new { success = false, message = "Tipo de arquivo não permitido." });
+
+            if (!await AssinaturaArquivoPermitidaAsync(request.AnexoArquivo, extensao))
+                return new JsonResult(new { success = false, message = "Conteudo do arquivo nao permitido." });
+
             var nomeArquivo = $"{Guid.NewGuid()}{extensao}";
             var caminhoFisico = Path.Combine(uploadsRoot, nomeArquivo);
 
@@ -750,10 +981,11 @@ public class HomeModel : PageModel
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Erro ao salvar chamado {ChamadoId}.", request.Id);
             return new JsonResult(new
             {
                 success = false,
-                message = ex.InnerException?.Message ?? ex.Message
+                message = "Nao foi possivel salvar o chamado no momento."
             });
         }
     }
@@ -762,6 +994,36 @@ public class HomeModel : PageModel
     {
         var claim = User.FindFirst("Id")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private static async Task<bool> AssinaturaArquivoPermitidaAsync(IFormFile arquivo, string extensao)
+    {
+        var buffer = new byte[8];
+        await using var stream = arquivo.OpenReadStream();
+        var bytesLidos = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length));
+
+        return extensao switch
+        {
+            ".jpg" or ".jpeg" => bytesLidos >= 3 &&
+                                 buffer[0] == 0xFF &&
+                                 buffer[1] == 0xD8 &&
+                                 buffer[2] == 0xFF,
+            ".png" => bytesLidos >= 8 &&
+                      buffer[0] == 0x89 &&
+                      buffer[1] == 0x50 &&
+                      buffer[2] == 0x4E &&
+                      buffer[3] == 0x47 &&
+                      buffer[4] == 0x0D &&
+                      buffer[5] == 0x0A &&
+                      buffer[6] == 0x1A &&
+                      buffer[7] == 0x0A,
+            ".pdf" => bytesLidos >= 4 &&
+                      buffer[0] == 0x25 &&
+                      buffer[1] == 0x50 &&
+                      buffer[2] == 0x44 &&
+                      buffer[3] == 0x46,
+            _ => false
+        };
     }
 
     public async Task<IActionResult> OnGetCategoriasPorTipoAsync(int tipoId)
@@ -906,9 +1168,119 @@ public class HomeModel : PageModel
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 
+    private async Task<QuadroTarefa> GarantirQuadroTarefasPadraoAsync(int grupoId, int usuarioId)
+    {
+        var quadro = await _context.QuadrosTarefas
+            .FirstOrDefaultAsync(q => q.GrupoId == grupoId && q.Ativo);
+
+        if (quadro != null)
+            return quadro;
+
+        if (_context.Database.CurrentTransaction != null)
+        {
+            try
+            {
+                quadro = new QuadroTarefa
+                {
+                    GrupoId = grupoId,
+                    Nome = "Tarefas",
+                    Descricao = "Quadro principal de tarefas",
+                    Ativo = true,
+                    CriadoPorUsuarioId = usuarioId,
+                    DataCriacao = DateTime.UtcNow
+                };
+
+                _context.QuadrosTarefas.Add(quadro);
+                await _context.SaveChangesAsync();
+
+                return quadro;
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                if (quadro != null)
+                    _context.Entry(quadro).State = EntityState.Detached;
+
+                return await _context.QuadrosTarefas
+                    .FirstAsync(q => q.GrupoId == grupoId && q.Ativo);
+            }
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var quadroExistente = await _context.QuadrosTarefas
+                        .FirstOrDefaultAsync(q => q.GrupoId == grupoId && q.Ativo);
+
+                    if (quadroExistente != null)
+                    {
+                        await transaction.CommitAsync();
+                        return quadroExistente;
+                    }
+
+                    quadro = new QuadroTarefa
+                    {
+                        GrupoId = grupoId,
+                        Nome = "Tarefas",
+                        Descricao = "Quadro principal de tarefas",
+                        Ativo = true,
+                        CriadoPorUsuarioId = usuarioId,
+                        DataCriacao = DateTime.UtcNow
+                    };
+
+                    _context.QuadrosTarefas.Add(quadro);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return quadro;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+        {
+            if (quadro != null)
+                _context.Entry(quadro).State = EntityState.Detached;
+
+            return await _context.QuadrosTarefas
+                .FirstAsync(q => q.GrupoId == grupoId && q.Ativo);
+        }
+    }
+
+    private async Task<ColunaQuadro?> ObterColunaTarefasDestinoAsync(int quadroId, int? colunaId)
+    {
+        if (colunaId.HasValue && colunaId.Value > 0)
+        {
+            return await _context.ColunasQuadro
+                .FirstOrDefaultAsync(c => c.Id == colunaId.Value && c.QuadroId == quadroId && c.Ativa);
+        }
+
+        return await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId && c.Ativa)
+            .OrderBy(c => c.Posicao)
+            .FirstOrDefaultAsync();
+    }
+
     public class ExcluirChamadoRequest
     {
         public int Id { get; set; }
+    }
+
+    public class CriarTarefaDeChamadoRequest
+    {
+        public int GrupoId { get; set; }
+        public int ChamadoId { get; set; }
+        public int? ColunaId { get; set; }
     }
 
     public class EditarChamadoRequest

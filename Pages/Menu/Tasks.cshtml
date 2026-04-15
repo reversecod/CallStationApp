@@ -1,0 +1,463 @@
+@page
+@model CallStationApp.Pages.Menu.TasksModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@using CallStationApp.Models
+@{
+    ViewData["Title"] = "Tarefas";
+}
+
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tarefas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="~/css/tasks.css" asp-append-version="true">
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" class="d-none">
+    <symbol id="home" viewBox="0 0 16 16">
+        <path d="M8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4.5a.5.5 0 0 0 .5-.5v-4h2v4a.5.5 0 0 0 .5.5H14a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146z"></path>
+    </symbol>
+    <symbol id="speedometer2" viewBox="0 0 16 16">
+        <path d="M8 4a.5.5 0 0 1 .5.5V6a.5.5 0 0 1-1 0V4.5A.5.5 0 0 1 8 4zM3.732 5.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707zM2 10a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 10zm9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5zm.754-4.246a.389.389 0 0 0-.527-.02L7.547 9.31a.91.91 0 1 0 1.302 1.258l3.434-4.297a.389.389 0 0 0-.029-.518z"></path>
+        <path fill-rule="evenodd" d="M0 10a8 8 0 1 1 15.547 2.661c-.442 1.253-1.845 1.602-2.932 1.25C11.309 13.488 9.475 13 8 13c-1.474 0-3.31.488-4.615.911-1.087.352-2.49.003-2.932-1.25A7.988 7.988 0 0 1 0 10zm8-7a7 7 0 0 0-6.603 9.329c.203.575.923.876 1.68.63C4.397 12.533 6.358 12 8 12s3.604.532 4.923.96c.757.245 1.477-.056 1.68-.631A7 7 0 0 0 8 3z"></path>
+    </symbol>
+    <symbol id="table" viewBox="0 0 16 16">
+        <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm15 2h-4v3h4V4zm0 4h-4v3h4V8zm0 4h-4v3h3a1 1 0 0 0 1-1v-2zm-5 3v-3H6v3h4zm-5 0v-3H1v2a1 1 0 0 0 1 1h3zm-4-4h4V8H1v3zm0-4h4V4H1v3zm5-3v3h4V4H6zm4 4H6v3h4V8z"></path>
+    </symbol>
+    <symbol id="grid" viewBox="0 0 16 16">
+        <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"></path>
+    </symbol>
+</svg>
+<main>
+    <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
+        <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
+            <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
+        </a>
+
+        <hr />
+
+        <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item">
+                <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#home"></use></svg>
+                    Chamados
+                </a>
+            </li>
+            <li>
+                <a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page">
+                    <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#table"></use></svg>
+                    Tarefas
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link link-body-emphasis">
+                    <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#speedometer2"></use></svg>
+                    Dashboard
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link link-body-emphasis">
+                    <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
+                    Histórico
+                </a>
+            </li>
+            <li>
+                <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
+                    Membros
+                </a>
+            </li>
+        </ul>
+
+        <hr />
+
+        <div class="dropdown">
+            <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle"
+               data-bs-toggle="dropdown" aria-expanded="false">
+                <img src="@(Model.FotoUsuarioLogado ?? "/images/default-user.png")" alt="" class="user-img rounded-circle me-2" loading="lazy">
+                <strong>@(Model.NomeUsuarioLogado ?? "Usuário")</strong>
+            </a>
+            <ul class="dropdown-menu text-small shadow">
+                <li><a class="dropdown-item" href="#">Configuracoes</a></li>
+                <li><a class="dropdown-item" href="#">Perfil</a></li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="tasks-content">
+        <header class="tasks-header">
+            <div>
+                <div class="text-white-50 small">@(Model.GrupoAtual?.Nome ?? "Grupo")</div>
+                <h1 class="h3 text-white mb-0">@Model.Quadro.Nome</h1>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge text-bg-light border">@Model.Colunas.Sum(c => c.Cartoes.Count) cartões visíveis</span>
+                <button type="button" class="btn btn-light btn-sm" id="btnNovaLista">
+                    <i class="bi bi-plus-lg me-1"></i>
+                    Nova lista
+                </button>
+            </div>
+        </header>
+
+        <div id="board" class="board" data-board-id="@Model.Quadro.Id" data-grupo-id="@Model.GrupoId">
+            @foreach (var coluna in Model.Colunas)
+            {
+                <section class="task-list" data-column-id="@coluna.Id">
+                    <div class="task-list-header">
+                        <h2>@coluna.Nome</h2>
+                        <span>@coluna.Cartoes.Count</span>
+                    </div>
+
+                    <div class="task-cards" data-column-cards="@coluna.Id">
+                        @foreach (var cartao in coluna.Cartoes)
+                        {
+                            <article class="task-card @(cartao.Concluido ? "task-card-done" : "")"
+                                     draggable="true"
+                                     data-card-id="@cartao.Id"
+                                     data-concluido="@cartao.Concluido.ToString().ToLowerInvariant()">
+                                @if (!string.IsNullOrWhiteSpace(cartao.CorCapa))
+                                {
+                                    <div class="task-cover" style="background:@cartao.CorCapa"></div>
+                                }
+
+                                <div class="task-card-main">
+                                    <button type="button"
+                                            class="task-done-toggle @(cartao.Concluido ? "is-done" : "")"
+                                            data-toggle-done="@cartao.Id"
+                                            aria-label="Alternar conclusão">
+                                        <i class="bi @(cartao.Concluido ? "bi-check-lg" : "")"></i>
+                                    </button>
+                                    <div class="task-title">@cartao.Titulo</div>
+                                </div>
+
+                                <div class="task-meta">
+                                    @if (cartao.Chamados.Any())
+                                    {
+                                        <span><i class="bi bi-ticket-detailed"></i> @string.Join(", ", cartao.Chamados.Select(c => $"#{c.NumeroChamadoGrupo}"))</span>
+                                    }
+                                    @if (cartao.DataVencimento.HasValue)
+                                    {
+                                        <span><i class="bi bi-clock"></i> @cartao.DataVencimento.Value.ToString("dd/MM")</span>
+                                    }
+                                    @if (!cartao.Privado)
+                                    {
+                                        <span><i class="bi bi-people"></i> Grupo</span>
+                                    }
+                                    else
+                                    {
+                                        <span><i class="bi bi-lock"></i> Privado</span>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    </div>
+
+                    <div class="d-flex align-items-center gap-1 px-2 pb-2">
+                        <button type="button" class="btn-add-card flex-grow-1 m-0" style="width:auto;" data-add-card-column="@coluna.Id">
+                            <i class="bi bi-plus-lg"></i>
+                            Adicionar cartão
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-template-column="@coluna.Id" title="Templates">
+                            <i class="bi bi-layout-text-sidebar"></i>
+                        </button>
+                    </div>
+                </section>
+            }
+
+            <section class="task-list add-list-panel">
+                <button type="button" class="btn-add-list" id="btnAdicionarListaInline">
+                    <i class="bi bi-plus-lg"></i>
+                    Adicionar outra lista
+                </button>
+            </section>
+        </div>
+    </div>
+</main>
+
+<div class="modal fade" id="modalLista" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form id="formLista">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova lista</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="listaNome">Nome</label>
+                    <input type="text" class="form-control" id="listaNome" maxlength="60" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Criar lista</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalCartao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content task-modal">
+            <form id="formCartao">
+                <input type="hidden" id="cartaoId">
+                <input type="hidden" id="cartaoColunaId">
+
+                <div class="modal-header task-modal-cover">
+                    <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm" id="cartaoColunaSelect">
+                            @foreach (var coluna in Model.Colunas)
+                            {
+                                <option value="@coluna.Id">@coluna.Nome</option>
+                            }
+                        </select>
+                        <span class="badge text-bg-dark" id="cartaoPrivacidadeBadge">Privado</span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row g-4">
+                        <div class="col-lg-7">
+                            <label class="form-label" for="cartaoTitulo">Título</label>
+                            <input type="text" class="form-control form-control-lg mb-3" id="cartaoTitulo" maxlength="150" required>
+
+                            <div class="d-flex flex-wrap gap-2 mb-4">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnFocoDatas">
+                                    <i class="bi bi-clock me-1"></i>
+                                    Datas
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnFocoMembros">
+                                    <i class="bi bi-person-plus me-1"></i>
+                                    Membros
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnFocoChamados">
+                                    <i class="bi bi-ticket-detailed me-1"></i>
+                                    Chamados
+                                </button>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="cartaoDescricao">Descrição</label>
+                                <textarea class="form-control" id="cartaoDescricao" rows="5" placeholder="Adicione uma descrição mais detalhada..."></textarea>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label" for="cartaoPrioridade">Prioridade</label>
+                                    <select id="cartaoPrioridade" class="form-select">
+                                        <option value="">Sem prioridade</option>
+                                        <option value="Baixa">Baixa</option>
+                                        <option value="Media">Média</option>
+                                        <option value="Alta">Alta</option>
+                                        <option value="Critica">Crítica</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="cartaoCriticidade">Criticidade</label>
+                                    <select id="cartaoCriticidade" class="form-select">
+                                        <option value="">Sem criticidade</option>
+                                        <option value="Baixa">Baixa</option>
+                                        <option value="Media">Média</option>
+                                        <option value="Alta">Alta</option>
+                                        <option value="Critico">Critico</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label" for="cartaoUrgencia">Urgência</label>
+                                    <select id="cartaoUrgencia" class="form-select">
+                                        <option value="">Sem urgencia</option>
+                                        <option value="NaoUrgente">Não urgente</option>
+                                        <option value="PoucaUrgencia">Pouca urgência</option>
+                                        <option value="Urgente">Urgente</option>
+                                        <option value="Emergencia">Emergencia</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1" id="secaoDatas">
+                                <div class="col-md-6">
+                                    <label class="form-label" for="cartaoDataInicio">Início</label>
+                                    <input type="datetime-local" class="form-control" id="cartaoDataInicio">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="cartaoDataVencimento">Vencimento</label>
+                                    <input type="datetime-local" class="form-control" id="cartaoDataVencimento">
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <label class="form-label" for="cartaoCorCapa">Cor da capa</label>
+                                <input type="color" class="form-control form-control-color" id="cartaoCorCapa" value="#0d6efd">
+                            </div>
+                        </div>
+
+                        <div class="col-lg-5">
+                            <div class="side-panel" id="secaoMembros">
+                                <h3><i class="bi bi-people me-2"></i>Visibilidade</h3>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="cartaoCompartilharGrupo">
+                                    <label class="form-check-label" for="cartaoCompartilharGrupo">Adicionar o grupo todo</label>
+                                </div>
+                                <label class="form-label" for="cartaoMembros">Membros com acesso</label>
+                                <div id="cartaoMembrosResumo" class="selection-summary text-muted small">Nenhum membro selecionado.</div>
+                                <div class="form-text">Ao criar, o cartão nasce privado. Usuários só veem se forem adicionados ou se o grupo todo for incluído.</div>
+                            </div>
+
+                            <div class="side-panel mt-3" id="secaoChamados">
+                                <h3><i class="bi bi-ticket-detailed me-2"></i>Chamados vinculados</h3>
+                                <div id="cartaoChamadosResumo" class="selection-summary text-muted small">Nenhum chamado vinculado.</div>
+                            </div>
+
+                            <div class="side-panel mt-3">
+                                <h3><i class="bi bi-chat-left-text me-2"></i>Comentários e atividade</h3>
+                                <div class="input-group input-group-sm mb-3">
+                                    <input type="text" class="form-control" id="comentarioTexto" maxlength="500" placeholder="Escrever um comentário...">
+                                    <button type="button" class="btn btn-outline-primary" id="btnAdicionarComentario">Enviar</button>
+                                </div>
+                                <div id="cartaoAtividade" class="activity-list">
+                                    <div class="text-muted small">Sem atividade carregada.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer justify-content-between">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-outline-danger d-none" id="btnArquivarCartao">Arquivar</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMostrarSalvarTemplate">
+                            <i class="bi bi-layout-text-sidebar me-1"></i>
+                            Salvar como template
+                        </button>
+                        <div class="input-group input-group-sm d-none" id="salvarTemplateInline" style="max-width: 22rem;">
+                            <input type="text" class="form-control" id="nomeTemplateCartao" maxlength="100" placeholder="Nome do template">
+                            <button type="button" class="btn btn-outline-primary" id="btnConfirmarSalvarTemplate">Salvar</button>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar cartão</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalMembrosCartao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Membros com acesso</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <select id="cartaoMembros" class="form-select" multiple size="10">
+                    @foreach (var membro in Model.Membros)
+                    {
+                        <option value="@membro.UsuarioId">@membro.NomeExibicao (@membro.Permissao)</option>
+                    }
+                </select>
+                <div class="form-text">A tarefa privada fica visivel somente para os membros selecionados.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aplicar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalChamadosCartao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Chamados vinculados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <select id="cartaoChamados" class="form-select" multiple size="10"></select>
+                <div class="form-text">A lista mostra apenas chamados visiveis para todos os membros da tarefa.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aplicar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade" id="modalTemplateCartao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="formTemplateCartao">
+                <input type="hidden" id="templateId">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="templateModalTitulo">Novo template</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="templateNome">Nome</label>
+                    <input type="text" class="form-control mb-3" id="templateNome" maxlength="100" required>
+
+                    <label class="form-label" for="templateDescricao">Descrição</label>
+                    <textarea class="form-control mb-3" id="templateDescricao" rows="4"></textarea>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="templatePrioridade">Prioridade</label>
+                            <select id="templatePrioridade" class="form-select">
+                                <option value="">Sem prioridade</option>
+                                <option value="Baixa">Baixa</option>
+                                <option value="Media">Média</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Critica">Crítica</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="templateCriticidade">Criticidade</label>
+                            <select id="templateCriticidade" class="form-select">
+                                <option value="">Sem criticidade</option>
+                                <option value="Baixa">Baixa</option>
+                                <option value="Media">Média</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Critico">Crítico</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="templateUrgencia">Urgência</label>
+                            <select id="templateUrgencia" class="form-select">
+                                <option value="">Sem urgência</option>
+                                <option value="NaoUrgente">Não urgente</option>
+                                <option value="PoucaUrgencia">Pouca urgência</option>
+                                <option value="Urgente">Urgente</option>
+                                <option value="Emergencia">Emergência</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label" for="templateCorCapa">Cor da capa</label>
+                        <input type="color" class="form-control form-control-color" id="templateCorCapa" value="#0d6efd">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" defer></script>
+<script src="~/js/tasks.js" asp-append-version="true" defer></script>
+</body>
+</html>

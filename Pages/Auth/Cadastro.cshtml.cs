@@ -11,10 +11,12 @@ public class CadastroModel : PageModel
 {
     public readonly AppDbContext Context;
     private readonly PasswordHasher<Usuario> _passwordHasher;
-    public CadastroModel(AppDbContext context)
+    private readonly ILogger<CadastroModel> _logger;
+    public CadastroModel(AppDbContext context, ILogger<CadastroModel> logger)
     {
         Context = context;
         _passwordHasher = new PasswordHasher<Usuario>();
+        _logger = logger;
     }
     
     [BindProperty]
@@ -103,5 +105,12 @@ public class CadastroModel : PageModel
         NomeCompleto = NomeUsuario = Email = Senha = ConfirmarSenha = null;
 
         return Page();
+    }
+
+    private static bool EhErroDuplicidade(DbUpdateException ex)
+    {
+        var mensagem = ex.InnerException?.Message ?? ex.Message;
+        return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
+               mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 }
