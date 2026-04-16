@@ -316,6 +316,34 @@ CREATE TABLE Cartao_tarefa_contador_grupo (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =========================================================
+-- 5) TEMPLATES DE CARTÕES
+-- =========================================================
+CREATE TABLE Templates_cartoes_tarefas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grupo_id INT NOT NULL,
+    criado_por_usuario_id INT NOT NULL,
+    nome VARCHAR(100) NOT NULL,
+    descricao TEXT NULL,
+    prioridade ENUM('Baixa','Media','Alta','Critica') NULL,
+    criticidade ENUM('Baixa','Media','Alta','Critico') NULL,
+    urgencia ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia') NULL,
+    cor_capa VARCHAR(20) NULL,
+    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    data_atualizacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_templates_cartoes_tarefas_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+
+    CONSTRAINT fk_templates_cartoes_tarefas_criador
+        FOREIGN KEY (criado_por_usuario_id) REFERENCES Usuarios(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE UNIQUE INDEX uq_templates_cartoes_tarefas_grupo_nome_ativo
+    ON Templates_cartoes_tarefas (grupo_id, nome, ativo);
+
+-- =========================================================
 -- 5) CARTÕES / TAREFAS
 -- OBS:
 -- - tarefa nasce privada para o criador

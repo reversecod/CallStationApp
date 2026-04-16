@@ -99,9 +99,9 @@
 
             <div class="d-flex flex-wrap gap-2 align-items-center">
                 <span class="badge text-bg-light border">@Model.Colunas.Sum(c => c.Cartoes.Count) cartões visíveis</span>
-                <button type="button" class="btn btn-light btn-sm" id="btnNovaLista">
-                    <i class="bi bi-plus-lg me-1"></i>
-                    Nova lista
+                <button type="button" class="btn btn-light btn-sm" id="btnAbrirArquivados">
+                    <i class="bi bi-archive me-1"></i>
+                    Arquivados
                 </button>
             </div>
         </header>
@@ -111,8 +111,13 @@
             {
                 <section class="task-list" data-column-id="@coluna.Id">
                     <div class="task-list-header">
-                        <h2>@coluna.Nome</h2>
-                        <span>@coluna.Cartoes.Count</span>
+                        <button type="button" class="task-list-title" data-rename-list="@coluna.Id">@coluna.Nome</button>
+                        <div class="d-flex align-items-center gap-2">
+                            <span>@coluna.Cartoes.Count</span>
+                            <button type="button" class="btn btn-sm btn-link task-list-menu" data-list-actions="@coluna.Id" aria-label="Acoes da lista">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="task-cards" data-column-cards="@coluna.Id">
@@ -174,12 +179,45 @@
             <section class="task-list add-list-panel">
                 <button type="button" class="btn-add-list" id="btnAdicionarListaInline">
                     <i class="bi bi-plus-lg"></i>
-                    Adicionar outra lista
+                    Nova lista
                 </button>
             </section>
         </div>
     </div>
 </main>
+
+<div id="painelArquivados"
+     class="painel-arquivados d-none shadow">
+    <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
+        <h2 class="h6 mb-0">Cartões arquivados</h2>
+        <button type="button" class="btn-close" id="btnFecharArquivados" aria-label="Fechar"></button>
+    </div>
+    <div id="listaCartoesArquivados" class="p-3 overflow-auto" style="height:calc(100vh - 58px);">
+        <div class="text-muted small">Carregando...</div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAcoesLista" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ações da lista</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body d-grid gap-2">
+                <button type="button" class="btn btn-outline-secondary text-start" id="btnRenomearListaModal">
+                    Renomear lista
+                </button>
+                <button type="button" class="btn btn-outline-secondary text-start" id="btnArquivarCartoesLista">
+                    Arquivar todos os cartões desta lista
+                </button>
+                <button type="button" class="btn btn-outline-danger text-start" id="btnExcluirLista">
+                    Excluir lista
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="modal fade" id="modalLista" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -460,6 +498,27 @@
                     <button type="submit" class="btn btn-primary">Salvar template</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalSelecionarTemplate" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Selecionar template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="listaTemplatesModal" class="row g-3"></div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button type="button" class="btn btn-outline-primary" id="btnNovoTemplateModal">
+                    <i class="bi bi-plus-lg me-1"></i>
+                    Criar novo template
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
         </div>
     </div>
 </div>

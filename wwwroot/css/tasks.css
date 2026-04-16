@@ -92,11 +92,36 @@ main {
     padding: .8rem .85rem .35rem;
 }
 
-.task-list-header h2 {
+.task-list-title {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
     font-size: .98rem;
+    font-weight: 700;
     line-height: 1.25;
     margin: 0;
     overflow-wrap: anywhere;
+}
+
+.task-list-title:hover {
+    text-decoration: underline;
+}
+
+.task-list-menu {
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    color: #e5e7eb;
+    border-radius: 8px;
+    text-decoration: none;
+}
+
+.task-list-menu:hover,
+.task-list-menu:focus {
+    color: #fff;
+    background: rgba(255, 255, 255, .12);
 }
 
 .task-list-header span {
@@ -108,6 +133,30 @@ main {
     border-radius: 999px;
     background: rgba(255, 255, 255, .12);
     font-size: .8rem;
+}
+
+.painel-arquivados {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    z-index: 1500;
+    background: linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%);
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform .22s ease, opacity .22s ease;
+}
+
+.painel-arquivados.d-none {
+    display: block !important;
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.arquivado-cover {
+    height: .45rem;
 }
 
 .task-cards {

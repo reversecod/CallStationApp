@@ -4,14 +4,21 @@ let modalCartao = null;
 let modalMembrosCartao = null;
 let modalChamadosCartao = null;
 let modalTemplateCartao = null;
+let modalSelecionarTemplate = null;
+let modalAcoesLista = null;
 let painelTemplates = null;
 let colunaTemplatesAtual = null;
+let listaAcoesAtualId = null;
 let templatesAtuais = [];
 let snapshotBoardAntesDrag = null;
 let cartaoAtualEstado = {
     membros: [],
     chamados: [],
-    compartilharGrupo: false
+    compartilharGrupo: false,
+    arquivado: false,
+    podeEditar: false,
+    titulo: "",
+    colunaId: null
 };
 
 function mostrarToast(mensagem, tipo = "danger") {
@@ -48,15 +55,23 @@ document.addEventListener("DOMContentLoaded", () => {
     modalMembrosCartao = new bootstrap.Modal(document.getElementById("modalMembrosCartao"));
     modalChamadosCartao = new bootstrap.Modal(document.getElementById("modalChamadosCartao"));
     modalTemplateCartao = new bootstrap.Modal(document.getElementById("modalTemplateCartao"));
+    modalSelecionarTemplate = new bootstrap.Modal(document.getElementById("modalSelecionarTemplate"));
+    modalAcoesLista = new bootstrap.Modal(document.getElementById("modalAcoesLista"));
 
-    document.getElementById("btnNovaLista")?.addEventListener("click", abrirModalLista);
+    document.getElementById("btnAbrirArquivados")?.addEventListener("click", abrirPainelArquivados);
+    document.getElementById("btnFecharArquivados")?.addEventListener("click", fecharPainelArquivados);
     document.getElementById("btnAdicionarListaInline")?.addEventListener("click", abrirModalLista);
     document.getElementById("formLista")?.addEventListener("submit", criarLista);
     document.getElementById("formCartao")?.addEventListener("submit", salvarCartao);
     document.getElementById("formTemplateCartao")?.addEventListener("submit", salvarTemplate);
     document.getElementById("btnAdicionarComentario")?.addEventListener("click", adicionarComentario);
+    document.getElementById("btnArquivarCartao")?.addEventListener("click", alternarArquivamentoCartao);
     document.getElementById("btnMostrarSalvarTemplate")?.addEventListener("click", mostrarSalvarComoTemplate);
     document.getElementById("btnConfirmarSalvarTemplate")?.addEventListener("click", salvarComoTemplate);
+    document.getElementById("btnNovoTemplateModal")?.addEventListener("click", abrirModalTemplateNovo);
+    document.getElementById("btnRenomearListaModal")?.addEventListener("click", () => renomearLista(listaAcoesAtualId));
+    document.getElementById("btnArquivarCartoesLista")?.addEventListener("click", arquivarCartoesListaAtual);
+    document.getElementById("btnExcluirLista")?.addEventListener("click", excluirListaAtual);
     document.getElementById("cartaoCorCapa")?.addEventListener("input", atualizarCorCapaModal);
     document.getElementById("cartaoCorCapa")?.addEventListener("change", atualizarCorCapaModal);
 
@@ -94,12 +109,31 @@ document.addEventListener("DOMContentLoaded", () => {
         fecharPainelTemplates();
     });
 
+    document.addEventListener("click", event => {
+        const painel = document.getElementById("painelArquivados");
+        if (!painel || painel.classList.contains("d-none")) return;
+        if (painel.contains(event.target) || event.target.closest("#btnAbrirArquivados") || event.target.closest(".modal")) return;
+
+        fecharPainelArquivados();
+    });
+
     inicializarBoard();
 });
 
 function inicializarBoard() {
+    document.querySelectorAll(".task-list[data-column-id]").forEach(inicializarLista);
     document.querySelectorAll(".task-card").forEach(inicializarCard);
     document.querySelectorAll(".task-cards").forEach(inicializarDropZone);
+}
+
+function inicializarLista(lista) {
+    const colunaId = Number(lista.dataset.columnId);
+    lista.querySelector("[data-rename-list]")?.addEventListener("click", () => renomearLista(colunaId));
+    lista.querySelector("[data-list-actions]")?.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        abrirAcoesLista(colunaId);
+    });
 }
 
 function inicializarCard(card) {
@@ -228,6 +262,98 @@ async function criarLista(event) {
     document.getElementById("formLista").reset();
 }
 
+function abrirAcoesLista(colunaId) {
+    listaAcoesAtualId = colunaId;
+    modalAcoesLista?.show();
+}
+
+async function renomearLista(colunaId) {
+    if (!colunaId) return;
+
+    const titulo = document.querySelector(`.task-list[data-column-id="${colunaId}"] [data-rename-list]`);
+    const nomeAtual = titulo?.textContent?.trim() || "";
+    const nome = prompt("Nome da lista", nomeAtual)?.trim();
+    if (!nome || nome === nomeAtual) return;
+
+    try {
+        const data = await fetchJson("?handler=RenomearLista", {
+            grupoId: getGrupoId(),
+            colunaId,
+            nome
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel renomear a lista.");
+            return;
+        }
+
+        if (titulo) {
+            titulo.textContent = data.nome || nome;
+        }
+
+        const option = document.querySelector(`#cartaoColunaSelect option[value="${colunaId}"]`);
+        if (option) {
+            option.textContent = data.nome || nome;
+        }
+
+        modalAcoesLista?.hide();
+        mostrarToast("Lista renomeada com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel renomear a lista.");
+    }
+}
+
+async function arquivarCartoesListaAtual() {
+    const colunaId = listaAcoesAtualId;
+    if (!colunaId) return;
+    if (!confirm("Arquivar todos os cartões desta lista?")) return;
+
+    try {
+        const data = await fetchJson("?handler=ArquivarCartoesLista", {
+            grupoId: getGrupoId(),
+            colunaId
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel arquivar os cartoes da lista.");
+            return;
+        }
+
+        const lista = document.querySelector(`.task-list[data-column-id="${colunaId}"]`);
+        lista?.querySelectorAll(".task-card").forEach(card => card.remove());
+        atualizarContadorLista(lista);
+        modalAcoesLista?.hide();
+        mostrarToast("Cartoes arquivados com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel arquivar os cartoes da lista.");
+    }
+}
+
+async function excluirListaAtual() {
+    const colunaId = listaAcoesAtualId;
+    if (!colunaId) return;
+    if (!confirm("Excluir esta lista? Todos os cartões dentro dela serão arquivados.")) return;
+
+    try {
+        const data = await fetchJson("?handler=ExcluirLista", {
+            grupoId: getGrupoId(),
+            colunaId
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel excluir a lista.");
+            return;
+        }
+
+        document.querySelector(`.task-list[data-column-id="${colunaId}"]`)?.remove();
+        document.querySelector(`#cartaoColunaSelect option[value="${colunaId}"]`)?.remove();
+        modalAcoesLista?.hide();
+        mostrarToast("Lista excluida com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel excluir a lista.");
+    }
+}
+
 function abrirModalCartaoNovo(colunaId) {
     document.getElementById("formCartao").reset();
     setValue("cartaoId", "");
@@ -243,17 +369,24 @@ function abrirModalCartaoNovo(colunaId) {
     cartaoAtualEstado = {
         membros: [],
         chamados: [],
-        compartilharGrupo: false
+        compartilharGrupo: false,
+        arquivado: false,
+        podeEditar: true,
+        titulo: "",
+        colunaId
     };
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados();
     ocultarSalvarComoTemplate();
+    document.getElementById("btnArquivarCartao")?.classList.add("d-none");
     modalCartao.show();
     setTimeout(() => document.getElementById("cartaoTitulo")?.focus(), 150);
 }
 
 async function abrirModalCartaoExistente(id) {
+    fecharPainelArquivados();
+
     let data;
     try {
         data = await fetch(`?handler=Cartao&id=${encodeURIComponent(id)}&grupoId=${encodeURIComponent(getGrupoId())}`)
@@ -293,7 +426,11 @@ async function abrirModalCartaoExistente(id) {
     cartaoAtualEstado = {
         membros: data.membros || [],
         chamados: data.chamados || [],
-        compartilharGrupo: !!data.compartilharGrupo
+        compartilharGrupo: !!data.compartilharGrupo,
+        arquivado: !!data.arquivado,
+        podeEditar: !!data.podeEditar,
+        titulo: data.titulo || "",
+        colunaId: data.colunaId
     };
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
@@ -379,6 +516,72 @@ async function alternarConcluido(cartaoId, card) {
     }
 }
 
+async function alternarArquivamentoCartao() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) return;
+
+    if (cartaoAtualEstado.arquivado) {
+        await restaurarCartao(cartaoId);
+        return;
+    }
+
+    if (!confirm("Arquivar este cartão? Ele sairá do board mas poderá ser restaurado.")) {
+        return;
+    }
+
+    try {
+        const data = await fetchJson("?handler=ArquivarCartao", {
+            cartaoId,
+            grupoId: getGrupoId()
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel arquivar o cartao.");
+            return;
+        }
+
+        const card = document.querySelector(`.task-card[data-card-id="${cartaoId}"]`);
+        const lista = card?.closest(".task-list");
+        card?.remove();
+        atualizarContadorLista(lista);
+        modalCartao?.hide();
+        mostrarToast("Cartao arquivado com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel arquivar o cartao.");
+    }
+}
+
+async function restaurarCartao(cartaoId) {
+    try {
+        const data = await fetchJson("?handler=RestaurarCartao", {
+            cartaoId,
+            grupoId: getGrupoId()
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel restaurar o cartao.");
+            return;
+        }
+
+        modalCartao?.hide();
+        removerItemArquivado(cartaoId);
+
+        const colunaCards = document.querySelector(`.task-cards[data-column-cards="${data.colunaId}"]`);
+        if (colunaCards) {
+            inserirCardNoBoard(cartaoId, {
+                colunaId: data.colunaId,
+                titulo: cartaoAtualEstado.titulo || getValue("cartaoTitulo") || "Cartao",
+                compartilharGrupo: cartaoAtualEstado.compartilharGrupo
+            });
+            mostrarToast("Cartao restaurado com sucesso.", "success");
+        } else {
+            mostrarToast("Cartão restaurado. Atualize a página para ver na lista correta.", "success");
+        }
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel restaurar o cartao.");
+    }
+}
+
 function aplicarEstadoConcluido(card, concluido) {
     card.dataset.concluido = String(concluido);
     card.classList.toggle("task-card-done", concluido);
@@ -393,6 +596,69 @@ function aplicarEstadoConcluido(card, concluido) {
     }
 }
 
+async function abrirPainelArquivados() {
+    const painel = document.getElementById("painelArquivados");
+    const lista = document.getElementById("listaCartoesArquivados");
+    if (!painel || !lista) return;
+
+    painel.classList.remove("d-none");
+    lista.innerHTML = '<div class="text-muted small">Carregando...</div>';
+
+    try {
+        const response = await fetch(`?handler=CartoesArquivados&grupoId=${encodeURIComponent(getGrupoId())}`);
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+
+        const data = await response.json();
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel carregar os cartoes arquivados.");
+            return;
+        }
+
+        renderizarCartoesArquivados(data.cartoes || []);
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel carregar os cartoes arquivados.");
+        lista.innerHTML = '<div class="text-muted small">Nenhum cartão arquivado.</div>';
+    }
+}
+
+function fecharPainelArquivados() {
+    document.getElementById("painelArquivados")?.classList.add("d-none");
+}
+
+function renderizarCartoesArquivados(cartoes) {
+    const lista = document.getElementById("listaCartoesArquivados");
+    if (!lista) return;
+
+    lista.innerHTML = cartoes.length
+        ? cartoes.map(cartao => {
+            const data = cartao.dataArquivamento ? new Date(cartao.dataArquivamento).toLocaleString("pt-BR") : "";
+            const cor = cartao.corCapa ? `<div class="arquivado-cover" style="background:${normalizarCorTemplate(cartao.corCapa)}"></div>` : "";
+            return `
+                <button type="button" class="list-group-item list-group-item-action mb-2 border rounded-1 overflow-hidden p-0" data-arquivado-id="${cartao.id}">
+                    ${cor}
+                    <div class="p-2">
+                        <div class="fw-semibold">${escapeHtml(cartao.titulo || "Cartao")}</div>
+                        <div class="small text-muted">${escapeHtml(cartao.nomeColuna || "Lista")}</div>
+                        <div class="small text-muted">${escapeHtml(data)}</div>
+                    </div>
+                </button>
+            `;
+        }).join("")
+        : '<div class="text-muted small">Nenhum cartão arquivado.</div>';
+
+    lista.querySelectorAll("[data-arquivado-id]").forEach(item => {
+        item.addEventListener("click", () => abrirModalCartaoExistente(Number(item.dataset.arquivadoId)));
+    });
+}
+
+function removerItemArquivado(cartaoId) {
+    document.querySelector(`[data-arquivado-id="${cartaoId}"]`)?.remove();
+    const lista = document.getElementById("listaCartoesArquivados");
+    if (lista && !lista.querySelector("[data-arquivado-id]")) {
+        lista.innerHTML = '<div class="text-muted small">Nenhum cartão arquivado.</div>';
+    }
+}
+
 function inserirListaNoBoard(id, nome) {
     const board = getBoard();
     const addListPanel = board?.querySelector(".add-list-panel");
@@ -403,8 +669,13 @@ function inserirListaNoBoard(id, nome) {
     lista.dataset.columnId = id;
     lista.innerHTML = `
         <div class="task-list-header">
-            <h2>${escapeHtml(nome)}</h2>
-            <span>0</span>
+            <button type="button" class="task-list-title" data-rename-list="${id}">${escapeHtml(nome)}</button>
+            <div class="d-flex align-items-center gap-2">
+                <span>0</span>
+                <button type="button" class="btn btn-sm btn-link task-list-menu" data-list-actions="${id}" aria-label="Acoes da lista">
+                    <i class="bi bi-three-dots"></i>
+                </button>
+            </div>
         </div>
 
         <div class="task-cards" data-column-cards="${id}"></div>
@@ -421,6 +692,7 @@ function inserirListaNoBoard(id, nome) {
     `;
 
     board.insertBefore(lista, addListPanel);
+    inicializarLista(lista);
 
     const cardsContainer = lista.querySelector(".task-cards");
     if (cardsContainer) {
@@ -429,8 +701,11 @@ function inserirListaNoBoard(id, nome) {
 
     lista.querySelector("[data-add-card-column]")?.addEventListener("click", () =>
         abrirModalCartaoNovo(Number(id)));
-    lista.querySelector("[data-template-column]")?.addEventListener("click", event =>
-        abrirPainelTemplates(Number(id), event.currentTarget));
+    lista.querySelector("[data-template-column]")?.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        abrirModalSelecionarTemplate(Number(id));
+    });
 
     const selectColunas = document.getElementById("cartaoColunaSelect");
     if (selectColunas) {
@@ -450,7 +725,9 @@ function inserirCardNoBoard(id, payload) {
     card.draggable = true;
     card.dataset.cardId = id;
     card.dataset.concluido = "false";
+    const capa = payload.corCapa ? `<div class="task-cover" style="background:${normalizarCorTemplate(payload.corCapa)}"></div>` : "";
     card.innerHTML = `
+        ${capa}
         <div class="task-card-main">
             <button type="button" class="task-done-toggle" data-toggle-done="${id}" aria-label="Alternar conclusão">
                 <i class="bi"></i>
@@ -498,8 +775,16 @@ function inicializarBotaoTemplate(botao) {
     botao.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        abrirPainelTemplates(Number(botao.dataset.templateColumn), botao);
+        abrirModalSelecionarTemplate(Number(botao.dataset.templateColumn));
     });
+}
+
+async function abrirModalSelecionarTemplate(colunaId) {
+    fecharPainelTemplates();
+    colunaTemplatesAtual = colunaId;
+    modalSelecionarTemplate?.show();
+    await carregarTemplatesPainel();
+    renderizarTemplatesModal();
 }
 
 async function abrirPainelTemplates(colunaId, botao) {
@@ -589,6 +874,45 @@ function renderizarPainelTemplates() {
     painelTemplates.querySelector("#btnNovoTemplatePainel")?.addEventListener("click", abrirModalTemplateNovo);
 }
 
+function renderizarTemplatesModal() {
+    const lista = document.getElementById("listaTemplatesModal");
+    if (!lista) return;
+
+    lista.innerHTML = templatesAtuais.length
+        ? templatesAtuais.map(template => `
+            <div class="col-12 col-md-6">
+                <div class="border rounded-1 h-100 overflow-hidden">
+                    <div style="height:8px;background:${normalizarCorTemplate(template.corCapa)};"></div>
+                    <div class="p-3">
+                        <div class="fw-semibold mb-3">${escapeHtml(template.nome)}</div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-primary" data-usar-template="${template.id}">
+                                Usar
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-editar-template="${template.id}" aria-label="Editar template">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-excluir-template="${template.id}" aria-label="Excluir template">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join("")
+        : '<div class="col-12 text-muted">Nenhum template criado ainda.</div>';
+
+    lista.querySelectorAll("[data-usar-template]").forEach(btn => {
+        btn.addEventListener("click", () => usarTemplate(Number(btn.dataset.usarTemplate)));
+    });
+    lista.querySelectorAll("[data-editar-template]").forEach(btn => {
+        btn.addEventListener("click", () => abrirModalTemplateEdicao(Number(btn.dataset.editarTemplate)));
+    });
+    lista.querySelectorAll("[data-excluir-template]").forEach(btn => {
+        btn.addEventListener("click", () => excluirTemplate(Number(btn.dataset.excluirTemplate)));
+    });
+}
+
 function fecharPainelTemplates() {
     painelTemplates?.classList.add("d-none");
     colunaTemplatesAtual = null;
@@ -597,8 +921,6 @@ function fecharPainelTemplates() {
 async function usarTemplate(templateId) {
     const colunaId = colunaTemplatesAtual;
     if (!templateId || !colunaId) return;
-
-    const template = templatesAtuais.find(item => Number(item.id) === templateId);
 
     try {
         const data = await fetchJson("?handler=CriarCartaoDeTemplate", {
@@ -613,11 +935,14 @@ async function usarTemplate(templateId) {
         }
 
         inserirCardNoBoard(data.id, {
-            colunaId,
-            titulo: template?.nome || "Template",
-            compartilharGrupo: false
+            colunaId: data.colunaId || colunaId,
+            titulo: data.titulo || "Template",
+            corCapa: data.corCapa,
+            compartilharGrupo: !!data.compartilharGrupo
         });
+        modalSelecionarTemplate?.hide();
         fecharPainelTemplates();
+        mostrarToast("Cartao criado pelo template com sucesso.", "success");
     } catch (error) {
         mostrarToast(error.message || "Nao foi possivel criar o cartao pelo template.");
     }
@@ -628,6 +953,7 @@ function abrirModalTemplateNovo() {
     setValue("templateId", "");
     setValue("templateCorCapa", "#0d6efd");
     document.getElementById("templateModalTitulo").textContent = "Novo template";
+    modalSelecionarTemplate?.hide();
     modalTemplateCartao.show();
 }
 
@@ -644,6 +970,7 @@ function abrirModalTemplateEdicao(templateId) {
     setValue("templateUrgencia", template.urgencia);
     setValue("templateCorCapa", template.corCapa || "#0d6efd");
     document.getElementById("templateModalTitulo").textContent = "Editar template";
+    modalSelecionarTemplate?.hide();
     modalTemplateCartao.show();
 }
 
@@ -672,6 +999,7 @@ async function salvarTemplate(event) {
         modalTemplateCartao.hide();
         document.getElementById("formTemplateCartao").reset();
         await carregarTemplatesPainel();
+        renderizarTemplatesModal();
         mostrarToast("Template salvo com sucesso.", "success");
     } catch (error) {
         mostrarToast(error.message || "Nao foi possivel salvar o template.");
@@ -694,6 +1022,7 @@ async function excluirTemplate(templateId) {
 
         templatesAtuais = templatesAtuais.filter(item => Number(item.id) !== templateId);
         renderizarPainelTemplates();
+        renderizarTemplatesModal();
         mostrarToast("Template excluido com sucesso.", "success");
     } catch (error) {
         mostrarToast(error.message || "Nao foi possivel excluir o template.");
@@ -1078,6 +1407,15 @@ function configurarEdicao(podeEditar) {
     document.getElementById("btnMostrarSalvarTemplate").disabled = !podeEditar;
     document.getElementById("btnConfirmarSalvarTemplate").disabled = !podeEditar;
     document.querySelector('#formCartao button[type="submit"]').disabled = !podeEditar;
+
+    const btnArquivar = document.getElementById("btnArquivarCartao");
+    if (btnArquivar) {
+        const cartaoId = toNullableInt(getValue("cartaoId"));
+        btnArquivar.classList.toggle("d-none", !podeEditar || !cartaoId);
+        btnArquivar.textContent = cartaoAtualEstado.arquivado ? "Restaurar" : "Arquivar";
+        btnArquivar.classList.toggle("btn-outline-danger", !cartaoAtualEstado.arquivado);
+        btnArquivar.classList.toggle("btn-outline-success", cartaoAtualEstado.arquivado);
+    }
 }
 
 function renderizarAtividade(itens) {
@@ -1136,6 +1474,7 @@ function atualizarEstadoModalCartao() {
     modal.dataset.membros = (cartaoAtualEstado.membros || []).join(",");
     modal.dataset.chamados = (cartaoAtualEstado.chamados || []).join(",");
     modal.dataset.compartilharGrupo = String(!!cartaoAtualEstado.compartilharGrupo);
+    modal.dataset.arquivado = String(!!cartaoAtualEstado.arquivado);
 }
 
 function getBoard() {

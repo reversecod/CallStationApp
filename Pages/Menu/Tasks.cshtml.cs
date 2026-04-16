@@ -149,6 +149,191 @@ public class TasksModel : PageModel
 
         return BadRequest(new { success = false, message = "Nao foi possivel criar a lista no momento." });
     }
+
+    public async Task<IActionResult> OnPostRenomearListaAsync([FromBody] RenomearListaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var nome = request.Nome?.Trim();
+        if (request.ColunaId <= 0 || string.IsNullOrWhiteSpace(nome) || nome.Length > 60)
+            return BadRequest(new { success = false, message = "Nome da lista invalido." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var coluna = await _context.ColunasQuadro
+                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+
+                    if (coluna == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
+
+                    var existe = await _context.ColunasQuadro
+                        .AnyAsync(c => c.QuadroId == coluna.QuadroId && c.Id != coluna.Id && c.Nome == nome);
+
+                    if (existe)
+                        return (IActionResult)BadRequest(new { success = false, message = "Ja existe uma lista com este nome." });
+
+                    coluna.Nome = nome;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, id = coluna.Id, nome = coluna.Nome });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+        {
+            return BadRequest(new { success = false, message = "Ja existe uma lista com este nome." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao renomear lista {ColunaId} no grupo {GrupoId}.", request.ColunaId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel renomear a lista no momento." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostArquivarCartoesListaAsync([FromBody] ListaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var coluna = await _context.ColunasQuadro
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+
+                    if (coluna == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
+
+                    var cartoes = await _context.CartoesTarefas
+                        .Where(c => c.ColunaId == request.ColunaId && c.GrupoId == request.GrupoId && c.Status != StatusCartaoTarefa.Arquivada)
+                        .ToListAsync();
+
+                    var agora = DateTime.UtcNow;
+                    foreach (var cartao in cartoes)
+                    {
+                        cartao.Status = StatusCartaoTarefa.Arquivada;
+                        cartao.DataAtualizacao = agora;
+                        RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado pela lista");
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        cartoesIds = cartoes.Select(c => c.Id).ToList()
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao arquivar cartoes da lista {ColunaId} no grupo {GrupoId}.", request.ColunaId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel arquivar os cartoes da lista no momento." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostExcluirListaAsync([FromBody] ListaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var coluna = await _context.ColunasQuadro
+                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+
+                    if (coluna == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
+
+                    var cartoes = await _context.CartoesTarefas
+                        .Where(c => c.ColunaId == request.ColunaId && c.GrupoId == request.GrupoId && c.Status != StatusCartaoTarefa.Arquivada)
+                        .ToListAsync();
+
+                    var agora = DateTime.UtcNow;
+                    foreach (var cartao in cartoes)
+                    {
+                        cartao.Status = StatusCartaoTarefa.Arquivada;
+                        cartao.DataAtualizacao = agora;
+                        RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado por exclusao da lista");
+                    }
+
+                    coluna.Ativa = false;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        cartoesIds = cartoes.Select(c => c.Id).ToList()
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir lista {ColunaId} no grupo {GrupoId}.", request.ColunaId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel excluir a lista no momento." });
+        }
+    }
+
     public async Task<IActionResult> OnGetCartaoAsync(int id, int grupoId)
     {
         var usuarioId = GetUsuarioLogadoId();
@@ -244,6 +429,8 @@ public class TasksModel : PageModel
             dataVencimento = cartao.DataVencimento,
             corCapa = cartao.CorCapa,
             concluido = cartao.Status == StatusCartaoTarefa.Concluida,
+            status = cartao.Status.ToString(),
+            arquivado = cartao.Status == StatusCartaoTarefa.Arquivada,
             compartilharGrupo = !cartao.Privado,
             membros,
             chamados = chamados.Select(c => c.Id).ToList(),
@@ -818,10 +1005,28 @@ public class TasksModel : PageModel
             Ativo = true
         };
 
+        var strategy = _context.Database.CreateExecutionStrategy();
+
         try
         {
-            _context.TemplatesCartoesTarefas.Add(template);
-            await _context.SaveChangesAsync();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    _context.TemplatesCartoesTarefas.Add(template);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, id = template.Id, nome = template.Nome });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
@@ -832,8 +1037,169 @@ public class TasksModel : PageModel
             _logger.LogError(ex, "Erro ao salvar cartao {CartaoId} como template no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
             return BadRequest(new { success = false, message = "Nao foi possivel salvar o template no momento." });
         }
+    }
 
-        return new JsonResult(new { success = true, id = template.Id, nome = template.Nome });
+    public async Task<IActionResult> OnPostArquivarCartaoAsync([FromBody] ArquivarCartaoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var cartao = await _context.CartoesTarefas
+                        .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
+
+                    if (cartao == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+
+                    var membrosAtuais = await _context.CartoesTarefasUsuarios
+                        .AsNoTracking()
+                        .Where(x => x.CartaoTarefaId == cartao.Id)
+                        .Select(x => x.UsuarioId)
+                        .ToListAsync();
+
+                    if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
+                        return (IActionResult)Forbid();
+
+                    cartao.Status = StatusCartaoTarefa.Arquivada;
+                    cartao.DataAtualizacao = DateTime.UtcNow;
+
+                    RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao arquivar cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel arquivar o cartao no momento." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostRestaurarCartaoAsync([FromBody] ArquivarCartaoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var cartao = await _context.CartoesTarefas
+                        .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
+
+                    if (cartao == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+
+                    var membrosAtuais = await _context.CartoesTarefasUsuarios
+                        .AsNoTracking()
+                        .Where(x => x.CartaoTarefaId == cartao.Id)
+                        .Select(x => x.UsuarioId)
+                        .ToListAsync();
+
+                    if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
+                        return (IActionResult)Forbid();
+
+                    var coluna = await _context.ColunasQuadro
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(c => c.Id == cartao.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+
+                    if (coluna == null)
+                    {
+                        return (IActionResult)BadRequest(new
+                        {
+                            success = false,
+                            message = "A lista original foi desativada. Mova o cartão para uma lista ativa antes de restaurar."
+                        });
+                    }
+
+                    cartao.Status = StatusCartaoTarefa.Ativa;
+                    cartao.DataAtualizacao = DateTime.UtcNow;
+
+                    RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao restaurado");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, colunaId = coluna.Id, colunaNome = coluna.Nome });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao restaurar cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel restaurar o cartao no momento." });
+        }
+    }
+
+    public async Task<IActionResult> OnGetCartoesArquivadosAsync(int grupoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, grupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var cartoes = await (
+            from cartao in _context.CartoesTarefas.AsNoTracking()
+            join coluna in _context.ColunasQuadro.AsNoTracking()
+                on cartao.ColunaId equals coluna.Id
+            where cartao.GrupoId == grupoId &&
+                  cartao.Status == StatusCartaoTarefa.Arquivada &&
+                  (cartao.CriadorId == usuarioId.Value ||
+                   !cartao.Privado ||
+                   _context.CartoesTarefasUsuarios.Any(x => x.CartaoTarefaId == cartao.Id && x.UsuarioId == usuarioId.Value))
+            orderby cartao.DataAtualizacao descending
+            select new
+            {
+                id = cartao.Id,
+                titulo = cartao.Titulo,
+                nomeColuna = coluna.Nome,
+                corCapa = cartao.CorCapa,
+                dataArquivamento = cartao.DataAtualizacao
+            })
+            .Take(100)
+            .ToListAsync();
+
+        return new JsonResult(new { success = true, cartoes });
     }
 
     public async Task<IActionResult> OnGetTemplatesAsync(int grupoId)
@@ -932,7 +1298,11 @@ public class TasksModel : PageModel
                         {
                             success = true,
                             id = cartao.Id,
-                            numeroCartaoGrupo = cartao.NumeroCartaoGrupo
+                            numeroCartaoGrupo = cartao.NumeroCartaoGrupo,
+                            titulo = cartao.Titulo,
+                            colunaId = cartao.ColunaId,
+                            corCapa = cartao.CorCapa,
+                            compartilharGrupo = !cartao.Privado
                         });
                     }
                     catch
@@ -1002,10 +1372,28 @@ public class TasksModel : PageModel
             Ativo = true
         };
 
+        var strategy = _context.Database.CreateExecutionStrategy();
+
         try
         {
-            _context.TemplatesCartoesTarefas.Add(template);
-            await _context.SaveChangesAsync();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    _context.TemplatesCartoesTarefas.Add(template);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, id = template.Id, nome = template.Nome });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
@@ -1016,8 +1404,6 @@ public class TasksModel : PageModel
             _logger.LogError(ex, "Erro ao criar template no grupo {GrupoId}.", request.GrupoId);
             return BadRequest(new { success = false, message = "Nao foi possivel salvar o template no momento." });
         }
-
-        return new JsonResult(new { success = true, id = template.Id, nome = template.Nome });
     }
 
     public async Task<IActionResult> OnPostEditarTemplateAsync([FromBody] EditarTemplateRequest request)
@@ -1060,9 +1446,27 @@ public class TasksModel : PageModel
         template.CorCapa = NormalizarCor(request.CorCapa);
         template.DataAtualizacao = DateTime.UtcNow;
 
+        var strategy = _context.Database.CreateExecutionStrategy();
+
         try
         {
-            await _context.SaveChangesAsync();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
@@ -1073,7 +1477,6 @@ public class TasksModel : PageModel
             _logger.LogError(ex, "Erro ao editar template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
             return BadRequest(new { success = false, message = "Nao foi possivel salvar o template no momento." });
         }
-        return new JsonResult(new { success = true });
     }
 
     public async Task<IActionResult> OnPostExcluirTemplateAsync([FromBody] ExcluirTemplateRequest request)
@@ -1092,11 +1495,35 @@ public class TasksModel : PageModel
         if (template == null)
             return NotFound(new { success = false, message = "Template nao encontrado." });
 
-        template.Ativo = false;
-        template.DataAtualizacao = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-        return new JsonResult(new { success = true });
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    template.Ativo = false;
+                    template.DataAtualizacao = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel excluir o template no momento." });
+        }
     }
 
     private async Task CarregarDadosAsync(int usuarioId, PermissaoUsuario permissao)
@@ -1804,6 +2231,19 @@ public class TasksModel : PageModel
         public string? Nome { get; set; }
     }
 
+    public class RenomearListaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ColunaId { get; set; }
+        public string? Nome { get; set; }
+    }
+
+    public class ListaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ColunaId { get; set; }
+    }
+
     public class SalvarCartaoRequest
     {
         public int? Id { get; set; }
@@ -1867,6 +2307,12 @@ public class TasksModel : PageModel
         public int CartaoId { get; set; }
         public int GrupoId { get; set; }
         public string? NomeTemplate { get; set; }
+    }
+
+    public class ArquivarCartaoRequest
+    {
+        public int CartaoId { get; set; }
+        public int GrupoId { get; set; }
     }
 
     public class CriarCartaoDeTemplateRequest
