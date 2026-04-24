@@ -12,6 +12,7 @@ namespace CallStationApp.Pages.Menu;
 public class TasksModel : PageModel
 {
     private const decimal OrdemBase = 1024m;
+    private const string PrefixoColunaArquivoSistema = "__callstation_archive__";
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly ILogger<TasksModel> _logger;
@@ -28,6 +29,7 @@ public class TasksModel : PageModel
 
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
+    public bool UsuarioLogadoEhAdministrador { get; set; }
     public Grupo? GrupoAtual { get; set; }
     public QuadroTarefa Quadro { get; set; } = null!;
     public List<ColunaBoardViewModel> Colunas { get; set; } = new();
@@ -46,6 +48,8 @@ public class TasksModel : PageModel
         var contexto = await _grupoAuthorizationService.ObterContextoMembroAsync(usuarioId.Value, GrupoId);
         if (contexto == null)
             return RedirectToPage("/Menu/Menu");
+
+        UsuarioLogadoEhAdministrador = GrupoPermissionService.PodeGerenciarGrupo(contexto.Permissao);
 
         GrupoAtual = await _context.Grupos.AsNoTracking().FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (GrupoAtual == null)
@@ -94,6 +98,8 @@ public class TasksModel : PageModel
                     try
                     {
                         var quadro = await GarantirQuadroPadraoAsync(request.GrupoId, usuarioId.Value);
+                        await RemoverColunasInativasComMesmoNomeAsync(quadro.Id, request.GrupoId, nome, usuarioId.Value);
+
                         var existe = await _context.ColunasQuadro
                             .AnyAsync(c => c.QuadroId == quadro.Id && c.Nome == nome);
 
@@ -299,18 +305,27 @@ public class TasksModel : PageModel
                         return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
 
                     var cartoes = await _context.CartoesTarefas
-                        .Where(c => c.ColunaId == request.ColunaId && c.GrupoId == request.GrupoId && c.Status != StatusCartaoTarefa.Arquivada)
+                        .Where(c => c.ColunaId == request.ColunaId && c.GrupoId == request.GrupoId)
                         .ToListAsync();
+
+                    var colunaArquivo = cartoes.Count > 0
+                        ? await ObterOuCriarColunaArquivoSistemaAsync(coluna.QuadroId)
+                        : null;
 
                     var agora = DateTime.UtcNow;
                     foreach (var cartao in cartoes)
                     {
-                        cartao.Status = StatusCartaoTarefa.Arquivada;
+                        if (cartao.Status != StatusCartaoTarefa.Arquivada)
+                            cartao.Status = StatusCartaoTarefa.Arquivada;
+
+                        if (colunaArquivo != null)
+                            cartao.ColunaId = colunaArquivo.Id;
+
                         cartao.DataAtualizacao = agora;
                         RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado por exclusao da lista");
                     }
 
-                    coluna.Ativa = false;
+                    _context.ColunasQuadro.Remove(coluna);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -919,6 +934,88 @@ public class TasksModel : PageModel
         return new JsonResult(new { success = true });
     }
 
+    public async Task<IActionResult> OnPostReordenarListasAsync([FromBody] ReordenarListasRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var colunasIds = request.ColunasIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        if (colunasIds.Count != request.ColunasIds.Count || colunasIds.Count == 0)
+            return BadRequest(new { success = false, message = "Ordem das listas invalida." });
+
+        var colunas = await _context.ColunasQuadro
+            .Where(c => colunasIds.Contains(c.Id) && c.Ativa && c.Quadro.GrupoId == request.GrupoId)
+            .ToListAsync();
+
+        if (colunas.Count != colunasIds.Count)
+            return BadRequest(new { success = false, message = "Lista invalida." });
+
+        var quadroIds = colunas.Select(c => c.QuadroId).Distinct().ToList();
+        if (quadroIds.Count != 1)
+            return BadRequest(new { success = false, message = "As listas informadas nao pertencem ao mesmo quadro." });
+
+        var quadroId = quadroIds[0];
+        var totalColunasAtivas = await _context.ColunasQuadro
+            .CountAsync(c => c.QuadroId == quadroId && c.Ativa);
+
+        if (totalColunasAtivas != colunasIds.Count)
+            return BadRequest(new { success = false, message = "A lista de ordenacao esta desatualizada." });
+
+        var colunasPorId = colunas.ToDictionary(c => c.Id);
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var maiorPosicao = await _context.ColunasQuadro
+                        .Where(c => c.QuadroId == quadroId)
+                        .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
+
+                    for (var i = 0; i < colunasIds.Count; i++)
+                    {
+                        colunasPorId[colunasIds[i]].Posicao = maiorPosicao + ((i + 1) * OrdemBase);
+                    }
+
+                    await _context.SaveChangesAsync();
+
+                    for (var i = 0; i < colunasIds.Count; i++)
+                    {
+                        colunasPorId[colunasIds[i]].Posicao = maiorPosicao + ((colunasIds.Count + i + 1) * OrdemBase);
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao reordenar listas no grupo {GrupoId}.", request.GrupoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel salvar a ordem das listas." });
+        }
+    }
+
     public async Task<IActionResult> OnPostAlternarConcluidoAsync([FromBody] AlternarConcluidoRequest request)
     {
         var usuarioId = GetUsuarioLogadoId();
@@ -1133,18 +1230,26 @@ public class TasksModel : PageModel
                         return (IActionResult)Forbid();
 
                     var coluna = await _context.ColunasQuadro
-                        .AsNoTracking()
                         .FirstOrDefaultAsync(c => c.Id == cartao.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
 
                     if (coluna == null)
                     {
-                        return (IActionResult)BadRequest(new
+                        coluna = await _context.ColunasQuadro
+                            .Where(c => c.QuadroId == cartao.QuadroId && c.Ativa && c.Quadro.GrupoId == request.GrupoId)
+                            .OrderBy(c => c.Posicao)
+                            .FirstOrDefaultAsync();
+
+                        if (coluna == null)
                         {
-                            success = false,
-                            message = "A lista original foi desativada. Mova o cartão para uma lista ativa antes de restaurar."
-                        });
+                            return (IActionResult)BadRequest(new
+                            {
+                                success = false,
+                                message = "Crie uma lista ativa antes de restaurar este cartao."
+                            });
+                        }
                     }
 
+                    cartao.ColunaId = coluna.Id;
                     cartao.Status = StatusCartaoTarefa.Ativa;
                     cartao.DataAtualizacao = DateTime.UtcNow;
 
@@ -1192,7 +1297,7 @@ public class TasksModel : PageModel
             {
                 id = cartao.Id,
                 titulo = cartao.Titulo,
-                nomeColuna = coluna.Nome,
+                nomeColuna = coluna.Ativa ? coluna.Nome : "Lista excluida",
                 corCapa = cartao.CorCapa,
                 dataArquivamento = cartao.DataAtualizacao
             })
@@ -1524,6 +1629,77 @@ public class TasksModel : PageModel
             _logger.LogError(ex, "Erro ao excluir template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
             return BadRequest(new { success = false, message = "Nao foi possivel excluir o template no momento." });
         }
+    }
+
+    private async Task<ColunaQuadro> ObterOuCriarColunaArquivoSistemaAsync(int quadroId)
+    {
+        var colunaArquivo = await _context.ColunasQuadro
+            .FirstOrDefaultAsync(c => c.QuadroId == quadroId &&
+                                      !c.Ativa &&
+                                      c.Nome.StartsWith(PrefixoColunaArquivoSistema));
+
+        if (colunaArquivo != null)
+            return colunaArquivo;
+
+        var ultimaPosicao = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId)
+            .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
+
+        colunaArquivo = new ColunaQuadro
+        {
+            QuadroId = quadroId,
+            Nome = $"{PrefixoColunaArquivoSistema}_{Guid.NewGuid():N}",
+            Posicao = ultimaPosicao + OrdemBase,
+            Ativa = false,
+            DataCriacao = DateTime.UtcNow
+        };
+
+        _context.ColunasQuadro.Add(colunaArquivo);
+        await _context.SaveChangesAsync();
+
+        return colunaArquivo;
+    }
+
+    private async Task RemoverColunasInativasComMesmoNomeAsync(int quadroId, int grupoId, string nome, int usuarioId)
+    {
+        var colunasInativas = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId &&
+                        !c.Ativa &&
+                        c.Nome == nome &&
+                        !c.Nome.StartsWith(PrefixoColunaArquivoSistema))
+            .ToListAsync();
+
+        if (colunasInativas.Count == 0)
+            return;
+
+        ColunaQuadro? colunaArquivo = null;
+        var agora = DateTime.UtcNow;
+
+        foreach (var coluna in colunasInativas)
+        {
+            var cartoes = await _context.CartoesTarefas
+                .Where(c => c.ColunaId == coluna.Id && c.GrupoId == grupoId)
+                .ToListAsync();
+
+            if (cartoes.Count > 0)
+            {
+                colunaArquivo ??= await ObterOuCriarColunaArquivoSistemaAsync(quadroId);
+
+                foreach (var cartao in cartoes)
+                {
+                    if (cartao.Status != StatusCartaoTarefa.Arquivada)
+                        cartao.Status = StatusCartaoTarefa.Arquivada;
+
+                    cartao.ColunaId = colunaArquivo.Id;
+                    cartao.DataAtualizacao = agora;
+                    RegistrarHistorico(cartao.Id, usuarioId, "Cartao arquivado por limpeza de lista excluida");
+                }
+            }
+
+            _context.ColunasQuadro.Remove(coluna);
+        }
+
+        await _context.SaveChangesAsync();
     }
 
     private async Task CarregarDadosAsync(int usuarioId, PermissaoUsuario permissao)
@@ -2281,6 +2457,12 @@ public class TasksModel : PageModel
     {
         public int GrupoId { get; set; }
         public List<ColunaOrdemRequest> Colunas { get; set; } = new();
+    }
+
+    public class ReordenarListasRequest
+    {
+        public int GrupoId { get; set; }
+        public List<int> ColunasIds { get; set; } = new();
     }
 
     public class ColunaOrdemRequest

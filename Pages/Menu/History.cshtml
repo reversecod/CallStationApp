@@ -1,0 +1,179 @@
+@page
+@model CallStationApp.Pages.Menu.HistoryModel
+@using CallStationApp.Models
+@{
+    ViewData["Title"] = "Historico";
+}
+
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Historico</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { min-height: 100vh; background:#f8fafc; }
+        main { position: relative; min-height: 100vh; }
+        .sidebar { position: fixed; top: 0; left: 0; width: 17.5rem; height: 100vh; z-index: 1000; }
+        .content-wrapper { margin-left: 17.5rem; padding: 1.5rem; min-height: 100vh; }
+        .logo-img { width: 100%; height: auto; }
+        .user-img { width: 2rem; height: 2rem; }
+        .icon-svg { width: 1rem; height: 1rem; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; line-height: 1; flex-shrink: 0; color: currentColor; fill: currentColor; }
+        .sidebar .nav-link { display: flex; align-items: center; }
+        .sidebar .nav-link.active .icon-svg { color: #111; fill: #111; }
+        .hero-box, .history-card { background:#fff; border:1px solid #e9ecef; border-radius:1.15rem; box-shadow:0 10px 30px rgba(0,0,0,.04); }
+        .history-card { padding:1.2rem 1.25rem; }
+        .history-grid { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; align-items:start; }
+        .history-meta { display:flex; flex-wrap:wrap; gap:.75rem 1rem; color:#6b7280; font-size:.92rem; }
+        .history-badge { border-radius:999px; padding:.35rem .75rem; font-size:.82rem; font-weight:700; }
+        .history-badge.concluido { background:#dcfce7; color:#166534; }
+        .history-badge.fechado { background:#e5e7eb; color:#374151; }
+        .history-badge.cancelado { background:#fee2e2; color:#b91c1c; }
+        .history-number { background:#f3f4f6; border:1px solid #e5e7eb; color:#111827; border-radius:999px; padding:.3rem .7rem; font-size:.86rem; font-weight:700; }
+        .history-timeline { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.85rem; margin-top:1rem; }
+        .history-block { border:1px solid #eef2f7; border-radius:.9rem; background:#f8fafc; padding:.85rem; }
+        .history-label { font-size:.78rem; color:#6b7280; text-transform:uppercase; letter-spacing:.02em; }
+        .history-value { margin-top:.2rem; font-weight:600; color:#111827; }
+        @@media (max-width: 767.98px) {
+            .sidebar { position: static; width: 100%; height: auto; }
+            .content-wrapper { margin-left: 0; padding: 1rem; }
+            .history-grid, .history-timeline { grid-template-columns:1fr; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
+        <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
+            <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
+        </a>
+        <hr />
+        <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item"><a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-house-door me-2 icon-svg"></i>Chamados</a></li>
+            <li><a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-table me-2 icon-svg"></i>Tarefas</a></li>
+            <li><a href="#" class="nav-link link-body-emphasis"><i class="bi bi-speedometer2 me-2 icon-svg"></i>Dashboard</a></li>
+            <li><a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page"><i class="bi bi-grid me-2 icon-svg"></i>Historico</a></li>
+            <li><a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-people me-2 icon-svg"></i>Membros</a></li>
+            @if (Model.UsuarioLogadoEhAdministrador)
+            {
+                <li><a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-sliders2-vertical me-2 icon-svg"></i>Grupo</a></li>
+            }
+        </ul>
+        <hr />
+        <div class="dropdown">
+            <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
+                <img src="@(Model.FotoUsuarioLogado ?? "/images/default-user.png")" alt="" class="user-img rounded-circle me-2" loading="lazy">
+                <strong>@(Model.NomeUsuarioLogado ?? "Usuario")</strong>
+            </a>
+            <ul class="dropdown-menu text-small shadow">
+                <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <div class="hero-box p-4 p-md-5 mb-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                <div>
+                    <div class="text-muted small mb-1">Quadro atual</div>
+                    <h1 class="h3 mb-2">Historico de chamados</h1>
+                    <p class="text-muted mb-0">Somente chamados concluidos, fechados e cancelados deste grupo aparecem aqui.</p>
+                </div>
+                <div class="align-self-md-center">
+                    <span class="history-number">@(Model.GrupoAtual?.Nome ?? "Grupo")</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex flex-column gap-3">
+            @if (Model.Chamados.Any())
+            {
+                @foreach (var chamado in Model.Chamados)
+                {
+                    var titulo = !string.IsNullOrWhiteSpace(chamado.Titulo) ? chamado.Titulo : $"Chamado {chamado.NumeroChamadoGrupo}";
+                    var classeStatus = chamado.Status switch
+                    {
+                        StatusChamado.Concluido => "concluido",
+                        StatusChamado.Fechado => "fechado",
+                        StatusChamado.Cancelado => "cancelado",
+                        _ => "fechado"
+                    };
+                    var textoStatus = chamado.Status switch
+                    {
+                        StatusChamado.Concluido => "Concluido",
+                        StatusChamado.Fechado => "Fechado",
+                        StatusChamado.Cancelado => "Cancelado",
+                        _ => chamado.Status.ToString()
+                    };
+
+                    <article class="history-card">
+                        <div class="history-grid">
+                            <div>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <span class="history-number">Chamado @chamado.NumeroChamadoGrupo</span>
+                                    <span class="history-badge @classeStatus">@textoStatus</span>
+                                </div>
+                                <h2 class="h5 mb-2">@titulo</h2>
+                                <div class="history-meta">
+                                    <span><i class="bi bi-calendar-event me-1"></i>Aberto em @chamado.DataCriacao.ToString("dd/MM/yyyy HH:mm")</span>
+                                    <span><i class="bi bi-calendar-check me-1"></i>Finalizado em @(chamado.DataFinal?.ToString("dd/MM/yyyy HH:mm") ?? "Nao registrado")</span>
+                                </div>
+                            </div>
+                            <div class="align-self-start">
+                                <span class="history-number">#@chamado.Id</span>
+                            </div>
+                        </div>
+                        <div class="history-timeline">
+                            <div class="history-block">
+                                <div class="history-label">Criado por</div>
+                                <div class="history-value">@chamado.CriadoPor</div>
+                            </div>
+                            <div class="history-block">
+                                <div class="history-label">Ultimo status final por</div>
+                                <div class="history-value">@chamado.FinalizadoPor</div>
+                            </div>
+                        </div>
+                    </article>
+                }
+
+                @if (Model.TemPaginaAnterior || Model.TemProximaPagina)
+                {
+                    <div class="d-flex justify-content-between align-items-center pt-2">
+                        @if (Model.TemPaginaAnterior)
+                        {
+                            <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" asp-route-page="@(Model.PaginaAtual - 1)" class="btn btn-outline-secondary btn-sm">Anterior</a>
+                        }
+                        else
+                        {
+                            <span></span>
+                        }
+
+                        <span class="text-muted small">Pagina @Model.PaginaAtual</span>
+
+                        @if (Model.TemProximaPagina)
+                        {
+                            <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" asp-route-page="@(Model.PaginaAtual + 1)" class="btn btn-outline-secondary btn-sm">Proxima</a>
+                        }
+                        else
+                        {
+                            <span></span>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="history-card text-center py-5">
+                    <i class="bi bi-grid fs-1 text-secondary"></i>
+                    <h2 class="h4 mt-3">Nenhum chamado finalizado</h2>
+                    <p class="text-muted mb-0">Quando chamados forem concluidos, fechados ou cancelados, eles aparecerao aqui.</p>
+                </div>
+            }
+        </div>
+    </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

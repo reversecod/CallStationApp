@@ -1,4 +1,5 @@
 let draggedCard = null;
+let draggedList = null;
 let modalLista = null;
 let modalCartao = null;
 let modalMembrosCartao = null;
@@ -11,6 +12,7 @@ let colunaTemplatesAtual = null;
 let listaAcoesAtualId = null;
 let templatesAtuais = [];
 let snapshotBoardAntesDrag = null;
+let snapshotListasAntesDrag = null;
 let cartaoAtualEstado = {
     membros: [],
     chamados: [],
@@ -124,15 +126,63 @@ function inicializarBoard() {
     document.querySelectorAll(".task-list[data-column-id]").forEach(inicializarLista);
     document.querySelectorAll(".task-card").forEach(inicializarCard);
     document.querySelectorAll(".task-cards").forEach(inicializarDropZone);
+    inicializarOrdenacaoListas();
 }
 
 function inicializarLista(lista) {
     const colunaId = Number(lista.dataset.columnId);
+    const handle = lista.querySelector(".task-list-drag-handle");
+
+    handle?.addEventListener("dragstart", event => {
+        snapshotListasAntesDrag = capturarSnapshotListas();
+        draggedList = lista;
+        lista.classList.add("dragging-list");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(colunaId));
+    });
+
+    handle?.addEventListener("dragend", async () => {
+        lista.classList.remove("dragging-list");
+        draggedList = null;
+
+        const snapshotListasDepoisDrag = capturarSnapshotListas();
+        if (!snapshotsListasIguais(snapshotListasAntesDrag, snapshotListasDepoisDrag)) {
+            await salvarOrdemListas(snapshotListasDepoisDrag);
+            sincronizarSelectColunasComBoard();
+        }
+
+        snapshotListasAntesDrag = null;
+    });
+
     lista.querySelector("[data-rename-list]")?.addEventListener("click", () => renomearLista(colunaId));
     lista.querySelector("[data-list-actions]")?.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
         abrirAcoesLista(colunaId);
+    });
+}
+
+function inicializarOrdenacaoListas() {
+    const board = getBoard();
+    if (!board) return;
+
+    board.addEventListener("dragover", event => {
+        if (!draggedList) return;
+
+        event.preventDefault();
+        const addListPanel = board.querySelector(".add-list-panel");
+        const afterElement = obterListaAposCursor(board, event.clientX);
+
+        if (afterElement == null) {
+            board.insertBefore(draggedList, addListPanel);
+        } else {
+            board.insertBefore(draggedList, afterElement);
+        }
+    });
+
+    board.addEventListener("drop", event => {
+        if (!draggedList) return;
+        event.preventDefault();
     });
 }
 
@@ -201,6 +251,33 @@ function obterElementoAposCursor(container, y) {
 
         return closest;
     }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+}
+
+function obterListaAposCursor(container, x) {
+    const listas = [...container.querySelectorAll(".task-list[data-column-id]:not(.dragging-list)")];
+    return listas.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+        }
+
+        return closest;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+}
+
+function capturarSnapshotListas() {
+    return [...document.querySelectorAll(".task-list[data-column-id]")]
+        .map(coluna => Number(coluna.dataset.columnId))
+        .filter(Number.isFinite);
+}
+
+function snapshotsListasIguais(snapshotA, snapshotB) {
+    if (!snapshotA || !snapshotB || snapshotA.length !== snapshotB.length) {
+        return false;
+    }
+
+    return snapshotA.every((colunaId, index) => colunaId === snapshotB[index]);
 }
 
 function capturarSnapshotBoard() {
@@ -496,6 +573,19 @@ async function salvarOrdemBoard() {
     }
 }
 
+async function salvarOrdemListas(colunasIds = capturarSnapshotListas()) {
+    try {
+        await fetchJson("?handler=ReordenarListas", {
+            grupoId: getGrupoId(),
+            colunasIds
+        });
+    } catch (error) {
+        console.error(error);
+        mostrarToast("NÃ£o foi possÃ­vel salvar a nova ordem das listas.");
+        window.location.reload();
+    }
+}
+
 async function alternarConcluido(cartaoId, card) {
     if (!cartaoId || !card) return;
 
@@ -669,9 +759,12 @@ function inserirListaNoBoard(id, nome) {
     lista.dataset.columnId = id;
     lista.innerHTML = `
         <div class="task-list-header">
+            <span class="task-list-drag-handle" title="Mover lista" aria-label="Mover lista" draggable="true">
+                <i class="bi bi-grip-vertical"></i>
+            </span>
             <button type="button" class="task-list-title" data-rename-list="${id}">${escapeHtml(nome)}</button>
             <div class="d-flex align-items-center gap-2">
-                <span>0</span>
+                <span class="task-list-count">0</span>
                 <button type="button" class="btn btn-sm btn-link task-list-menu" data-list-actions="${id}" aria-label="Acoes da lista">
                     <i class="bi bi-three-dots"></i>
                 </button>
@@ -714,6 +807,8 @@ function inserirListaNoBoard(id, nome) {
         option.textContent = nome;
         selectColunas.appendChild(option);
     }
+
+    sincronizarSelectColunasComBoard();
 }
 
 function inserirCardNoBoard(id, payload) {
@@ -1336,11 +1431,24 @@ function atualizarResumoChamados(chamadosVinculados) {
 }
 
 function atualizarContadorLista(lista) {
-    const contador = lista?.querySelector(".task-list-header span");
+    const contador = lista?.querySelector(".task-list-count");
     const total = lista?.querySelectorAll(".task-card").length ?? 0;
     if (contador) {
         contador.textContent = String(total);
     }
+}
+
+function sincronizarSelectColunasComBoard() {
+    const selectColunas = document.getElementById("cartaoColunaSelect");
+    if (!selectColunas) return;
+
+    const opcoesPorId = new Map([...selectColunas.options].map(option => [option.value, option]));
+    capturarSnapshotListas().forEach(colunaId => {
+        const option = opcoesPorId.get(String(colunaId));
+        if (option) {
+            selectColunas.appendChild(option);
+        }
+    });
 }
 
 async function adicionarComentario() {

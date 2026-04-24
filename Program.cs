@@ -1,5 +1,6 @@
 using CallStationApp.Authorization;
 using CallStationApp.Data;
+using CallStationApp.Services;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
@@ -48,6 +49,7 @@ CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 
 builder.Services.AddScoped<GrupoAuthorizationService>();
 builder.Services.AddMemoryCache();
+builder.Services.AddHostedService<ChamadoStatusAutomationService>();
 
 // SERVIÇOS
 builder.Services.AddRazorPages();

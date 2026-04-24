@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using System.Data;
+using System.Globalization;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -16,22 +16,18 @@ public class HomeModel : PageModel
     private readonly AppDbContext _context;
     private readonly IWebHostEnvironment _environment;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
-    private readonly IMemoryCache _memoryCache;
     private readonly ILogger<HomeModel> _logger;
     private const int TamanhoPaginaChamados = 20;
-    private static readonly TimeSpan CacheCatalogoTtl = TimeSpan.FromMinutes(10);
 
     public HomeModel(
         AppDbContext context,
         IWebHostEnvironment environment,
         GrupoAuthorizationService grupoAuthorizationService,
-        IMemoryCache memoryCache,
         ILogger<HomeModel> logger)
     {
         _context = context;
         _environment = environment;
         _grupoAuthorizationService = grupoAuthorizationService;
-        _memoryCache = memoryCache;
         _logger = logger;
     }
 
@@ -48,6 +44,7 @@ public class HomeModel : PageModel
     public List<Setor> SetoresDisponiveis { get; set; } = new();
     public List<OcorrenciaTipo> TiposOcorrenciaDisponiveis { get; set; } = new();
     public bool PodeCriarChamado { get; set; }
+    public bool UsuarioLogadoEhAdministrador { get; set; }
     public bool TemPaginaAnterior => PaginaAtual > 1;
     public bool TemProximaPagina { get; set; }
 
@@ -76,6 +73,7 @@ public class HomeModel : PageModel
             return RedirectToPage("/Menu/Menu");
 
         PodeCriarChamado = GrupoPermissionService.PodeCriarChamado(contextoMembro.Permissao);
+        UsuarioLogadoEhAdministrador = GrupoPermissionService.PodeGerenciarGrupo(contextoMembro.Permissao);
 
         GrupoAtual = await _context.Grupos
             .AsNoTracking()
@@ -147,7 +145,7 @@ public class HomeModel : PageModel
 
          var chamado = await _context.Chamados
         .AsNoTracking()
-        .FirstOrDefaultAsync(c => c.Id == id && c.GrupoId == GrupoId);
+        .FirstOrDefaultAsync(c => c.Id == id && c.GrupoId == GrupoId && c.Status != StatusChamado.Excluido);
 
         if (chamado == null)
             return new JsonResult(new { success = false, message = "Chamado não encontrado." });
@@ -606,7 +604,7 @@ public class HomeModel : PageModel
         if (request == null || request.Id <= 0)
             return new JsonResult(new { success = false, message = "Chamado inválido." });
 
-        var chamado = await _context.Chamados.FirstOrDefaultAsync(c => c.Id == request.Id);
+        var chamado = await _context.Chamados.FirstOrDefaultAsync(c => c.Id == request.Id && c.Status != StatusChamado.Excluido);
         if (chamado == null)
             return new JsonResult(new { success = false, message = "Chamado não encontrado." });
 
@@ -633,12 +631,39 @@ public class HomeModel : PageModel
             return new JsonResult(new { success = false, message = "Você não tem permissão para cancelar este chamado." });
         }
 
-        chamado.Status = StatusChamado.Cancelado;
+        if (chamado.Status == StatusChamado.Cancelado)
+            return new JsonResult(new { success = false, message = "O chamado ja esta cancelado." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
 
         try
         {
-            await _context.SaveChangesAsync();
-            return new JsonResult(new { success = true, message = "Chamado cancelado com sucesso." });
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var statusAnterior = chamado.Status;
+                    var agora = DateTime.UtcNow;
+
+                    chamado.Status = StatusChamado.Cancelado;
+                    chamado.DataFinalizacao = agora;
+
+                    RegistrarTransicaoStatusChamado(chamado, statusAnterior, StatusChamado.Cancelado, idUsuario.Value, false, "Cancelamento manual");
+                    RegistrarHistoricoAlteracaoStatus(chamado, statusAnterior, StatusChamado.Cancelado, idUsuario.Value, "StatusManual");
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, message = "Chamado cancelado com sucesso." });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -719,12 +744,16 @@ public class HomeModel : PageModel
             });
         }
 
-        var setorFoiAlterado = chamado.SetorId != request.SetorId;
-        var tipoFoiAlterado = chamado.OcorrenciaTipoId != request.OcorrenciaTipoId;
-        var categoriaFoiAlterada = chamado.OcorrenciaCategoriaId != request.OcorrenciaCategoriaId;
-        var subcategoriaFoiAlterada = chamado.OcorrenciaSubcategoriaId != request.OcorrenciaSubcategoriaId;
+        if (!TryNormalizarDataHoraNullable(request.DataFinalizacao, out var dataFinalizacao))
+            return new JsonResult(new { success = false, message = "Data de finalizacao invalida." });
 
-        if (setorFoiAlterado && request.SetorId.HasValue)
+        if (!TryNormalizarDataHoraNullable(request.PrazoResposta, out var prazoResposta))
+            return new JsonResult(new { success = false, message = "Prazo de resposta invalido." });
+
+        if (!TryNormalizarDataHoraNullable(request.PrazoConclusao, out var prazoConclusao))
+            return new JsonResult(new { success = false, message = "Prazo de conclusao invalido." });
+
+        if (request.SetorId.HasValue)
         {
             var setorValido = await _context.Setores
                 .AsNoTracking()
@@ -740,7 +769,7 @@ public class HomeModel : PageModel
             }
         }
 
-        if (tipoFoiAlterado && request.OcorrenciaTipoId.HasValue)
+        if (request.OcorrenciaTipoId.HasValue)
         {
             var tipoValido = await _context.OcorrenciasTipo
                 .AsNoTracking()
@@ -756,7 +785,7 @@ public class HomeModel : PageModel
             }
         }
 
-        if ((categoriaFoiAlterada || tipoFoiAlterado) && request.OcorrenciaCategoriaId.HasValue)
+        if (request.OcorrenciaCategoriaId.HasValue)
         {
             if (!request.OcorrenciaTipoId.HasValue)
             {
@@ -767,11 +796,15 @@ public class HomeModel : PageModel
                 });
             }
 
-            var categoriaValida = await _context.OcorrenciasCategoria
-                .AsNoTracking()
-                .AnyAsync(c =>
-                    c.Id == request.OcorrenciaCategoriaId.Value &&
-                    c.TipoId == request.OcorrenciaTipoId.Value);
+            var categoriaValida = await (
+                from categoria in _context.OcorrenciasCategoria.AsNoTracking()
+                join tipo in _context.OcorrenciasTipo.AsNoTracking()
+                    on categoria.TipoId equals tipo.Id
+                where categoria.Id == request.OcorrenciaCategoriaId.Value &&
+                      categoria.TipoId == request.OcorrenciaTipoId.Value &&
+                      tipo.GrupoId == chamado.GrupoId
+                select categoria.Id
+            ).AnyAsync();
 
             if (!categoriaValida)
             {
@@ -783,7 +816,7 @@ public class HomeModel : PageModel
             }
         }
 
-        if ((subcategoriaFoiAlterada || categoriaFoiAlterada) && request.OcorrenciaSubcategoriaId.HasValue)
+        if (request.OcorrenciaSubcategoriaId.HasValue)
         {
             if (!request.OcorrenciaCategoriaId.HasValue)
             {
@@ -794,11 +827,17 @@ public class HomeModel : PageModel
                 });
             }
 
-            var subcategoriaValida = await _context.OcorrenciasSubcategoria
-                .AsNoTracking()
-                .AnyAsync(sc =>
-                    sc.Id == request.OcorrenciaSubcategoriaId.Value &&
-                    sc.CategoriaId == request.OcorrenciaCategoriaId.Value);
+            var subcategoriaValida = await (
+                from subcategoria in _context.OcorrenciasSubcategoria.AsNoTracking()
+                join categoria in _context.OcorrenciasCategoria.AsNoTracking()
+                    on subcategoria.CategoriaId equals categoria.Id
+                join tipo in _context.OcorrenciasTipo.AsNoTracking()
+                    on categoria.TipoId equals tipo.Id
+                where subcategoria.Id == request.OcorrenciaSubcategoriaId.Value &&
+                      subcategoria.CategoriaId == request.OcorrenciaCategoriaId.Value &&
+                      tipo.GrupoId == chamado.GrupoId
+                select subcategoria.Id
+            ).AnyAsync();
 
             if (!subcategoriaValida)
             {
@@ -811,6 +850,7 @@ public class HomeModel : PageModel
         }
 
         var houveAlteracao = false;
+        var statusAnteriorOriginal = chamado.Status;
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Titulo, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Titulo != request.Titulo)
@@ -908,24 +948,41 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.DataFinalizacao, idUsuario.Value, chamado.CriadorChamadoId)
-            && chamado.DataFinalizacao != request.DataFinalizacao)
+        var statusFinalAtual = chamado.Status == StatusChamado.Concluido ||
+                               chamado.Status == StatusChamado.Fechado ||
+                               chamado.Status == StatusChamado.Cancelado;
+
+        if (chamado.Status != statusAnteriorOriginal && statusFinalAtual && dataFinalizacao == null)
         {
-            chamado.DataFinalizacao = request.DataFinalizacao;
+            dataFinalizacao = DateTime.UtcNow;
+        }
+
+        if (chamado.Status != statusAnteriorOriginal &&
+            !statusFinalAtual &&
+            statusAnteriorOriginal is StatusChamado.Concluido or StatusChamado.Fechado or StatusChamado.Cancelado &&
+            dataFinalizacao == null)
+        {
+            dataFinalizacao = null;
+        }
+
+        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.DataFinalizacao, idUsuario.Value, chamado.CriadorChamadoId)
+            && chamado.DataFinalizacao != dataFinalizacao)
+        {
+            chamado.DataFinalizacao = dataFinalizacao;
             houveAlteracao = true;
         }
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoResposta, idUsuario.Value, chamado.CriadorChamadoId)
-            && chamado.PrazoResposta != request.PrazoResposta)
+            && chamado.PrazoResposta != prazoResposta)
         {
-            chamado.PrazoResposta = request.PrazoResposta;
+            chamado.PrazoResposta = prazoResposta;
             houveAlteracao = true;
         }
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId)
-            && chamado.PrazoConclusao != request.PrazoConclusao)
+            && chamado.PrazoConclusao != prazoConclusao)
         {
-            chamado.PrazoConclusao = request.PrazoConclusao;
+            chamado.PrazoConclusao = prazoConclusao;
             houveAlteracao = true;
         }
 
@@ -970,13 +1027,36 @@ public class HomeModel : PageModel
             });
         }
 
+        var strategy = _context.Database.CreateExecutionStrategy();
+
         try
         {
-            await _context.SaveChangesAsync();
-            return new JsonResult(new
+            return await strategy.ExecuteAsync(async () =>
             {
-                success = true,
-                message = "Chamado salvo com sucesso."
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    if (chamado.Status != statusAnteriorOriginal)
+                    {
+                        RegistrarTransicaoStatusChamado(chamado, statusAnteriorOriginal, chamado.Status, idUsuario.Value, false, "Atualizacao manual");
+                        RegistrarHistoricoAlteracaoStatus(chamado, statusAnteriorOriginal, chamado.Status, idUsuario.Value, "StatusManual");
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = "Chamado salvo com sucesso."
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             });
         }
         catch (Exception ex)
@@ -989,6 +1069,52 @@ public class HomeModel : PageModel
             });
         }
     }
+
+    private void RegistrarTransicaoStatusChamado(
+        Chamado chamado,
+        StatusChamado statusAnterior,
+        StatusChamado statusNovo,
+        int? usuarioId,
+        bool origemAutomatica,
+        string? descricaoOrigem)
+    {
+        _context.HistoricoStatusChamados.Add(new HistoricoStatusChamado
+        {
+            ChamadoId = chamado.Id,
+            StatusAnterior = ConverterStatusAnterior(statusAnterior),
+            StatusNovo = ConverterStatusNovo(statusNovo),
+            UsuarioId = usuarioId,
+            OrigemAutomatica = origemAutomatica,
+            DescricaoOrigem = descricaoOrigem,
+            DataTransicao = DateTime.UtcNow
+        });
+    }
+
+    private void RegistrarHistoricoAlteracaoStatus(
+        Chamado chamado,
+        StatusChamado statusAnterior,
+        StatusChamado statusNovo,
+        int usuarioId,
+        string tipoAlteracao)
+    {
+        _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+        {
+            ChamadoId = chamado.Id,
+            GrupoId = chamado.GrupoId,
+            UsuarioId = usuarioId,
+            CampoAlterado = "Status",
+            ValorAnterior = statusAnterior.ToString(),
+            ValorAlterado = statusNovo.ToString(),
+            TipoAlteracao = tipoAlteracao,
+            DataAlteracao = DateTime.UtcNow
+        });
+    }
+
+    private static StatusAnteriorChamado ConverterStatusAnterior(StatusChamado status) =>
+        Enum.Parse<StatusAnteriorChamado>(status.ToString());
+
+    private static StatusNovoChamado ConverterStatusNovo(StatusChamado status) =>
+        Enum.Parse<StatusNovoChamado>(status.ToString());
 
     private int? GetUsuarioLogadoId()
     {
@@ -1080,67 +1206,35 @@ public class HomeModel : PageModel
         return new JsonResult(new { success = true, subcategorias });
     }
 
-    private Task<List<Setor>> ObterSetoresDisponiveisAsync(int grupoId)
-    {
-        return _memoryCache.GetOrCreateAsync(
-            $"catalogo:setores:{grupoId}",
-            async entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
-                return await _context.Setores
-                    .AsNoTracking()
-                    .Where(s => s.GrupoId == grupoId)
-                    .OrderBy(s => s.NomeSetor)
-                    .ToListAsync();
-            })!;
-    }
+    private Task<List<Setor>> ObterSetoresDisponiveisAsync(int grupoId) =>
+        _context.Setores
+            .AsNoTracking()
+            .Where(s => s.GrupoId == grupoId)
+            .OrderBy(s => s.NomeSetor)
+            .ToListAsync();
 
-    private Task<List<OcorrenciaTipo>> ObterTiposOcorrenciaDisponiveisAsync(int grupoId)
-    {
-        return _memoryCache.GetOrCreateAsync(
-            $"catalogo:tipos:{grupoId}",
-            async entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
-                return await _context.OcorrenciasTipo
-                    .AsNoTracking()
-                    .Where(t => t.GrupoId == grupoId)
-                    .OrderBy(t => t.TipoOcorrencia)
-                    .ToListAsync();
-            })!;
-    }
+    private Task<List<OcorrenciaTipo>> ObterTiposOcorrenciaDisponiveisAsync(int grupoId) =>
+        _context.OcorrenciasTipo
+            .AsNoTracking()
+            .Where(t => t.GrupoId == grupoId)
+            .OrderBy(t => t.TipoOcorrencia)
+            .ToListAsync();
 
-    private Task<List<object>> ObterCategoriasPorTipoAsync(int tipoId)
-    {
-        return _memoryCache.GetOrCreateAsync(
-            $"catalogo:categorias:{tipoId}",
-            async entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
-                return await _context.OcorrenciasCategoria
-                    .AsNoTracking()
-                    .Where(c => c.TipoId == tipoId)
-                    .OrderBy(c => c.CategoriaOcorrencia)
-                    .Select(c => (object)new { id = c.Id, nome = c.CategoriaOcorrencia })
-                    .ToListAsync();
-            })!;
-    }
+    private Task<List<object>> ObterCategoriasPorTipoAsync(int tipoId) =>
+        _context.OcorrenciasCategoria
+            .AsNoTracking()
+            .Where(c => c.TipoId == tipoId)
+            .OrderBy(c => c.CategoriaOcorrencia)
+            .Select(c => (object)new { id = c.Id, nome = c.CategoriaOcorrencia })
+            .ToListAsync();
 
-    private Task<List<object>> ObterSubcategoriasPorCategoriaAsync(int categoriaId)
-    {
-        return _memoryCache.GetOrCreateAsync(
-            $"catalogo:subcategorias:{categoriaId}",
-            async entry =>
-            {
-                entry.AbsoluteExpirationRelativeToNow = CacheCatalogoTtl;
-                return await _context.OcorrenciasSubcategoria
-                    .AsNoTracking()
-                    .Where(sc => sc.CategoriaId == categoriaId)
-                    .OrderBy(sc => sc.SubcategoriaOcorrencia)
-                    .Select(sc => (object)new { id = sc.Id, nome = sc.SubcategoriaOcorrencia })
-                    .ToListAsync();
-            })!;
-    }
+    private Task<List<object>> ObterSubcategoriasPorCategoriaAsync(int categoriaId) =>
+        _context.OcorrenciasSubcategoria
+            .AsNoTracking()
+            .Where(sc => sc.CategoriaId == categoriaId)
+            .OrderBy(sc => sc.SubcategoriaOcorrencia)
+            .Select(sc => (object)new { id = sc.Id, nome = sc.SubcategoriaOcorrencia })
+            .ToListAsync();
 
     private static bool TryParseNullableEnum<TEnum>(string? valor, out TEnum? resultado) where TEnum : struct
     {
@@ -1157,6 +1251,59 @@ public class HomeModel : PageModel
         }
 
         resultado = null;
+        return false;
+    }
+
+    private static bool TryNormalizarDataHoraNullable(string? valor, out DateTime? resultado)
+    {
+        resultado = null;
+
+        if (string.IsNullOrWhiteSpace(valor))
+            return true;
+
+        var texto = valor.Trim();
+        if (texto.EndsWith(" --:--", StringComparison.Ordinal))
+            texto = texto.Replace(" --:--", " 00:00", StringComparison.Ordinal);
+
+        if (texto.Length == 10 &&
+            DateTime.TryParseExact(texto, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var somenteData))
+        {
+            resultado = somenteData.Date;
+            return true;
+        }
+
+        if (texto.EndsWith("T", StringComparison.Ordinal))
+            texto += "00:00";
+        else if (texto.Length == 13 &&
+                 DateTime.TryParseExact(texto, "yyyy-MM-dd'T'HH", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dataHoraSemMinuto))
+        {
+            resultado = dataHoraSemMinuto;
+            return true;
+        }
+
+        var formatos = new[]
+        {
+            "yyyy-MM-dd'T'HH:mm",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy-MM-dd HH:mm:ss",
+            "dd/MM/yyyy HH:mm",
+            "dd/MM/yyyy HH:mm:ss",
+            "dd/MM/yyyy"
+        };
+
+        if (DateTime.TryParseExact(texto, formatos, CultureInfo.GetCultureInfo("pt-BR"), DateTimeStyles.None, out var dataHora))
+        {
+            resultado = dataHora;
+            return true;
+        }
+
+        if (DateTime.TryParse(texto, CultureInfo.GetCultureInfo("pt-BR"), DateTimeStyles.None, out dataHora))
+        {
+            resultado = dataHora;
+            return true;
+        }
+
         return false;
     }
 
@@ -1298,9 +1445,9 @@ public class HomeModel : PageModel
         public string? Criticidade { get; set; }
         public string? Urgencia { get; set; }
         public string? Status { get; set; }
-        public DateTime? DataFinalizacao { get; set; }
-        public DateTime? PrazoResposta { get; set; }
-        public DateTime? PrazoConclusao { get; set; }
+        public string? DataFinalizacao { get; set; }
+        public string? PrazoResposta { get; set; }
+        public string? PrazoConclusao { get; set; }
         public bool Publico { get; set; }
         public IFormFile? AnexoArquivo { get; set; }
     }

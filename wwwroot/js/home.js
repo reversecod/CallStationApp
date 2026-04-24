@@ -2,6 +2,11 @@ const cronometrosAtivos = [];
 let chamadoSelecionadoId = null;
 let modalSelecionarListaTarefa = null;
 let salvandoEdicaoChamado = false;
+const camposDataHoraChamado = [
+    { id: "editDataFinalizacao", nome: "Finalizacao" },
+    { id: "editPrazoResposta", nome: "Prazo resposta" },
+    { id: "editPrazoConclusao", nome: "Prazo conclusao" }
+];
 
 function mostrarToast(mensagem, tipo = "danger") {
     let container = document.getElementById("toastContainer");
@@ -99,6 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     inicializarDropTarefas();
     inicializarBotoesEdicao();
+    inicializarCamposDataHoraChamado();
     inicializarLimpezaSelecaoChamado();
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
@@ -400,11 +406,30 @@ function formatDateTimeLocal(value) {
     return localISO.slice(0, 16);
 }
 
+function formatDateTimeDisplay(value) {
+    const local = formatDateTimeLocal(value);
+    if (!local) return "";
+
+    const [data, hora] = local.split("T");
+    const [ano, mes, dia] = data.split("-");
+    return `${dia}/${mes}/${ano} ${hora}`;
+}
+
 function setValueIfExists(id, value) {
     const el = document.getElementById(id);
     if (el) {
         el.value = value ?? "";
     }
+}
+
+function setDateValueIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const dataHoraOriginal = formatDateTimeDisplay(value);
+    el.dataset.originalDateTime = dataHoraOriginal;
+    el.value = dataHoraOriginal;
+    el.classList.remove("is-invalid");
 }
 
 function setCheckedIfExists(id, value) {
@@ -580,9 +605,9 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editUrgencia", data.urgencia);
     setValueIfExists("editStatus", data.status ?? "Aberto");
 
-    setValueIfExists("editDataFinalizacao", formatDateTimeLocal(data.dataFinalizacao));
-    setValueIfExists("editPrazoResposta", formatDateTimeLocal(data.prazoResposta));
-    setValueIfExists("editPrazoConclusao", formatDateTimeLocal(data.prazoConclusao));
+    setDateValueIfExists("editDataFinalizacao", data.dataFinalizacao);
+    setDateValueIfExists("editPrazoResposta", data.prazoResposta);
+    setDateValueIfExists("editPrazoConclusao", data.prazoConclusao);
 
     setCheckedIfExists("editPublico", data.publico);
 }
@@ -641,6 +666,32 @@ function inicializarBotoesEdicao() {
             await carregarSubcategorias(this.value, null);
         });
     }
+}
+
+function inicializarCamposDataHoraChamado() {
+    camposDataHoraChamado.forEach(campo => {
+        const input = document.getElementById(campo.id);
+        if (!input) return;
+
+        input.addEventListener("input", () => {
+            input.value = aplicarMascaraDataHora(input.value);
+            input.classList.remove("is-invalid");
+        });
+
+        input.addEventListener("blur", () => {
+            input.value = aplicarMascaraDataHora(input.value, true);
+            if (!input.value) {
+                input.classList.remove("is-invalid");
+                return;
+            }
+
+            const normalizado = normalizarDataHoraChamado(input.value);
+            input.classList.toggle("is-invalid", !normalizado.valido);
+            if (normalizado.valido) {
+                input.value = normalizado.valor;
+            }
+        });
+    });
 }
 
 function inicializarLimpezaSelecaoChamado() {
@@ -747,6 +798,11 @@ async function salvarEdicaoChamado() {
     }
 
     const token = tokenInput.value;
+    const datasNormalizadas = normalizarDatasChamadoParaSubmit();
+    if (!datasNormalizadas.valido) {
+        mostrarToast(datasNormalizadas.mensagem);
+        return;
+    }
 
     const payload = {
         id: toNullableInt(getValue("editId")),
@@ -762,9 +818,9 @@ async function salvarEdicaoChamado() {
         criticidade: getNullableString("editCriticidade"),
         urgencia: getNullableString("editUrgencia"),
         status: getNullableString("editStatus"),
-        dataFinalizacao: toNullableDate(getValue("editDataFinalizacao")),
-        prazoResposta: toNullableDate(getValue("editPrazoResposta")),
-        prazoConclusao: toNullableDate(getValue("editPrazoConclusao")),
+        dataFinalizacao: datasNormalizadas.valores.editDataFinalizacao,
+        prazoResposta: datasNormalizadas.valores.editPrazoResposta,
+        prazoConclusao: datasNormalizadas.valores.editPrazoConclusao,
         publico: !!document.getElementById("editPublico")?.checked
     };
 
@@ -869,9 +925,92 @@ function toNullableInt(value) {
     return Number.isNaN(numero) ? null : numero;
 }
 
-function toNullableDate(value) {
-    if (!value) return null;
-    return value;
+function aplicarMascaraDataHora(valor, completarHora = false) {
+    const texto = String(valor ?? "").trim();
+    const contemHoraAberta = /--:--$/.test(texto);
+    const digitos = texto.replace(/\D/g, "").slice(0, 12);
+
+    if (!digitos) return "";
+
+    let resultado = digitos.slice(0, 2);
+    if (digitos.length > 2) resultado += `/${digitos.slice(2, 4)}`;
+    if (digitos.length > 4) resultado += `/${digitos.slice(4, 8)}`;
+
+    if (digitos.length > 8) {
+        resultado += ` ${digitos.slice(8, 10)}`;
+        if (digitos.length > 10) resultado += `:${digitos.slice(10, 12)}`;
+    } else if ((completarHora || contemHoraAberta) && digitos.length === 8) {
+        resultado += " --:--";
+    }
+
+    return resultado;
+}
+
+function normalizarDataHoraChamado(valor) {
+    const texto = String(valor ?? "").trim();
+    if (!texto) {
+        return { valido: true, valor: null };
+    }
+
+    const match = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(--:--|(\d{2}):(\d{2}))$/);
+    if (!match) {
+        return { valido: false, valor: null };
+    }
+
+    const dia = Number(match[1]);
+    const mes = Number(match[2]);
+    const ano = Number(match[3]);
+    const horaTexto = match[4] === "--:--" ? "00:00" : match[4];
+    const [hora, minuto] = horaTexto.split(":").map(Number);
+
+    if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) {
+        return { valido: false, valor: null };
+    }
+
+    const data = new Date(ano, mes - 1, dia, hora, minuto, 0, 0);
+    const dataValida =
+        data.getFullYear() === ano &&
+        data.getMonth() === mes - 1 &&
+        data.getDate() === dia &&
+        data.getHours() === hora &&
+        data.getMinutes() === minuto;
+
+    if (!dataValida) {
+        return { valido: false, valor: null };
+    }
+
+    return {
+        valido: true,
+        valor: `${match[1]}/${match[2]}/${match[3]} ${horaTexto}`
+    };
+}
+
+function normalizarDatasChamadoParaSubmit() {
+    const valores = {};
+
+    for (const campo of camposDataHoraChamado) {
+        const input = document.getElementById(campo.id);
+        if (!input || input.disabled) {
+            valores[campo.id] = null;
+            continue;
+        }
+
+        input.value = aplicarMascaraDataHora(input.value, true);
+        const normalizado = normalizarDataHoraChamado(input.value);
+        input.classList.toggle("is-invalid", !normalizado.valido);
+
+        if (!normalizado.valido) {
+            return {
+                valido: false,
+                mensagem: `${campo.nome}: informe uma data valida no formato dd/mm/aaaa --:-- ou dd/mm/aaaa HH:mm.`
+            };
+        }
+
+        input.value = normalizado.valor ?? "";
+        valores[campo.id] = normalizado.valor;
+    }
+
+    return { valido: true, valores };
 }
 
 async function carregarCategorias(tipoId, categoriaSelecionada) {

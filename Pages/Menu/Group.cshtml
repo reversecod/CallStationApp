@@ -1,0 +1,339 @@
+@page
+@model CallStationApp.Pages.Menu.GroupModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@using CallStationApp.Models
+@using Microsoft.AspNetCore.Html
+@{
+    ViewData["Title"] = "Grupo";
+}
+
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grupo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { min-height: 100vh; background:#f8f9fa; }
+        main { position: relative; min-height: 100vh; }
+        .sidebar { position: fixed; top:0; left:0; width:17.5rem; height:100vh; z-index:1000; }
+        .content-wrapper { margin-left:17.5rem; padding:1.5rem; min-height:100vh; }
+        .logo-img { width:100%; height:auto; }
+        .user-img { width:2rem; height:2rem; }
+        .icon-svg { width:1rem; height:1rem; font-size:1rem; display:inline-flex; align-items:center; justify-content:center; line-height:1; flex-shrink:0; color:currentColor; fill:currentColor; }
+        .sidebar .nav-link { display:flex; align-items:center; }
+        .sidebar .nav-link.active .icon-svg { color:#111; fill:#111; }
+        .page-card, .section-card { border:1px solid #e9ecef; border-radius:1rem; box-shadow:0 .25rem 1rem rgba(0,0,0,.04); }
+        .stat-card { border:1px solid #eef2f7; background:#fff; border-radius:.9rem; padding:1rem; }
+        .soft-table th { color:#6c757d; font-size:.82rem; font-weight:600; }
+        .color-dot { width:1rem; height:1rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.12); }
+        .nav-tabs .nav-link { color:#495057; }
+        .nav-tabs .nav-link.active { font-weight:600; }
+        @@media (max-width: 767.98px) {
+            .sidebar { position:static; width:100%; height:auto; }
+            .content-wrapper { margin-left:0; padding:1rem; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
+        <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
+            <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
+        </a>
+        <hr />
+        <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item">
+                <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <i class="bi bi-house-door me-2 icon-svg"></i> Chamados
+                </a>
+            </li>
+            <li>
+                <a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <i class="bi bi-table me-2 icon-svg"></i> Tarefas
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-link link-body-emphasis">
+                    <i class="bi bi-speedometer2 me-2 icon-svg"></i> Dashboard
+                </a>
+            </li>
+            <li>
+                <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <i class="bi bi-grid me-2 icon-svg"></i> Historico
+                </a>
+            </li>
+            <li>
+                <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                    <i class="bi bi-people me-2 icon-svg"></i> Membros
+                </a>
+            </li>
+            <li>
+                <a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page">
+                    <i class="bi bi-sliders2-vertical me-2 icon-svg"></i> Grupo
+                </a>
+            </li>
+        </ul>
+        <hr />
+        <div class="dropdown">
+            <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
+                <img src="@(Model.FotoUsuarioLogado ?? "/images/default-user.png")" alt="" class="user-img rounded-circle me-2" loading="lazy">
+                <strong>@(Model.NomeUsuarioLogado ?? "Usuario")</strong>
+            </a>
+            <ul class="dropdown-menu text-small shadow">
+                <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <div class="card page-card mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+                    <div>
+                        <div class="text-muted small mb-1">Configuracoes do grupo atual</div>
+                        <h1 class="h3 mb-1">@Model.GrupoAtual.Nome</h1>
+                        <p class="text-muted mb-0">Centralize identidade, estrutura, regras, SLA, permissoes e auditoria deste grupo.</p>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="color-dot" style="background:@CorCss(Model.GrupoAtual.EtiquetaCor)"></span>
+                        <span class="badge @(Model.Configuracao.Ativo ? "text-bg-success" : "text-bg-secondary")">
+                            @(Model.Configuracao.Ativo ? "Ativo" : "Inativo")
+                        </span>
+                    </div>
+                </div>
+                <div class="row g-3 mt-3">
+                    <div class="col-6 col-lg-3"><div class="stat-card"><div class="text-muted small">Chamados</div><div class="h5 mb-0">@Model.TotalChamados</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-card"><div class="text-muted small">Membros</div><div class="h5 mb-0">@Model.TotalMembros</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-card"><div class="text-muted small">Administradores</div><div class="h5 mb-0">@Model.Administradores.Count</div></div></div>
+                    <div class="col-6 col-lg-3"><div class="stat-card"><div class="text-muted small">Criado em</div><div class="h6 mb-0">@Model.GrupoAtual.DataCriacao.ToString("dd/MM/yyyy")</div></div></div>
+                </div>
+            </div>
+        </div>
+
+        <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
+        <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
+        <div id="feedbackGrupo" class="alert d-none" role="alert"></div>
+
+        <ul class="nav nav-tabs mb-3" id="grupoTabs" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabGeral" type="button">Geral</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabEstrutura" type="button">Estrutura</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabRegras" type="button">Regras</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabSla" type="button">SLA e Automacao</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabPermissoes" type="button">Permissoes</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAuditoria" type="button">Auditoria</button></li>
+        </ul>
+
+        <div class="tab-content">
+            <section class="tab-pane fade show active" id="tabGeral">
+                <div class="card section-card"><div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nome do grupo</label>
+                            <input class="form-control" id="geralNome" maxlength="35" value="@Model.GrupoAtual.Nome">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Identificador interno</label>
+                            <input class="form-control" id="geralSlug" maxlength="60" value="@Model.Configuracao.Slug">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Descricao</label>
+                            <textarea class="form-control" id="geralDescricao" maxlength="200" rows="3">@Model.GrupoAtual.DescricaoGrupo</textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Cor principal</label>
+                            <select class="form-select" id="geralCor">
+                                @foreach (var cor in Enum.GetNames<EtiquetaCor>())
+                                {
+                                    <option value="@cor" selected="@(Model.GrupoAtual.EtiquetaCor.ToString() == cor)">@cor</option>
+                                }
+                            </select>
+                            <div class="form-check form-switch mt-4">
+                                <input class="form-check-input" type="checkbox" id="geralAtivo" checked="@Model.Configuracao.Ativo">
+                                <label class="form-check-label" for="geralAtivo">Grupo ativo</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end mt-3">
+                        <button class="btn btn-primary" id="btnSalvarGeral"><i class="bi bi-check2 me-1"></i>Salvar</button>
+                    </div>
+                </div></div>
+            </section>
+
+            <section class="tab-pane fade" id="tabEstrutura">
+                <div class="row g-3">
+                    <div class="col-lg-6">@ListaSimples("Setores", "setor", Model.Setores, true)</div>
+                    <div class="col-lg-6">@ListaTiposChamado()</div>
+                    <div class="col-lg-6">@ListaSimples("Tipos de ocorrencia", "tipoOcorrencia", Model.TiposOcorrencia, false)</div>
+                    <div class="col-lg-6">@ListaCategorias()</div>
+                    <div class="col-12">@ListaSubcategorias()</div>
+                </div>
+            </section>
+
+            <section class="tab-pane fade" id="tabRegras">
+                <div class="card section-card"><div class="card-body">
+                    <div class="row g-3">
+                        @Switch("regraObrigarSetor", "Obrigar setor", Model.Configuracao.ObrigarSetor)
+                        @Switch("regraObrigarTipo", "Obrigar tipo de ocorrencia", Model.Configuracao.ObrigarTipoOcorrencia)
+                        @Switch("regraObrigarCategoria", "Obrigar categoria", Model.Configuracao.ObrigarCategoria)
+                        @Switch("regraObrigarSubcategoria", "Obrigar subcategoria", Model.Configuracao.ObrigarSubcategoria)
+                        @Switch("regraPermitirPublico", "Permitir chamados publicos", Model.Configuracao.PermitirChamadoPublico)
+                        @Switch("regraExigirSolucao", "Exigir solucao antes de concluir", Model.Configuracao.ExigirSolucaoParaConcluir)
+                        <div class="col-md-4">
+                            <label class="form-label">Fechar concluidos apos dias</label>
+                            <input type="number" min="0" max="365" class="form-control" id="regraFechamento" value="@Model.Configuracao.DiasParaFechamentoAutomatico">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" id="btnSalvarRegras">Salvar regras</button></div>
+                </div></div>
+            </section>
+
+            <section class="tab-pane fade" id="tabSla">
+                <div class="card section-card"><div class="card-body">
+                    <div class="row g-3">
+                        @Switch("slaAtivo", "Mudar automaticamente para pendente quando houver prazo de conclusao", Model.Configuracao.AutomatizarPendentePorPrazoConclusao)
+                        @Switch("slaNotificarAdmins", "Notificar administradores sobre risco de SLA", Model.Configuracao.NotificarAdministradoresSla)
+                        <div class="col-md-4"><label class="form-label">Horas apos vencimento para pendente</label><input type="number" min="0" max="720" class="form-control" id="slaHorasApos" value="@Model.Configuracao.HorasAposVencimentoParaPendente"></div>
+                        <div class="col-md-4"><label class="form-label">Horas antes do prazo para alerta</label><input type="number" min="0" max="720" class="form-control" id="slaHorasAntes" value="@Model.Configuracao.HorasAntesPrazoParaAlerta"></div>
+                    </div>
+                    <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" id="btnSalvarSla">Salvar SLA</button></div>
+                </div></div>
+            </section>
+
+            <section class="tab-pane fade" id="tabPermissoes">
+                <div class="card section-card"><div class="card-body">
+                    <h2 class="h5">Administradores responsaveis</h2>
+                    <div class="row g-3 mt-1">
+                        @foreach (var admin in Model.Administradores)
+                        {
+                            <div class="col-md-4"><div class="stat-card"><div class="fw-semibold">@admin.Nome</div><div class="text-muted small">@@@admin.Usuario</div></div></div>
+                        }
+                    </div>
+                    <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="btn btn-outline-primary mt-3">Gerenciar membros</a>
+                </div></div>
+            </section>
+
+            <section class="tab-pane fade" id="tabAuditoria">
+                <div class="card section-card"><div class="card-body table-responsive">
+                    <table class="table soft-table align-middle">
+                        <thead><tr><th>Data</th><th>Usuario</th><th>Acao</th><th>Entidade</th><th>Campo</th><th>Alteracao</th></tr></thead>
+                        <tbody>
+                        @foreach (var a in Model.Auditorias)
+                        {
+                            <tr>
+                                <td>@a.Data.ToString("dd/MM/yyyy HH:mm")</td><td>@a.Usuario</td><td>@a.Acao</td><td>@a.Entidade</td><td>@a.Campo</td><td class="small text-muted">@a.Anterior -> @a.Novo</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div></div>
+            </section>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const grupoId = document.getElementById("grupoIdAtual").value;
+const token = document.getElementById("requestVerificationToken").value;
+const feedback = document.getElementById("feedbackGrupo");
+
+function showFeedback(type, text) {
+    feedback.className = `alert alert-${type}`;
+    feedback.textContent = text;
+}
+async function post(handler, body) {
+    const response = await fetch(`/Menu/Group?handler=${handler}&grupoId=${grupoId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "RequestVerificationToken": token },
+        body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => ({ success:false, message:"Erro inesperado." }));
+    if (!response.ok || !data.success) throw new Error(data.message || "Nao foi possivel concluir.");
+    showFeedback("success", data.message || "Salvo.");
+    setTimeout(() => window.location.reload(), 650);
+}
+document.getElementById("btnSalvarGeral")?.addEventListener("click", () => post("SalvarGeral", {
+    nome: geralNome.value, descricao: geralDescricao.value, slug: geralSlug.value, etiquetaCor: geralCor.value, ativo: geralAtivo.checked
+}).catch(e => showFeedback("danger", e.message)));
+document.getElementById("btnSalvarRegras")?.addEventListener("click", () => post("SalvarRegras", {
+    obrigarSetor: regraObrigarSetor.checked, obrigarTipoOcorrencia: regraObrigarTipo.checked, obrigarCategoria: regraObrigarCategoria.checked,
+    obrigarSubcategoria: regraObrigarSubcategoria.checked, permitirChamadoPublico: regraPermitirPublico.checked,
+    exigirSolucaoParaConcluir: regraExigirSolucao.checked, diasParaFechamentoAutomatico: regraFechamento.value ? parseInt(regraFechamento.value) : null
+}).catch(e => showFeedback("danger", e.message)));
+document.getElementById("btnSalvarSla")?.addEventListener("click", () => post("SalvarSla", {
+    automatizarPendentePorPrazoConclusao: slaAtivo.checked, notificarAdministradoresSla: slaNotificarAdmins.checked,
+    horasAposVencimentoParaPendente: slaHorasApos.value ? parseInt(slaHorasApos.value) : null,
+    horasAntesPrazoParaAlerta: slaHorasAntes.value ? parseInt(slaHorasAntes.value) : null
+}).catch(e => showFeedback("danger", e.message)));
+document.querySelectorAll("[data-create]").forEach(btn => btn.addEventListener("click", () => {
+    const tipo = btn.dataset.create;
+    const input = document.querySelector(`[data-input='${tipo}']`);
+    const body = { nome: input.value.trim() };
+    if (tipo === "categoria") body.tipoId = parseInt(document.getElementById("selectTipoCategoria").value);
+    if (tipo === "subcategoria") body.categoriaId = parseInt(document.getElementById("selectCategoriaSubcategoria").value);
+    if (tipo === "tipoChamado") body.descricao = document.getElementById("tipoChamadoDescricao").value.trim();
+    const handler = { setor:"CriarSetor", tipoOcorrencia:"CriarTipoOcorrencia", categoria:"CriarCategoria", subcategoria:"CriarSubcategoria", tipoChamado:"CriarTipoChamado" }[tipo];
+    post(handler, body).catch(e => showFeedback("danger", e.message));
+}));
+document.querySelectorAll("[data-archive-type]").forEach(btn => btn.addEventListener("click", () => {
+    if (confirm("Arquivar este tipo de chamado?")) post("ArquivarTipoChamado", { id: parseInt(btn.dataset.archiveType) }).catch(e => showFeedback("danger", e.message));
+}));
+document.querySelectorAll("[data-delete-setor]").forEach(btn => btn.addEventListener("click", () => {
+    if (confirm("Excluir este setor? A acao sera bloqueada se houver chamados vinculados.")) post("ExcluirSetor", { id: parseInt(btn.dataset.deleteSetor) }).catch(e => showFeedback("danger", e.message));
+}));
+</script>
+</body>
+</html>
+
+@functions {
+    private string CorCss(EtiquetaCor cor) => cor switch
+    {
+        EtiquetaCor.vermelho => "#ef4444",
+        EtiquetaCor.laranja => "#f97316",
+        EtiquetaCor.amarelo => "#eab308",
+        EtiquetaCor.verde => "#22c55e",
+        EtiquetaCor.azul => "#3b82f6",
+        EtiquetaCor.roxo => "#a855f7",
+        EtiquetaCor.rosa => "#ec4899",
+        EtiquetaCor.preto => "#1f2937",
+        _ => "#e5e7eb"
+    };
+
+    private IHtmlContent Switch(string id, string label, bool value) =>
+        new HtmlString($"<div class=\"col-md-4\"><div class=\"form-check form-switch\"><input class=\"form-check-input\" type=\"checkbox\" id=\"{id}\" {(value ? "checked" : "")}><label class=\"form-check-label\" for=\"{id}\">{label}</label></div></div>");
+
+    private IHtmlContent ListaSimples(string titulo, string tipo, IEnumerable<GroupModel.ItemVm> itens, bool permiteExcluir)
+    {
+        var rows = string.Join("", itens.Select(i =>
+        {
+            var acao = permiteExcluir
+                ? "<button class=\"btn btn-sm btn-outline-danger\" data-delete-setor=\"" + i.Id + "\">Excluir</button>"
+                : "";
+            return $"<tr><td>{System.Net.WebUtility.HtmlEncode(i.Nome)}</td><td>{i.Vinculos}</td><td class=\"text-end\">{acao}</td></tr>";
+        }));
+        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">{titulo}</h2><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"{tipo}\" maxlength=\"50\" placeholder=\"Novo item\"><button class=\"btn btn-primary\" data-create=\"{tipo}\">Adicionar</button></div><div class=\"table-responsive\"><table class=\"table soft-table align-middle\"><thead><tr><th>Nome</th><th>Vinculos</th><th></th></tr></thead><tbody>{rows}</tbody></table></div></div></div>");
+    }
+
+    private IHtmlContent ListaTiposChamado()
+    {
+        var rows = string.Join("", Model.TiposChamado.Select(i => $"<tr><td>{System.Net.WebUtility.HtmlEncode(i.Nome)}<div class=\"small text-muted\">{System.Net.WebUtility.HtmlEncode(i.Descricao)}</div></td><td>{(i.Ativo ? "Ativo" : "Arquivado")}</td><td class=\"text-end\"><button class=\"btn btn-sm btn-outline-secondary\" data-archive-type=\"{i.Id}\">Arquivar</button></td></tr>"));
+        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">Tipos de chamados</h2><input class=\"form-control mb-2\" data-input=\"tipoChamado\" maxlength=\"50\" placeholder=\"Nome\"><input class=\"form-control mb-2\" id=\"tipoChamadoDescricao\" maxlength=\"160\" placeholder=\"Descricao\"><button class=\"btn btn-primary mb-3\" data-create=\"tipoChamado\">Adicionar</button><div class=\"table-responsive\"><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div></div>");
+    }
+
+    private IHtmlContent ListaCategorias()
+    {
+        var opcoes = string.Join("", Model.TiposOcorrencia.Select(t => $"<option value=\"{t.Id}\">{System.Net.WebUtility.HtmlEncode(t.Nome)}</option>"));
+        var rows = string.Join("", Model.Categorias.Select(c => $"<tr><td>{System.Net.WebUtility.HtmlEncode(c.Nome)}</td><td>{System.Net.WebUtility.HtmlEncode(c.TipoNome)}</td><td>{c.Subcategorias}</td><td>{c.Vinculos}</td></tr>"));
+        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">Categorias</h2><select class=\"form-select mb-2\" id=\"selectTipoCategoria\">{opcoes}</select><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"categoria\" maxlength=\"50\" placeholder=\"Nova categoria\"><button class=\"btn btn-primary\" data-create=\"categoria\">Adicionar</button></div><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div>");
+    }
+
+    private IHtmlContent ListaSubcategorias()
+    {
+        var opcoes = string.Join("", Model.Categorias.Select(c => $"<option value=\"{c.Id}\">{System.Net.WebUtility.HtmlEncode(c.TipoNome)} / {System.Net.WebUtility.HtmlEncode(c.Nome)}</option>"));
+        var rows = string.Join("", Model.Subcategorias.Select(s => $"<tr><td>{System.Net.WebUtility.HtmlEncode(s.Nome)}</td><td>{System.Net.WebUtility.HtmlEncode(s.TipoNome)}</td><td>{System.Net.WebUtility.HtmlEncode(s.CategoriaNome)}</td><td>{s.Vinculos}</td></tr>"));
+        return new HtmlString($"<div class=\"card section-card\"><div class=\"card-body\"><h2 class=\"h5\">Subcategorias</h2><select class=\"form-select mb-2\" id=\"selectCategoriaSubcategoria\">{opcoes}</select><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"subcategoria\" maxlength=\"100\" placeholder=\"Nova subcategoria\"><button class=\"btn btn-primary\" data-create=\"subcategoria\">Adicionar</button></div><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div>");
+    }
+}

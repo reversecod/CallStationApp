@@ -4,6 +4,9 @@ namespace CallStationApp.Authorization;
 
 public static class GrupoPermissionService
 {
+    public static bool PodeGerenciarGrupo(PermissaoUsuario permissao) =>
+        permissao == PermissaoUsuario.Administracao;
+
     public static bool PodeCriarChamado(PermissaoUsuario permissao) =>
         permissao == PermissaoUsuario.Administracao ||
         permissao == PermissaoUsuario.Tecnico ||

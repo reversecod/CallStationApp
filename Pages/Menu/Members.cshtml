@@ -58,6 +58,19 @@
         .icon-svg {
             width: 1rem;
             height: 1rem;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            flex-shrink: 0;
+            color: currentColor;
+            fill: currentColor;
+        }
+
+        .sidebar .nav-link {
+            display: flex;
+            align-items: center;
         }
 
         .sidebar .nav-link.active .icon-svg {
@@ -196,25 +209,25 @@
             <ul class="nav nav-pills flex-column mb-auto">
                 <li class="nav-item">
                     <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#home"></use></svg>
+                        <i class="bi bi-house-door me-2 icon-svg" aria-hidden="true"></i>
                         Chamados
                     </a>
                 </li>
                 <li>
                     <a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#table"></use></svg>
+                        <i class="bi bi-table me-2 icon-svg" aria-hidden="true"></i>
                         Tarefas
                     </a>
                 </li>
                 <li>
                     <a href="#" class="nav-link link-body-emphasis">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#speedometer2"></use></svg>
+                        <i class="bi bi-speedometer2 me-2 icon-svg" aria-hidden="true"></i>
                         Dashboard
                     </a>
                 </li>
                 <li>
-                    <a href="#" class="nav-link link-body-emphasis">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
+                    <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                        <i class="bi bi-grid me-2 icon-svg" aria-hidden="true"></i>
                         Histórico
                     </a>
                 </li>
@@ -224,6 +237,15 @@
                         Membros
                     </a>
                 </li>
+                @if (Model.UsuarioLogadoEhAdministrador)
+                {
+                    <li>
+                        <a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                            <i class="bi bi-sliders2-vertical me-2 icon-svg" aria-hidden="true"></i>
+                            Grupo
+                        </a>
+                    </li>
+                }
             </ul>
 
             <hr />

@@ -13,6 +13,9 @@ namespace CallStationApp.Data
         // DbSets
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Grupo> Grupos { get; set; }
+        public DbSet<GrupoConfiguracao> GruposConfiguracoes { get; set; }
+        public DbSet<GrupoTipoChamado> GruposTiposChamados { get; set; }
+        public DbSet<GrupoAuditoria> GruposAuditorias { get; set; }
         public DbSet<UsuarioGrupo> UsuariosGrupos { get; set; }
         public DbSet<InfoUsuarioGrupo> InfoUsuariosGrupos { get; set; }
         public DbSet<OcorrenciaTipo> OcorrenciasTipo { get; set; }
@@ -130,6 +133,178 @@ namespace CallStationApp.Data
 
                 entity.HasIndex(g => new { g.Nome, g.CriadorId })
                     .IsUnique();
+            });
+
+            // ===== GrupoConfiguracao =====
+            modelBuilder.Entity<GrupoConfiguracao>(entity =>
+            {
+                entity.ToTable("Grupos_configuracoes");
+
+                entity.HasKey(c => c.GrupoId);
+
+                entity.Property(c => c.Slug)
+                    .HasColumnType("varchar(60)")
+                    .HasMaxLength(60);
+
+                entity.Property(c => c.Ativo)
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(c => c.ObrigarSetor)
+                    .HasColumnName("obrigar_setor")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(c => c.ObrigarTipoOcorrencia)
+                    .HasColumnName("obrigar_tipo_ocorrencia")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(c => c.ObrigarCategoria)
+                    .HasColumnName("obrigar_categoria")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(c => c.ObrigarSubcategoria)
+                    .HasColumnName("obrigar_subcategoria")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(c => c.PermitirChamadoPublico)
+                    .HasColumnName("permitir_chamado_publico")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(c => c.ExigirSolucaoParaConcluir)
+                    .HasColumnName("exigir_solucao_para_concluir")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(c => c.AutomatizarPendentePorPrazoConclusao)
+                    .HasColumnName("automatizar_pendente_por_prazo_conclusao")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(c => c.NotificarAdministradoresSla)
+                    .HasColumnName("notificar_administradores_sla")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(c => c.DataAtualizacao)
+                    .HasColumnName("data_atualizacao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(c => c.Slug)
+                    .IsUnique()
+                    .HasDatabaseName("uq_grupos_configuracoes_slug");
+
+                entity.HasOne(c => c.Grupo)
+                    .WithMany()
+                    .HasForeignKey(c => c.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== GrupoTipoChamado =====
+            modelBuilder.Entity<GrupoTipoChamado>(entity =>
+            {
+                entity.ToTable("Grupos_tipos_chamados");
+
+                entity.Property(t => t.Nome)
+                    .IsRequired()
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
+
+                entity.Property(t => t.Descricao)
+                    .HasColumnType("varchar(160)")
+                    .HasMaxLength(160);
+
+                entity.Property(t => t.Ativo)
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(t => t.DataCriacao)
+                    .HasColumnName("data_criacao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(t => t.DataArquivamento)
+                    .HasColumnName("data_arquivamento")
+                    .HasColumnType("datetime");
+
+                entity.HasIndex(t => new { t.GrupoId, t.Nome })
+                    .IsUnique()
+                    .HasDatabaseName("uq_grupos_tipos_chamados_grupo_nome");
+
+                entity.HasIndex(t => new { t.GrupoId, t.Ativo, t.Posicao })
+                    .HasDatabaseName("idx_grupos_tipos_chamados_grupo_ativo_posicao");
+
+                entity.HasOne(t => t.Grupo)
+                    .WithMany()
+                    .HasForeignKey(t => t.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== GrupoAuditoria =====
+            modelBuilder.Entity<GrupoAuditoria>(entity =>
+            {
+                entity.ToTable("Grupos_auditorias");
+
+                entity.Property(a => a.TipoAcao)
+                    .IsRequired()
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
+
+                entity.Property(a => a.Entidade)
+                    .IsRequired()
+                    .HasColumnType("varchar(50)")
+                    .HasMaxLength(50);
+
+                entity.Property(a => a.CampoAlterado)
+                    .HasColumnName("campo_alterado")
+                    .HasColumnType("varchar(80)")
+                    .HasMaxLength(80);
+
+                entity.Property(a => a.ValorAnterior)
+                    .HasColumnName("valor_anterior")
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
+
+                entity.Property(a => a.ValorNovo)
+                    .HasColumnName("valor_novo")
+                    .HasColumnType("varchar(500)")
+                    .HasMaxLength(500);
+
+                entity.Property(a => a.IpOrigem)
+                    .HasColumnName("ip_origem")
+                    .HasColumnType("varchar(64)")
+                    .HasMaxLength(64);
+
+                entity.Property(a => a.UserAgent)
+                    .HasColumnName("user_agent")
+                    .HasColumnType("varchar(255)")
+                    .HasMaxLength(255);
+
+                entity.Property(a => a.DataAcao)
+                    .HasColumnName("data_acao")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(a => new { a.GrupoId, a.DataAcao })
+                    .HasDatabaseName("idx_grupos_auditorias_grupo_data");
+
+                entity.HasIndex(a => new { a.GrupoId, a.TipoAcao })
+                    .HasDatabaseName("idx_grupos_auditorias_grupo_acao");
+
+                entity.HasOne(a => a.Grupo)
+                    .WithMany()
+                    .HasForeignKey(a => a.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(a => a.Usuario)
+                    .WithMany()
+                    .HasForeignKey(a => a.UsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // ===== UsuarioGrupo =====
@@ -399,6 +574,8 @@ namespace CallStationApp.Data
                 entity.HasIndex(c => c.DataCriacao).HasDatabaseName("idx_chamados_data_criacao");
                 entity.HasIndex(c => new { c.GrupoId, c.Status, c.DataCriacao })
                     .HasDatabaseName("idx_chamados_grupo_status_data");
+                entity.HasIndex(c => new { c.GrupoId, c.Status, c.PrazoConclusao })
+                    .HasDatabaseName("idx_chamados_grupo_status_prazo_conclusao");
                 entity.HasIndex(c => new { c.GrupoId, c.Publico, c.DataCriacao })
                     .HasDatabaseName("idx_chamados_grupo_publico_data");
                 entity.HasIndex(c => new { c.GrupoId, c.CriadorChamadoId, c.DataCriacao })
@@ -437,7 +614,25 @@ namespace CallStationApp.Data
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                entity.Property(h => h.OrigemAutomatica)
+                    .HasColumnName("origem_automatica")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(h => h.DescricaoOrigem)
+                    .HasColumnName("descricao_origem")
+                    .HasColumnType("varchar(100)")
+                    .HasMaxLength(100);
+
                 entity.HasIndex(h => new { h.ChamadoId }).HasDatabaseName("idx_historico_chamado");
+
+                entity.HasIndex(h => new { h.ChamadoId, h.DataTransicao })
+                    .HasDatabaseName("idx_historico_chamado_data");
+
+                entity.HasOne(h => h.Usuario)
+                    .WithMany()
+                    .HasForeignKey(h => h.UsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // ===== ComentarioChamado =====

@@ -184,12 +184,16 @@ CREATE INDEX idx_chamados_grupo_publico_data
 CREATE INDEX idx_chamados_grupo_criador_data
     ON Chamados (grupo_id, criador_chamado_id, data_criacao);
 
+CREATE INDEX idx_chamados_grupo_status_prazo_conclusao
+    ON Chamados (grupo_id, status, prazo_conclusao);
+
 -- ==========================
 -- HISTÓRICO DE STATUS
 -- ==========================
 CREATE TABLE Historico_status_chamados (
     id INT AUTO_INCREMENT PRIMARY KEY,
     chamado_id INT NOT NULL,
+    usuario_id INT NULL,
     status_anterior ENUM(
         'Aberto','EmAndamento','Pendente',
         'Concluido','Fechado','Reaberto',
@@ -201,9 +205,16 @@ CREATE TABLE Historico_status_chamados (
         'Cancelado','Excluido'
     ) NOT NULL,
     data_transicao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    origem_automatica BOOLEAN NOT NULL DEFAULT FALSE,
+    descricao_origem VARCHAR(100) NULL,
     CONSTRAINT fk_historico_chamado
-        FOREIGN KEY (chamado_id) REFERENCES Chamados(id)
+        FOREIGN KEY (chamado_id) REFERENCES Chamados(id),
+    CONSTRAINT fk_historico_chamado_usuario
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id)
 );
+
+CREATE INDEX idx_historico_chamado_data
+    ON Historico_status_chamados (chamado_id, data_transicao);
 
 -- ==========================
 -- COMENTÁRIOS
@@ -824,3 +835,89 @@ CREATE TABLE Chamado_contador_usuario_grupo (
     CONSTRAINT FK_chamado_contador_usuario_grupo_grupo
         FOREIGN KEY (grupo_id) REFERENCES Grupos(id)
 );
+
+-- ==========================
+-- CONFIGURACOES DO GRUPO
+-- ==========================
+
+CREATE TABLE Grupos_configuracoes (
+    grupo_id INT NOT NULL,
+    slug VARCHAR(60) NULL,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    obrigar_setor BOOLEAN NOT NULL DEFAULT FALSE,
+    obrigar_tipo_ocorrencia BOOLEAN NOT NULL DEFAULT FALSE,
+    obrigar_categoria BOOLEAN NOT NULL DEFAULT FALSE,
+    obrigar_subcategoria BOOLEAN NOT NULL DEFAULT FALSE,
+    permitir_chamado_publico BOOLEAN NOT NULL DEFAULT TRUE,
+    exigir_solucao_para_concluir BOOLEAN NOT NULL DEFAULT FALSE,
+    dias_para_fechamento_automatico INT NULL,
+    automatizar_pendente_por_prazo_conclusao BOOLEAN NOT NULL DEFAULT FALSE,
+    horas_apos_vencimento_para_pendente INT NULL,
+    horas_antes_prazo_para_alerta INT NULL,
+    notificar_administradores_sla BOOLEAN NOT NULL DEFAULT TRUE,
+    atualizado_por_usuario_id INT NULL,
+    data_atualizacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT PK_grupos_configuracoes PRIMARY KEY (grupo_id),
+    CONSTRAINT FK_grupos_configuracoes_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+    CONSTRAINT FK_grupos_configuracoes_usuario
+        FOREIGN KEY (atualizado_por_usuario_id) REFERENCES Usuarios(id)
+);
+
+CREATE UNIQUE INDEX uq_grupos_configuracoes_slug
+    ON Grupos_configuracoes(slug);
+
+CREATE TABLE Grupos_tipos_chamados (
+    id INT NOT NULL AUTO_INCREMENT,
+    grupo_id INT NOT NULL,
+    nome VARCHAR(50) NOT NULL,
+    descricao VARCHAR(160) NULL,
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    posicao INT NOT NULL DEFAULT 0,
+    criado_por_usuario_id INT NOT NULL,
+    arquivado_por_usuario_id INT NULL,
+    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    data_arquivamento DATETIME NULL,
+
+    CONSTRAINT PK_grupos_tipos_chamados PRIMARY KEY (id),
+    CONSTRAINT FK_grupos_tipos_chamados_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+    CONSTRAINT FK_grupos_tipos_chamados_criador
+        FOREIGN KEY (criado_por_usuario_id) REFERENCES Usuarios(id),
+    CONSTRAINT FK_grupos_tipos_chamados_arquivado_por
+        FOREIGN KEY (arquivado_por_usuario_id) REFERENCES Usuarios(id)
+);
+
+CREATE UNIQUE INDEX uq_grupos_tipos_chamados_grupo_nome
+    ON Grupos_tipos_chamados(grupo_id, nome);
+
+CREATE INDEX idx_grupos_tipos_chamados_grupo_ativo_posicao
+    ON Grupos_tipos_chamados(grupo_id, ativo, posicao);
+
+CREATE TABLE Grupos_auditorias (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    grupo_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    tipo_acao VARCHAR(50) NOT NULL,
+    entidade VARCHAR(50) NOT NULL,
+    entidade_id INT NULL,
+    campo_alterado VARCHAR(80) NULL,
+    valor_anterior VARCHAR(500) NULL,
+    valor_novo VARCHAR(500) NULL,
+    ip_origem VARCHAR(64) NULL,
+    user_agent VARCHAR(255) NULL,
+    data_acao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT PK_grupos_auditorias PRIMARY KEY (id),
+    CONSTRAINT FK_grupos_auditorias_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+    CONSTRAINT FK_grupos_auditorias_usuario
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id)
+);
+
+CREATE INDEX idx_grupos_auditorias_grupo_data
+    ON Grupos_auditorias(grupo_id, data_acao);
+
+CREATE INDEX idx_grupos_auditorias_grupo_acao
+    ON Grupos_auditorias(grupo_id, tipo_acao);

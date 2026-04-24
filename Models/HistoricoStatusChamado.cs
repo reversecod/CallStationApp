@@ -26,6 +26,20 @@ namespace CallStationApp.Models
         [EnumDataType(typeof(StatusNovoChamado))]
         public required StatusNovoChamado StatusNovo { get; set; }
 
+        [Column("usuario_id")]
+        public int? UsuarioId { get; set; }
+
+        [ForeignKey("UsuarioId")]
+        public Usuario? Usuario { get; set; }
+
+        [Required]
+        [Column("origem_automatica")]
+        public bool OrigemAutomatica { get; set; }
+
+        [Column("descricao_origem", TypeName = "varchar(100)")]
+        [StringLength(100)]
+        public string? DescricaoOrigem { get; set; }
+
         [Column("data_transicao", TypeName = "datetime")]
         public DateTime DataTransicao { get; set; } = DateTime.UtcNow;
     }

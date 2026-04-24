@@ -92,7 +92,34 @@ main {
     padding: .8rem .85rem .35rem;
 }
 
+.task-list.dragging-list {
+    opacity: .65;
+}
+
+.task-list-drag-handle {
+    width: 1.5rem;
+    min-width: 1.5rem;
+    height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: #9ca3af;
+    cursor: grab;
+}
+
+.task-list-drag-handle:active {
+    cursor: grabbing;
+}
+
+.task-list-drag-handle:hover,
+.task-list-drag-handle:focus {
+    color: #fff;
+    background: rgba(255, 255, 255, .12);
+}
+
 .task-list-title {
+    flex: 1;
     padding: 0;
     border: 0;
     background: transparent;
@@ -124,7 +151,7 @@ main {
     background: rgba(255, 255, 255, .12);
 }
 
-.task-list-header span {
+.task-list-count {
     min-width: 1.7rem;
     min-height: 1.7rem;
     display: inline-flex;
