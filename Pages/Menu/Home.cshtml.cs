@@ -13,6 +13,13 @@ namespace CallStationApp.Pages.Menu;
 [Authorize]
 public class HomeModel : PageModel
 {
+    private static readonly StatusChamado[] StatusFinais =
+    {
+        StatusChamado.Concluido,
+        StatusChamado.Fechado,
+        StatusChamado.Cancelado
+    };
+
     private readonly AppDbContext _context;
     private readonly IWebHostEnvironment _environment;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
@@ -98,7 +105,7 @@ public class HomeModel : PageModel
         IQueryable<Chamado> queryChamados = _context.Chamados
             .AsNoTracking()
             .Where(c => c.GrupoId == GrupoId &&
-                        c.Status != StatusChamado.Cancelado &&
+                        !StatusFinais.Contains(c.Status) &&
                         c.Status != StatusChamado.Excluido);
 
         if (contextoMembro.Permissao == PermissaoUsuario.Colaborador)
@@ -948,24 +955,32 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        var statusFinalAtual = chamado.Status == StatusChamado.Concluido ||
-                               chamado.Status == StatusChamado.Fechado ||
-                               chamado.Status == StatusChamado.Cancelado;
+        var statusFinalAtual = StatusFinais.Contains(chamado.Status);
+        var statusAnteriorEraFinal = StatusFinais.Contains(statusAnteriorOriginal);
+        var dataFinalizacaoFoiAjustadaAutomaticamente = false;
 
         if (chamado.Status != statusAnteriorOriginal && statusFinalAtual && dataFinalizacao == null)
         {
             dataFinalizacao = DateTime.UtcNow;
+            dataFinalizacaoFoiAjustadaAutomaticamente = true;
         }
 
         if (chamado.Status != statusAnteriorOriginal &&
             !statusFinalAtual &&
-            statusAnteriorOriginal is StatusChamado.Concluido or StatusChamado.Fechado or StatusChamado.Cancelado &&
+            statusAnteriorEraFinal &&
             dataFinalizacao == null)
         {
             dataFinalizacao = null;
+            dataFinalizacaoFoiAjustadaAutomaticamente = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.DataFinalizacao, idUsuario.Value, chamado.CriadorChamadoId)
+        var podeEditarDataFinalizacao = GrupoPermissionService.PodeEditarCampoChamado(
+            contextoMembro.Permissao,
+            ChamadoCampoEditavel.DataFinalizacao,
+            idUsuario.Value,
+            chamado.CriadorChamadoId);
+
+        if ((podeEditarDataFinalizacao || dataFinalizacaoFoiAjustadaAutomaticamente)
             && chamado.DataFinalizacao != dataFinalizacao)
         {
             chamado.DataFinalizacao = dataFinalizacao;

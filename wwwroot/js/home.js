@@ -887,12 +887,14 @@ function atualizarCardChamadoAposSalvar(payload) {
         return;
     }
 
-    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-andamento");
+    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-andamento", "ticket-reaberto");
 
     const classeStatus = payload.status === "Pendente"
         ? "ticket-pendente"
         : payload.status === "EmAndamento"
             ? "ticket-em-andamento"
+            : payload.status === "Reaberto"
+                ? "ticket-reaberto"
             : "ticket-aberto";
 
     card.classList.add(classeStatus);

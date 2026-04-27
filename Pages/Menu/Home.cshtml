@@ -210,6 +210,10 @@
       background: linear-gradient(to right, #1677c8, #4ea3f1);
     }
 
+    .ticket-reaberto {
+      background: linear-gradient(to right, #0f8f62, #49c17f);
+    }
+
       @@keyframes aparecer {
         0% {
           opacity: 0;
@@ -541,6 +545,15 @@
                         Membros
                     </a>
                 </li>
+                @if (Model.UsuarioLogadoEhAdministrador)
+                {
+                    <li>
+                        <a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
+                            <i class="bi bi-sliders2-vertical me-2 icon-svg" aria-hidden="true"></i>
+                            Grupo
+                        </a>
+                    </li>
+                }
             </ul>
 
             <hr />
@@ -578,6 +591,7 @@
                                 StatusChamado.Aberto => "ticket-aberto",
                                 StatusChamado.Pendente => "ticket-pendente",
                                 StatusChamado.EmAndamento => "ticket-em-andamento",
+                                StatusChamado.Reaberto => "ticket-reaberto",
                                 _ => "ticket-aberto"
                             };
 
