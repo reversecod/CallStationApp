@@ -25,7 +25,9 @@ public class MembersModel : PageModel
 
     public Grupo? GrupoAtual { get; set; }
     public string? NomeUsuarioLogado { get; set; }
+    public string? FotoUsuarioLogado { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
+    public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
     public List<MembroGrupoViewModel> Membros { get; set; } = new();
 
     public async Task<IActionResult> OnGetAsync()
@@ -45,6 +47,10 @@ public class MembersModel : PageModel
             return RedirectToPage("/Menu/Menu");
 
         UsuarioLogadoEhAdministrador = usuarioNoGrupo.Permissao == PermissaoUsuario.Administracao;
+        UsuarioLogadoPermissao = usuarioNoGrupo.Permissao;
+
+        if (usuarioNoGrupo.Permissao == PermissaoUsuario.Nenhuma)
+            return Forbid();
 
         GrupoAtual = await _context.Grupos
             .AsNoTracking()
@@ -53,11 +59,14 @@ public class MembersModel : PageModel
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
 
-        NomeUsuarioLogado = await _context.Usuarios
+        var usuarioLogado = await _context.Usuarios
             .AsNoTracking()
             .Where(u => u.Id == idUsuario.Value)
-            .Select(u => u.NomeUsuario)
+            .Select(u => new { u.NomeUsuario, u.FotoUsuario })
             .FirstOrDefaultAsync();
+
+        NomeUsuarioLogado = usuarioLogado?.NomeUsuario;
+        FotoUsuarioLogado = usuarioLogado?.FotoUsuario;
 
         Membros = await (
             from ug in _context.UsuariosGrupos.AsNoTracking()
@@ -225,6 +234,7 @@ public class MembersModel : PageModel
                     var notificacao = new Notificacao
                     {
                         UsuarioId = destinatario.Id,
+                        GrupoId = GrupoId,
                         Tipo = TipoNotificacao.ConviteGrupo,
                         Titulo = "Novo convite de grupo",
                         Mensagem = $"{remetente.NomeCompleto} convidou você para participar do grupo {grupo.Nome}.",
@@ -232,7 +242,7 @@ public class MembersModel : PageModel
                         DataCriacao = agora,
                         ReferenciaId = convite.Id,
                         ReferenciaTipo = "ConviteGrupo",
-                        LinkDestino = "/Menu/Notifications"
+                        LinkDestino = $"/Menu/Notifications?grupoId={GrupoId}"
                     };
 
                     _context.Notificacoes.Add(notificacao);

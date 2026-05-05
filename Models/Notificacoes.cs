@@ -15,6 +15,10 @@ namespace CallStationApp.Models
         public int UsuarioId { get; set; }
 
         [Required]
+        [Column("grupo_id")]
+        public int GrupoId { get; set; }
+
+        [Required]
         [Column("tipo")]
         public TipoNotificacao Tipo { get; set; } = TipoNotificacao.Sistema;
 
@@ -50,6 +54,9 @@ namespace CallStationApp.Models
 
         [ForeignKey(nameof(UsuarioId))]
         public Usuario? Usuario { get; set; }
+
+        [ForeignKey(nameof(GrupoId))]
+        public Grupo? Grupo { get; set; }
     }
 
     public enum TipoNotificacao

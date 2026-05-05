@@ -27,6 +27,9 @@ namespace CallStationApp.Models
         [Column("data_adicao")]
         public DateTime DataAdicao { get; set; } = DateTime.UtcNow;
 
+        [Column("data_ultimo_acesso")]
+        public DateTime? DataUltimoAcesso { get; set; }
+
         [Required]
         [Column("ativo")]
         public bool Ativo { get; set; } = true;

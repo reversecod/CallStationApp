@@ -1,6 +1,7 @@
 const cronometrosAtivos = [];
 let chamadoSelecionadoId = null;
 let modalSelecionarListaTarefa = null;
+let modalComentariosChamado = null;
 let salvandoEdicaoChamado = false;
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
@@ -51,6 +52,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalListaElement = document.getElementById("modalSelecionarListaTarefa");
     if (modalListaElement && window.bootstrap) {
         modalSelecionarListaTarefa = new bootstrap.Modal(modalListaElement);
+    }
+
+    const modalComentariosElement = document.getElementById("modalComentariosChamado");
+    if (modalComentariosElement && window.bootstrap) {
+        modalComentariosChamado = new bootstrap.Modal(modalComentariosElement);
     }
 
     document.getElementById("btnConfirmarListaTarefa")?.addEventListener("click", async () => {
@@ -106,6 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
     inicializarBotoesEdicao();
     inicializarCamposDataHoraChamado();
     inicializarLimpezaSelecaoChamado();
+    inicializarComentariosChamado();
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
 });
@@ -150,7 +157,7 @@ function inicializarDropTarefas() {
 async function prepararCriacaoTarefaDeChamado(chamadoId, redirectUrl) {
     const grupoId = Number(document.getElementById("grupoIdAtual")?.value);
     if (!grupoId) {
-        mostrarToast("Grupo atual nao encontrado.");
+        mostrarToast("Grupo atual não encontrado.");
         return;
     }
 
@@ -210,7 +217,7 @@ async function criarTarefaDeChamado(chamadoId, redirectUrl, colunaId) {
     const grupoIdInput = document.getElementById("grupoIdAtual");
 
     if (!tokenInput || !grupoIdInput) {
-        mostrarToast("Dados da sessao nao encontrados.");
+        mostrarToast("Dados da sessão não encontrados.");
         return;
     }
 
@@ -281,9 +288,14 @@ async function criarNovoChamado() {
     spanCronometro.dataset.criadoEm = new Date().toISOString();
     spanCronometro.textContent = "00:00";
 
+    const spanNumero = document.createElement("span");
+    spanNumero.className = "ticket-number";
+    spanNumero.textContent = "...";
+
     spanOuter.appendChild(spanCronometro);
     chamadoDiv.appendChild(img);
     chamadoDiv.appendChild(spanOuter);
+    chamadoDiv.appendChild(spanNumero);
 
     const buttonDiv = container.querySelector(".d-flex.align-items-center");
     if (buttonDiv) {
@@ -426,7 +438,7 @@ function setDateValueIfExists(id, value) {
     const el = document.getElementById(id);
     if (!el) return;
 
-    const dataHoraOriginal = formatDateTimeDisplay(value);
+    const dataHoraOriginal = formatDateTimeLocal(value);
     el.dataset.originalDateTime = dataHoraOriginal;
     el.value = dataHoraOriginal;
     el.classList.remove("is-invalid");
@@ -448,8 +460,6 @@ function aplicarPermissoesChamado(permissoes) {
     configurarCampo("wrapEditOcorrenciaTipoId", "editOcorrenciaTipoId", !!permissoes.podeEditarOcorrenciaTipoId);
     configurarCampo("wrapEditOcorrenciaCategoriaId", "editOcorrenciaCategoriaId", !!permissoes.podeEditarOcorrenciaCategoriaId);
     configurarCampo("wrapEditOcorrenciaSubcategoriaId", "editOcorrenciaSubcategoriaId", !!permissoes.podeEditarOcorrenciaSubcategoriaId);
-
-    configurarCampo("wrapEditAnexoArquivo", "editAnexoArquivo", !!permissoes.podeEditarAnexoChamado);
 
     configurarCampo("wrapEditPrioridade", "editPrioridade", !!permissoes.podeEditarPrioridade);
     configurarCampo("wrapEditCriticidade", "editCriticidade", !!permissoes.podeEditarCriticidade);
@@ -537,7 +547,7 @@ function atualizarResumoChamado(data) {
     const label = document.getElementById("chamadoSelecionadoLabel");
 
     if (label) {
-        label.textContent = data.id ? `Chamado ${data.id}` : "Chamado";
+        label.textContent = data.numeroChamadoGrupo ? `Chamado ${data.numeroChamadoGrupo}` : "Chamado";
         label.className = "badge badge-chamado-selecionado";
         label.classList.remove("d-none");
     }
@@ -569,7 +579,6 @@ async function preencherFormularioEdicao(data) {
     const msg = document.getElementById("mensagemSelecioneChamado");
     const form = document.getElementById("formEdicaoChamado");
     const label = document.getElementById("chamadoSelecionadoLabel");
-    const anexoTexto = document.getElementById("anexoAtualTexto");
     const textoDataCriacao = document.getElementById("textoDataCriacao");
 
     if (!form) return;
@@ -589,10 +598,6 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editOcorrenciaTipoId", data.ocorrenciaTipoId);
     await carregarCategorias(data.ocorrenciaTipoId, data.ocorrenciaCategoriaId);
     await carregarSubcategorias(data.ocorrenciaCategoriaId, data.ocorrenciaSubcategoriaId);
-
-    if (anexoTexto) {
-        anexoTexto.textContent = data.anexoChamado ? data.anexoChamado : "Nenhum";
-    }
 
     if (textoDataCriacao) {
         textoDataCriacao.textContent = data.dataCriacao
@@ -651,6 +656,10 @@ function inicializarBotoesEdicao() {
         btnExcluir.addEventListener("click", excluirChamado);
     }
 
+    document.getElementById("btnAbrirComentariosChamado")?.addEventListener("click", () => {
+        abrirComentariosChamado(chamadoSelecionadoId);
+    });
+
     const selectTipo = document.getElementById("editOcorrenciaTipoId");
     const selectCategoria = document.getElementById("editOcorrenciaCategoriaId");
 
@@ -674,12 +683,10 @@ function inicializarCamposDataHoraChamado() {
         if (!input) return;
 
         input.addEventListener("input", () => {
-            input.value = aplicarMascaraDataHora(input.value);
             input.classList.remove("is-invalid");
         });
 
         input.addEventListener("blur", () => {
-            input.value = aplicarMascaraDataHora(input.value, true);
             if (!input.value) {
                 input.classList.remove("is-invalid");
                 return;
@@ -702,6 +709,152 @@ function inicializarLimpezaSelecaoChamado() {
 
         cancelarEdicaoChamado();
     });
+}
+
+function inicializarComentariosChamado() {
+    document.getElementById("btnEnviarComentarioChamado")?.addEventListener("click", enviarComentarioChamado);
+}
+
+async function abrirComentariosChamado(chamadoId) {
+    if (!chamadoId || !modalComentariosChamado) {
+        mostrarToast("Selecione um chamado para abrir os comentários.");
+        return;
+    }
+
+    const input = document.getElementById("comentariosChamadoId");
+    if (input) input.value = chamadoId;
+    modalComentariosChamado.show();
+    await carregarComentariosChamado(chamadoId);
+    await marcarComentariosVisualizados(chamadoId);
+}
+
+async function carregarComentariosChamado(chamadoId) {
+    const lista = document.getElementById("listaComentariosChamado");
+    if (!lista) return;
+
+    lista.innerHTML = '<div class="text-muted small">Carregando comentários...</div>';
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const response = await fetch(`?handler=ComentariosChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível carregar os comentários.");
+        }
+
+        renderizarComentariosChamado(data.dados?.comentarios || []);
+    } catch (error) {
+        lista.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar os comentários.")}</div>`;
+    }
+}
+
+async function enviarComentarioChamado() {
+    const chamadoId = Number(document.getElementById("comentariosChamadoId")?.value);
+    const textoInput = document.getElementById("textoNovoComentarioChamado");
+    const anexoInput = document.getElementById("anexoNovoComentarioChamado");
+    const mensagem = (textoInput?.value || "").trim();
+    const arquivo = anexoInput?.files?.[0] || null;
+
+    if (!chamadoId || (!mensagem && !arquivo)) {
+        mostrarToast("Informe um comentário ou selecione uma imagem.");
+        return;
+    }
+
+    if (mensagem.length > 500) {
+        mostrarToast("O comentário não pode exceder 500 caracteres.");
+        return;
+    }
+
+    if (arquivo && arquivo.size > 5 * 1024 * 1024) {
+        mostrarToast("A imagem do comentário deve ter no máximo 5 MB.");
+        return;
+    }
+
+    const formData = new FormData();
+    const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+    formData.append("ChamadoId", chamadoId);
+    if (mensagem) formData.append("Mensagem", mensagem);
+    if (arquivo) formData.append("AnexoImagem", arquivo);
+
+    try {
+        const response = await fetch(`?handler=AdicionarComentarioChamado&grupoId=${encodeURIComponent(grupoId)}`, {
+            method: "POST",
+            headers: {
+                "RequestVerificationToken": getToken()
+            },
+            body: formData
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível adicionar o comentário.");
+        }
+
+        if (textoInput) textoInput.value = "";
+        if (anexoInput) anexoInput.value = "";
+        mostrarToast(data.dados?.message || "Comentário adicionado com sucesso.", "success");
+        await carregarComentariosChamado(chamadoId);
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível adicionar o comentário.");
+    }
+}
+
+async function marcarComentariosVisualizados(chamadoId) {
+    if (!chamadoId) return;
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const response = await fetch(`?handler=MarcarComentariosVisualizados&grupoId=${encodeURIComponent(grupoId)}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "RequestVerificationToken": getToken()
+            },
+            body: JSON.stringify({ chamadoId })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            return;
+        }
+
+        removerIndicadorComentario(chamadoId);
+    } catch {
+        // Indicador permanece para nova tentativa quando os comentários forem abertos novamente.
+    }
+}
+
+function removerIndicadorComentario(chamadoId) {
+    const card = document.querySelector(`.ticket-card[data-id="${chamadoId}"]`);
+    card?.querySelector("[data-comment-badge]")?.remove();
+}
+
+function renderizarComentariosChamado(comentarios) {
+    const lista = document.getElementById("listaComentariosChamado");
+    if (!lista) return;
+
+    if (!comentarios.length) {
+        lista.innerHTML = '<div class="text-muted small">Nenhum comentário registrado para este chamado.</div>';
+        return;
+    }
+
+    lista.innerHTML = comentarios.map(comentario => {
+        const anexo = comentario.anexoUrl
+            ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentário"></a>`
+            : "";
+
+        return `
+            <div class="comment-card">
+                <div class="comment-meta">
+                    <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
+                    <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                ${anexo}
+            </div>
+        `;
+    }).join("");
 }
 
 function cancelarEdicaoChamado() {
@@ -832,11 +985,6 @@ async function salvarEdicaoChamado() {
         }
     }
 
-    const fileInput = document.getElementById("editAnexoArquivo");
-    if (fileInput && fileInput.files && fileInput.files.length > 0) {
-        formData.append("AnexoArquivo", fileInput.files[0]);
-    }
-
     salvandoEdicaoChamado = true;
     const btnSalvar = document.getElementById("btnSalvarEdicao");
     if (btnSalvar) {
@@ -901,7 +1049,8 @@ function atualizarCardChamadoAposSalvar(payload) {
 
     const texto = card.querySelector(".ticket-text");
     const cronometro = card.querySelector(".cronometro");
-    const titulo = payload.titulo || `Chamado ${chamadoSelecionadoId}`;
+    const numero = (card.querySelector(".ticket-number")?.textContent?.trim() || chamadoSelecionadoId).toString().replace(/^#/, "");
+    const titulo = payload.titulo || `Chamado ${numero}`;
 
     if (texto && cronometro) {
         texto.textContent = `${titulo} - `;
@@ -911,6 +1060,10 @@ function atualizarCardChamadoAposSalvar(payload) {
 
 function getValue(id) {
     return document.getElementById(id)?.value ?? "";
+}
+
+function getToken() {
+    return document.getElementById("requestVerificationToken")?.value || "";
 }
 
 function getNullableString(id) {
@@ -952,6 +1105,24 @@ function normalizarDataHoraChamado(valor) {
     const texto = String(valor ?? "").trim();
     if (!texto) {
         return { valido: true, valor: null };
+    }
+
+    const matchNativo = texto.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (matchNativo) {
+        const ano = Number(matchNativo[1]);
+        const mes = Number(matchNativo[2]);
+        const dia = Number(matchNativo[3]);
+        const hora = Number(matchNativo[4]);
+        const minuto = Number(matchNativo[5]);
+        const data = new Date(ano, mes - 1, dia, hora, minuto, 0, 0);
+        const dataValida =
+            data.getFullYear() === ano &&
+            data.getMonth() === mes - 1 &&
+            data.getDate() === dia &&
+            data.getHours() === hora &&
+            data.getMinutes() === minuto;
+
+        return { valido: dataValida, valor: dataValida ? texto : null };
     }
 
     const match = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(--:--|(\d{2}):(\d{2}))$/);
@@ -997,14 +1168,13 @@ function normalizarDatasChamadoParaSubmit() {
             continue;
         }
 
-        input.value = aplicarMascaraDataHora(input.value, true);
         const normalizado = normalizarDataHoraChamado(input.value);
         input.classList.toggle("is-invalid", !normalizado.valido);
 
         if (!normalizado.valido) {
             return {
                 valido: false,
-                mensagem: `${campo.nome}: informe uma data valida no formato dd/mm/aaaa --:-- ou dd/mm/aaaa HH:mm.`
+                mensagem: `${campo.nome}: informe uma data e hora valida.`
             };
         }
 

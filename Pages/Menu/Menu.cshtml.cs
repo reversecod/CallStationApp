@@ -48,6 +48,7 @@ public class MenuModel : PageModel
                 ug.GrupoId,
                 ug.Permissao,
                 ug.DataAdicao,
+                ug.DataUltimoAcesso,
                 Grupo = new
                 {
                     ug.Grupo!.Nome,
@@ -118,6 +119,7 @@ public class MenuModel : PageModel
                     EtiquetaCor = ug.Grupo.EtiquetaCor,
                     Permissao = ug.Permissao,
                     DataEntrada = ug.DataAdicao,
+                    DataUltimoAcesso = ug.DataUltimoAcesso,
                     TotalChamados = chamadoInfo?.TotalChamados ?? 0,
                     ChamadosAbertos = chamadoInfo?.ChamadosAbertos ?? 0,
                     TotalMembros = membroInfo?.TotalMembros ?? 0,
@@ -267,8 +269,10 @@ public class MenuModel : PageModel
                 tipo = n.Tipo.ToString(),
                 titulo = n.Titulo,
                 mensagem = n.Mensagem,
+                nomeGrupo = n.Grupo != null ? n.Grupo.Nome : string.Empty,
                 lida = n.Lida,
                 dataCriacao = n.DataCriacao,
+                grupoId = n.GrupoId,
                 linkDestino = n.LinkDestino
             })
             .ToListAsync();
@@ -283,6 +287,107 @@ public class MenuModel : PageModel
             notificacoes,
             totalNaoLidas = naoLidas
         });
+    }
+
+    public async Task<IActionResult> OnGetAbrirNotificacoesAsync()
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return RedirectToPage("/Auth/Login");
+
+        var grupoId = await _context.Notificacoes
+            .AsNoTracking()
+            .Where(n => n.UsuarioId == idUsuario.Value)
+            .OrderByDescending(n => !n.Lida)
+            .ThenByDescending(n => n.DataCriacao)
+            .Select(n => (int?)n.GrupoId)
+            .FirstOrDefaultAsync();
+
+        if (!grupoId.HasValue)
+        {
+            grupoId = await _context.UsuariosGrupos
+                .AsNoTracking()
+                .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
+                .OrderByDescending(ug => ug.DataUltimoAcesso ?? ug.DataAdicao)
+                .Select(ug => (int?)ug.GrupoId)
+                .FirstOrDefaultAsync();
+        }
+
+        if (!grupoId.HasValue)
+            return RedirectToPage("/Menu/Notifications");
+
+        var possuiAcesso = await _context.UsuariosGrupos
+            .AsNoTracking()
+            .AnyAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == grupoId.Value && ug.Ativo);
+
+        if (!possuiAcesso)
+            return RedirectToPage("/Menu/Menu");
+
+        return RedirectToPage("/Menu/Notifications", new { grupoId = grupoId.Value });
+    }
+
+    public async Task<IActionResult> OnGetListarGruposRecentesAsync()
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var grupos = await _context.UsuariosGrupos
+            .AsNoTracking()
+            .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
+            .OrderByDescending(ug => ug.DataUltimoAcesso ?? ug.DataAdicao)
+            .ThenBy(ug => ug.Grupo.Nome)
+            .Take(12)
+            .Select(ug => new
+            {
+                id = ug.GrupoId,
+                nome = ug.Grupo.Nome,
+                dataUltimoAcesso = ug.DataUltimoAcesso ?? ug.DataAdicao,
+                permissao = ug.Permissao.ToString()
+            })
+            .ToListAsync();
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = new { grupos }
+        });
+    }
+
+    public async Task<IActionResult> OnGetAcessarGrupoAsync(int grupoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return RedirectToPage("/Auth/Login");
+
+        if (grupoId <= 0)
+            return RedirectToPage("/Menu/Menu");
+
+        var vinculo = await _context.UsuariosGrupos
+            .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == grupoId && ug.Ativo);
+
+        if (vinculo == null)
+            return RedirectToPage("/Menu/Menu");
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                vinculo.DataUltimoAcesso = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+
+        return RedirectToPage("/Menu/Home", new { grupoId });
     }
 
     public async Task<IActionResult> OnPostMarcarNotificacoesComoLidasAsync()
@@ -329,6 +434,7 @@ public class GrupoViewModel
     public EtiquetaCor EtiquetaCor { get; set; }
     public PermissaoUsuario Permissao { get; set; }
     public DateTime DataEntrada { get; set; }
+    public DateTime? DataUltimoAcesso { get; set; }
     public int TotalChamados { get; set; }
     public int ChamadosAbertos { get; set; }
     public int TotalMembros { get; set; }

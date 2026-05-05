@@ -7,3 +7,17 @@ appsettings.Development.json
 .idea/
 .vs/
 *.user
+
+# Build / publish / validações temporárias
+/out/
+/temp_build_validation*/
+/bin/
+/obj/
+
+# Uploads e arquivos gerados em runtime
+/uploads_privados/
+/wwwroot/uploads/
+
+# Arquivos temporários
+*.tmp
+*.log

@@ -69,17 +69,17 @@ public class GroupModel : PageModel
 
         var grupo = await _context.Grupos.FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (grupo == null)
-            return NotFound(new { success = false, message = "Grupo nao encontrado." });
+            return NotFound(new { success = false, message = "Grupo não encontrado." });
 
         var nome = Limpar(request.Nome);
         var descricao = Limpar(request.Descricao);
         var slug = Slug(request.Slug);
 
         if (string.IsNullOrWhiteSpace(nome) || nome.Length > 35)
-            return BadRequest(new { success = false, message = "Nome obrigatorio com ate 35 caracteres." });
+            return BadRequest(new { success = false, message = "Nome obrigatório com até 35 caracteres." });
 
         if (descricao.Length > 200)
-            return BadRequest(new { success = false, message = "Descricao deve ter ate 200 caracteres." });
+            return BadRequest(new { success = false, message = "Descrição deve ter até 200 caracteres." });
 
         if (!Enum.TryParse<EtiquetaCor>(request.EtiquetaCor, true, out var cor))
             return BadRequest(new { success = false, message = "Cor invalida." });
@@ -89,7 +89,7 @@ public class GroupModel : PageModel
         if (!string.IsNullOrWhiteSpace(slug) &&
             await _context.GruposConfiguracoes.AnyAsync(c => c.GrupoId != GrupoId && c.Slug == slug))
         {
-            return BadRequest(new { success = false, message = "Identificador ja esta em uso." });
+            return BadRequest(new { success = false, message = "Identificador já está em uso." });
         }
 
         try
@@ -111,10 +111,14 @@ public class GroupModel : PageModel
             await _context.SaveChangesAsync();
             return new JsonResult(new { success = true, message = "Grupo salvo com sucesso." });
         }
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+        {
+            return new JsonResult(new { success = false, message = "Este identificador (slug) já está em uso." });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao salvar grupo {GrupoId}.", GrupoId);
-            return StatusCode(500, new { success = false, message = "Nao foi possivel salvar o grupo." });
+            return StatusCode(500, new { success = false, message = "Não foi possível salvar o grupo." });
         }
     }
 
@@ -168,6 +172,9 @@ public class GroupModel : PageModel
         config.HorasAposVencimentoParaPendente = request.HorasAposVencimentoParaPendente;
         config.HorasAntesPrazoParaAlerta = request.HorasAntesPrazoParaAlerta;
         config.NotificarAdministradoresSla = request.NotificarAdministradoresSla;
+        config.ExibirDataFinalizacaoModal = request.ExibirDataFinalizacaoModal;
+        config.ExibirPrazoRespostaModal = request.ExibirPrazoRespostaModal;
+        config.ExibirPrazoConclusaoModal = request.ExibirPrazoConclusaoModal;
         config.AtualizadoPorUsuarioId = usuarioId.Value;
         config.DataAtualizacao = DateTime.UtcNow;
         Auditar(usuarioId.Value, "Atualizar", "GrupoConfiguracao", GrupoId, "SLA", null, "SLA atualizado");
@@ -182,18 +189,39 @@ public class GroupModel : PageModel
         if (usuarioId.Result != null)
             return usuarioId.Result;
 
-        var nome = NomeValido(request.Nome, 50);
-        if (await _context.Setores.AnyAsync(s => s.GrupoId == GrupoId && s.NomeSetor == nome))
-            return BadRequest(new { success = false, message = "Setor duplicado." });
+        var nome = Limpar(request.Nome);
+        if (!NomeValido(nome, 50))
+            return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
 
-        var usuario = await _context.Usuarios.FirstAsync(u => u.Id == usuarioId.Id);
-        var setor = new Setor { GrupoId = GrupoId, UsuarioId = usuarioId.Id, Usuario = usuario, NomeSetor = nome };
-        _context.Setores.Add(setor);
-        await _context.SaveChangesAsync();
-        Auditar(usuarioId.Id, "Criar", "Setor", setor.Id, null, null, nome);
-        await _context.SaveChangesAsync();
-        InvalidarCacheCatalogoGrupo();
-        return new JsonResult(new { success = true, message = "Setor criado." });
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (await _context.Setores.AnyAsync(s => s.GrupoId == GrupoId && s.NomeSetor == nome))
+                    return (IActionResult)BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+                var usuario = await _context.Usuarios.FirstAsync(u => u.Id == usuarioId.Id);
+                var setor = new Setor { GrupoId = GrupoId, UsuarioId = usuarioId.Id, Usuario = usuario, NomeSetor = nome };
+                _context.Setores.Add(setor);
+                Auditar(usuarioId.Id, "Criar", "Setor", null, null, null, nome);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                InvalidarCacheCatalogoGrupo();
+                return (IActionResult)new JsonResult(new { success = true, message = "Setor criado." });
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostCriarTipoOcorrenciaAsync([FromBody] NomeRequest request)
@@ -202,17 +230,38 @@ public class GroupModel : PageModel
         if (usuarioId.Result != null)
             return usuarioId.Result;
 
-        var nome = NomeValido(request.Nome, 50);
-        if (await _context.OcorrenciasTipo.AnyAsync(t => t.GrupoId == GrupoId && t.TipoOcorrencia == nome))
-            return BadRequest(new { success = false, message = "Tipo duplicado." });
+        var nome = Limpar(request.Nome);
+        if (!NomeValido(nome, 50))
+            return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
 
-        var tipo = new OcorrenciaTipo { GrupoId = GrupoId, UsuarioId = usuarioId.Id, TipoOcorrencia = nome };
-        _context.OcorrenciasTipo.Add(tipo);
-        await _context.SaveChangesAsync();
-        Auditar(usuarioId.Id, "Criar", "OcorrenciaTipo", tipo.Id, null, null, nome);
-        await _context.SaveChangesAsync();
-        InvalidarCacheCatalogoGrupo();
-        return new JsonResult(new { success = true, message = "Tipo de ocorrencia criado." });
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (await _context.OcorrenciasTipo.AnyAsync(t => t.GrupoId == GrupoId && t.TipoOcorrencia == nome))
+                    return (IActionResult)BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+                var tipo = new OcorrenciaTipo { GrupoId = GrupoId, UsuarioId = usuarioId.Id, TipoOcorrencia = nome };
+                _context.OcorrenciasTipo.Add(tipo);
+                Auditar(usuarioId.Id, "Criar", "OcorrenciaTipo", null, null, null, nome);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                InvalidarCacheCatalogoGrupo();
+                return (IActionResult)new JsonResult(new { success = true, message = "Tipo de ocorrencia criado." });
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostCriarCategoriaAsync([FromBody] CategoriaRequest request)
@@ -223,19 +272,40 @@ public class GroupModel : PageModel
 
         var tipo = await _context.OcorrenciasTipo.FirstOrDefaultAsync(t => t.Id == request.TipoId && t.GrupoId == GrupoId);
         if (tipo == null)
-            return BadRequest(new { success = false, message = "Tipo invalido." });
+            return BadRequest(new { success = false, message = "Tipo inválido." });
 
-        var nome = NomeValido(request.Nome, 50);
-        if (await _context.OcorrenciasCategoria.AnyAsync(c => c.TipoId == request.TipoId && c.CategoriaOcorrencia == nome))
-            return BadRequest(new { success = false, message = "Categoria duplicada." });
+        var nome = Limpar(request.Nome);
+        if (!NomeValido(nome, 50))
+            return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
 
-        var categoria = new OcorrenciaCategoria { TipoId = tipo.Id, OcorrenciaTipo = tipo, CategoriaOcorrencia = nome };
-        _context.OcorrenciasCategoria.Add(categoria);
-        await _context.SaveChangesAsync();
-        Auditar(usuarioId.Id, "Criar", "OcorrenciaCategoria", categoria.Id, null, null, nome);
-        await _context.SaveChangesAsync();
-        InvalidarCacheCatalogoTipo(tipo.Id);
-        return new JsonResult(new { success = true, message = "Categoria criada." });
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (await _context.OcorrenciasCategoria.AnyAsync(c => c.TipoId == request.TipoId && c.CategoriaOcorrencia == nome))
+                    return (IActionResult)BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+                var categoria = new OcorrenciaCategoria { TipoId = tipo.Id, OcorrenciaTipo = tipo, CategoriaOcorrencia = nome };
+                _context.OcorrenciasCategoria.Add(categoria);
+                Auditar(usuarioId.Id, "Criar", "OcorrenciaCategoria", null, null, null, nome);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                InvalidarCacheCatalogoTipo(tipo.Id);
+                return (IActionResult)new JsonResult(new { success = true, message = "Categoria criada." });
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostCriarSubcategoriaAsync([FromBody] SubcategoriaRequest request)
@@ -251,17 +321,38 @@ public class GroupModel : PageModel
         if (categoria == null)
             return BadRequest(new { success = false, message = "Categoria invalida." });
 
-        var nome = NomeValido(request.Nome, 100);
-        if (await _context.OcorrenciasSubcategoria.AnyAsync(s => s.CategoriaId == categoria.Id && s.SubcategoriaOcorrencia == nome))
-            return BadRequest(new { success = false, message = "Subcategoria duplicada." });
+        var nome = Limpar(request.Nome);
+        if (!NomeValido(nome, 100))
+            return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
 
-        var subcategoria = new OcorrenciaSubcategoria { CategoriaId = categoria.Id, OcorrenciaCategoria = categoria, SubcategoriaOcorrencia = nome };
-        _context.OcorrenciasSubcategoria.Add(subcategoria);
-        await _context.SaveChangesAsync();
-        Auditar(usuarioId.Id, "Criar", "OcorrenciaSubcategoria", subcategoria.Id, null, null, nome);
-        await _context.SaveChangesAsync();
-        InvalidarCacheCatalogoCategoria(categoria.Id);
-        return new JsonResult(new { success = true, message = "Subcategoria criada." });
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (await _context.OcorrenciasSubcategoria.AnyAsync(s => s.CategoriaId == categoria.Id && s.SubcategoriaOcorrencia == nome))
+                    return (IActionResult)BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+                var subcategoria = new OcorrenciaSubcategoria { CategoriaId = categoria.Id, OcorrenciaCategoria = categoria, SubcategoriaOcorrencia = nome };
+                _context.OcorrenciasSubcategoria.Add(subcategoria);
+                Auditar(usuarioId.Id, "Criar", "OcorrenciaSubcategoria", null, null, null, nome);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                InvalidarCacheCatalogoCategoria(categoria.Id);
+                return (IActionResult)new JsonResult(new { success = true, message = "Subcategoria criada." });
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostCriarTipoChamadoAsync([FromBody] TipoChamadoRequest request)
@@ -270,10 +361,13 @@ public class GroupModel : PageModel
         if (usuarioId.Result != null)
             return usuarioId.Result;
 
-        var nome = NomeValido(request.Nome, 50);
+        var nome = Limpar(request.Nome);
+        if (!NomeValido(nome, 50))
+            return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
+
         var descricao = Limpar(request.Descricao);
         if (descricao.Length > 160)
-            return BadRequest(new { success = false, message = "Descricao deve ter ate 160 caracteres." });
+            return BadRequest(new { success = false, message = "Descrição deve ter até 160 caracteres." });
 
         if (await _context.GruposTiposChamados.AnyAsync(t => t.GrupoId == GrupoId && t.Nome == nome))
             return BadRequest(new { success = false, message = "Tipo de chamado duplicado." });
@@ -295,7 +389,7 @@ public class GroupModel : PageModel
 
         var tipo = await _context.GruposTiposChamados.FirstOrDefaultAsync(t => t.Id == request.Id && t.GrupoId == GrupoId);
         if (tipo == null)
-            return NotFound(new { success = false, message = "Tipo de chamado nao encontrado." });
+            return NotFound(new { success = false, message = "Tipo de chamado não encontrado." });
 
         tipo.Ativo = false;
         tipo.ArquivadoPorUsuarioId = usuarioId.Id;
@@ -318,7 +412,7 @@ public class GroupModel : PageModel
 
         var setor = await _context.Setores.FirstOrDefaultAsync(s => s.Id == request.Id && s.GrupoId == GrupoId);
         if (setor == null)
-            return NotFound(new { success = false, message = "Setor nao encontrado." });
+            return NotFound(new { success = false, message = "Setor não encontrado." });
 
         _context.Setores.Remove(setor);
         Auditar(usuarioId.Id, "Excluir", "Setor", setor.Id, null, setor.NomeSetor, null);
@@ -361,33 +455,103 @@ public class GroupModel : PageModel
                                  orderby u.NomeCompleto
                                  select new AdminVm(u.NomeCompleto, u.NomeUsuario)).ToListAsync();
 
-        Setores = await _context.Setores.AsNoTracking()
+        var contagemChamadosPorSetor = await _context.Chamados
+            .AsNoTracking()
+            .Where(c => c.GrupoId == GrupoId && c.SetorId.HasValue)
+            .GroupBy(c => c.SetorId!.Value)
+            .Select(g => new { SetorId = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(x => x.SetorId, x => x.Total);
+
+        var contagemChamadosPorTipo = await _context.Chamados
+            .AsNoTracking()
+            .Where(c => c.GrupoId == GrupoId && c.OcorrenciaTipoId.HasValue)
+            .GroupBy(c => c.OcorrenciaTipoId!.Value)
+            .Select(g => new { TipoId = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(x => x.TipoId, x => x.Total);
+
+        var contagemChamadosPorCategoria = await _context.Chamados
+            .AsNoTracking()
+            .Where(c => c.GrupoId == GrupoId && c.OcorrenciaCategoriaId.HasValue)
+            .GroupBy(c => c.OcorrenciaCategoriaId!.Value)
+            .Select(g => new { CategoriaId = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(x => x.CategoriaId, x => x.Total);
+
+        var contagemChamadosPorSubcategoria = await _context.Chamados
+            .AsNoTracking()
+            .Where(c => c.GrupoId == GrupoId && c.OcorrenciaSubcategoriaId.HasValue)
+            .GroupBy(c => c.OcorrenciaSubcategoriaId!.Value)
+            .Select(g => new { SubcategoriaId = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(x => x.SubcategoriaId, x => x.Total);
+
+        var contagemSubcategoriasPorCategoria = await (
+                from s in _context.OcorrenciasSubcategoria.AsNoTracking()
+                join c in _context.OcorrenciasCategoria.AsNoTracking() on s.CategoriaId equals c.Id
+                join t in _context.OcorrenciasTipo.AsNoTracking() on c.TipoId equals t.Id
+                where t.GrupoId == GrupoId
+                group s by s.CategoriaId
+                into g
+                select new { CategoriaId = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(x => x.CategoriaId, x => x.Total);
+
+        var setores = await _context.Setores.AsNoTracking()
             .Where(s => s.GrupoId == GrupoId)
             .OrderBy(s => s.NomeSetor)
-            .Select(s => new ItemVm(s.Id, s.NomeSetor, _context.Chamados.Count(c => c.GrupoId == GrupoId && c.SetorId == s.Id)))
             .ToListAsync();
 
-        TiposOcorrencia = await _context.OcorrenciasTipo.AsNoTracking()
+        Setores = setores
+            .Select(s => new ItemVm(s.Id, s.NomeSetor, contagemChamadosPorSetor.GetValueOrDefault(s.Id)))
+            .ToList();
+
+        var tiposOcorrencia = await _context.OcorrenciasTipo.AsNoTracking()
             .Where(t => t.GrupoId == GrupoId)
             .OrderBy(t => t.TipoOcorrencia)
-            .Select(t => new ItemVm(t.Id, t.TipoOcorrencia, _context.Chamados.Count(c => c.GrupoId == GrupoId && c.OcorrenciaTipoId == t.Id)))
             .ToListAsync();
 
-        Categorias = await (from c in _context.OcorrenciasCategoria.AsNoTracking()
-                            join t in _context.OcorrenciasTipo.AsNoTracking() on c.TipoId equals t.Id
-                            where t.GrupoId == GrupoId
-                            orderby t.TipoOcorrencia, c.CategoriaOcorrencia
-                            select new CategoriaVm(c.Id, c.TipoId, t.TipoOcorrencia, c.CategoriaOcorrencia,
-                                _context.OcorrenciasSubcategoria.Count(s => s.CategoriaId == c.Id),
-                                _context.Chamados.Count(ch => ch.GrupoId == GrupoId && ch.OcorrenciaCategoriaId == c.Id))).ToListAsync();
+        TiposOcorrencia = tiposOcorrencia
+            .Select(t => new ItemVm(t.Id, t.TipoOcorrencia, contagemChamadosPorTipo.GetValueOrDefault(t.Id)))
+            .ToList();
 
-        Subcategorias = await (from s in _context.OcorrenciasSubcategoria.AsNoTracking()
-                               join c in _context.OcorrenciasCategoria.AsNoTracking() on s.CategoriaId equals c.Id
-                               join t in _context.OcorrenciasTipo.AsNoTracking() on c.TipoId equals t.Id
-                               where t.GrupoId == GrupoId
-                               orderby t.TipoOcorrencia, c.CategoriaOcorrencia, s.SubcategoriaOcorrencia
-                               select new SubcategoriaVm(s.Id, c.Id, t.TipoOcorrencia, c.CategoriaOcorrencia, s.SubcategoriaOcorrencia,
-                                   _context.Chamados.Count(ch => ch.GrupoId == GrupoId && ch.OcorrenciaSubcategoriaId == s.Id))).ToListAsync();
+        var categorias = await (from c in _context.OcorrenciasCategoria.AsNoTracking()
+                                join t in _context.OcorrenciasTipo.AsNoTracking() on c.TipoId equals t.Id
+                                where t.GrupoId == GrupoId
+                                orderby t.TipoOcorrencia, c.CategoriaOcorrencia
+                                select new { c.Id, c.TipoId, TipoNome = t.TipoOcorrencia, Nome = c.CategoriaOcorrencia })
+            .ToListAsync();
+
+        Categorias = categorias
+            .Select(c => new CategoriaVm(
+                c.Id,
+                c.TipoId,
+                c.TipoNome,
+                c.Nome,
+                contagemSubcategoriasPorCategoria.GetValueOrDefault(c.Id),
+                contagemChamadosPorCategoria.GetValueOrDefault(c.Id)))
+            .ToList();
+
+        var subcategorias = await (from s in _context.OcorrenciasSubcategoria.AsNoTracking()
+                                   join c in _context.OcorrenciasCategoria.AsNoTracking() on s.CategoriaId equals c.Id
+                                   join t in _context.OcorrenciasTipo.AsNoTracking() on c.TipoId equals t.Id
+                                   where t.GrupoId == GrupoId
+                                   orderby t.TipoOcorrencia, c.CategoriaOcorrencia, s.SubcategoriaOcorrencia
+                                   select new
+                                   {
+                                       SubcategoriaId = s.Id,
+                                       CategoriaId = c.Id,
+                                       TipoNome = t.TipoOcorrencia,
+                                       CategoriaNome = c.CategoriaOcorrencia,
+                                       Nome = s.SubcategoriaOcorrencia
+                                   })
+            .ToListAsync();
+
+        Subcategorias = subcategorias
+            .Select(s => new SubcategoriaVm(
+                s.SubcategoriaId,
+                s.CategoriaId,
+                s.TipoNome,
+                s.CategoriaNome,
+                s.Nome,
+                contagemChamadosPorSubcategoria.GetValueOrDefault(s.SubcategoriaId)))
+            .ToList();
 
         TiposChamado = await _context.GruposTiposChamados.AsNoTracking()
             .Where(t => t.GrupoId == GrupoId)
@@ -439,13 +603,35 @@ public class GroupModel : PageModel
         config = new GrupoConfiguracao
         {
             GrupoId = GrupoId,
-            Slug = Slug(await _context.Grupos.Where(g => g.Id == GrupoId).Select(g => g.Nome).FirstAsync()),
+            Slug = await GerarSlugUnicoAsync(await _context.Grupos.Where(g => g.Id == GrupoId).Select(g => g.Nome).FirstAsync()),
             AtualizadoPorUsuarioId = usuarioId,
             DataAtualizacao = DateTime.UtcNow
         };
         _context.GruposConfiguracoes.Add(config);
         await _context.SaveChangesAsync();
         return config;
+    }
+
+    private async Task<string?> GerarSlugUnicoAsync(string? valor)
+    {
+        var slugBase = Slug(valor);
+        if (string.IsNullOrWhiteSpace(slugBase))
+            return null;
+
+        if (!await _context.GruposConfiguracoes.AnyAsync(c => c.GrupoId != GrupoId && c.Slug == slugBase))
+            return slugBase;
+
+        for (var sufixo = 2; sufixo < 10_000; sufixo++)
+        {
+            var textoSufixo = $"-{sufixo}";
+            var tamanhoBase = Math.Min(slugBase.Length, 60 - textoSufixo.Length);
+            var candidato = $"{slugBase[..tamanhoBase].TrimEnd('-')}{textoSufixo}";
+
+            if (!await _context.GruposConfiguracoes.AnyAsync(c => c.GrupoId != GrupoId && c.Slug == candidato))
+                return candidato;
+        }
+
+        return null;
     }
 
     private void AuditarSeMudou(int usuarioId, string entidade, int? entidadeId, string campo, string? anterior, string? novo)
@@ -472,12 +658,14 @@ public class GroupModel : PageModel
         });
     }
 
-    private static string NomeValido(string? valor, int limite)
+    private static bool NomeValido(string nome, int limite = 50) =>
+        !string.IsNullOrWhiteSpace(nome) && nome.Trim().Length <= limite;
+
+    private static bool EhErroDuplicidade(DbUpdateException ex)
     {
-        var nome = Limpar(valor);
-        if (string.IsNullOrWhiteSpace(nome) || nome.Length > limite)
-            throw new ArgumentException($"Nome obrigatorio com ate {limite} caracteres.");
-        return nome;
+        var mensagem = ex.InnerException?.Message ?? ex.Message;
+        return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
+               mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Limpar(string? valor) => (valor ?? string.Empty).Trim();
@@ -510,7 +698,8 @@ public class GroupModel : PageModel
             }
         }
 
-        return sb.ToString().Trim('-');
+        var slug = sb.ToString().Trim('-');
+        return slug.Length <= 60 ? slug : slug[..60].TrimEnd('-');
     }
 
     private int? GetUsuarioLogadoId()
@@ -521,7 +710,7 @@ public class GroupModel : PageModel
 
     public record SalvarGeralRequest(string? Nome, string? Descricao, string? Slug, string? EtiquetaCor, bool Ativo);
     public record SalvarRegrasRequest(bool ObrigarSetor, bool ObrigarTipoOcorrencia, bool ObrigarCategoria, bool ObrigarSubcategoria, bool PermitirChamadoPublico, bool ExigirSolucaoParaConcluir, int? DiasParaFechamentoAutomatico);
-    public record SalvarSlaRequest(bool AutomatizarPendentePorPrazoConclusao, int? HorasAposVencimentoParaPendente, int? HorasAntesPrazoParaAlerta, bool NotificarAdministradoresSla);
+    public record SalvarSlaRequest(bool AutomatizarPendentePorPrazoConclusao, int? HorasAposVencimentoParaPendente, int? HorasAntesPrazoParaAlerta, bool NotificarAdministradoresSla, bool ExibirDataFinalizacaoModal = true, bool ExibirPrazoRespostaModal = true, bool ExibirPrazoConclusaoModal = true);
     public record NomeRequest(string? Nome);
     public record TipoChamadoRequest(string? Nome, string? Descricao);
     public record CategoriaRequest(int TipoId, string? Nome);

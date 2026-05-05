@@ -1,6 +1,7 @@
 using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Models;
+using CallStationApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -13,6 +14,9 @@ namespace CallStationApp.Pages.Menu;
 [Authorize]
 public class HomeModel : PageModel
 {
+    private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
+    private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
+
     private static readonly StatusChamado[] StatusFinais =
     {
         StatusChamado.Concluido,
@@ -23,6 +27,7 @@ public class HomeModel : PageModel
     private readonly AppDbContext _context;
     private readonly IWebHostEnvironment _environment;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly NotificacaoService _notificacaoService;
     private readonly ILogger<HomeModel> _logger;
     private const int TamanhoPaginaChamados = 20;
 
@@ -30,11 +35,13 @@ public class HomeModel : PageModel
         AppDbContext context,
         IWebHostEnvironment environment,
         GrupoAuthorizationService grupoAuthorizationService,
+        NotificacaoService notificacaoService,
         ILogger<HomeModel> logger)
     {
         _context = context;
         _environment = environment;
         _grupoAuthorizationService = grupoAuthorizationService;
+        _notificacaoService = notificacaoService;
         _logger = logger;
     }
 
@@ -52,6 +59,7 @@ public class HomeModel : PageModel
     public List<OcorrenciaTipo> TiposOcorrenciaDisponiveis { get; set; } = new();
     public bool PodeCriarChamado { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
+    public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
     public bool TemPaginaAnterior => PaginaAtual > 1;
     public bool TemProximaPagina { get; set; }
 
@@ -59,9 +67,11 @@ public class HomeModel : PageModel
     {
         public int Id { get; set; }
         public int NumeroChamadoGrupo { get; set; }
+        public int NumeroChamadoUsuario { get; set; }
         public string? Titulo { get; set; }
         public StatusChamado Status { get; set; }
         public DateTime DataCriacao { get; set; }
+        public bool TemComentariosNaoLidos { get; set; }
     }
 
     public async Task<IActionResult> OnGetAsync()
@@ -79,8 +89,11 @@ public class HomeModel : PageModel
         if (contextoMembro == null)
             return RedirectToPage("/Menu/Menu");
 
+        await AtualizarUltimoAcessoGrupoAsync(idUsuario.Value, GrupoId);
+
         PodeCriarChamado = GrupoPermissionService.PodeCriarChamado(contextoMembro.Permissao);
         UsuarioLogadoEhAdministrador = GrupoPermissionService.PodeGerenciarGrupo(contextoMembro.Permissao);
+        UsuarioLogadoPermissao = contextoMembro.Permissao;
 
         GrupoAtual = await _context.Grupos
             .AsNoTracking()
@@ -126,6 +139,7 @@ public class HomeModel : PageModel
             {
                 Id = c.Id,
                 NumeroChamadoGrupo = c.NumeroChamadoGrupo,
+                NumeroChamadoUsuario = c.NumeroChamadoUsuario,
                 Titulo = c.Titulo,
                 Status = c.Status,
                 DataCriacao = c.DataCriacao
@@ -136,6 +150,28 @@ public class HomeModel : PageModel
         if (TemProximaPagina)
         {
             Chamados.RemoveAt(Chamados.Count - 1);
+        }
+
+        if (Chamados.Count > 0)
+        {
+            var chamadosIds = Chamados.Select(c => c.Id).ToList();
+            var chamadosComComentariosNaoLidos = await _context.Notificacoes
+                .AsNoTracking()
+                .Where(n => n.UsuarioId == idUsuario.Value &&
+                            n.GrupoId == GrupoId &&
+                            !n.Lida &&
+                            n.Tipo == TipoNotificacao.Chamado &&
+                            (n.ReferenciaTipo == ReferenciaTipoComentarioChamado ||
+                             n.ReferenciaTipo == ReferenciaTipoComentarioHistorico) &&
+                            n.ReferenciaId.HasValue &&
+                            chamadosIds.Contains(n.ReferenciaId.Value))
+                .Select(n => n.ReferenciaId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var chamadosComComentariosNaoLidosSet = chamadosComComentariosNaoLidos.ToHashSet();
+            foreach (var chamado in Chamados)
+                chamado.TemComentariosNaoLidos = chamadosComComentariosNaoLidosSet.Contains(chamado.Id);
         }
 
         SetoresDisponiveis = await ObterSetoresDisponiveisAsync(GrupoId);
@@ -204,10 +240,58 @@ public class HomeModel : PageModel
             criadorPermissao = dadosCriador?.Permissao.ToString();
         }
 
+        var config = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .Where(c => c.GrupoId == chamado.GrupoId)
+            .Select(c => new
+            {
+                c.ExibirDataFinalizacaoModal,
+                c.ExibirPrazoRespostaModal,
+                c.ExibirPrazoConclusaoModal
+            })
+            .FirstOrDefaultAsync();
+
+        var possuiSetor = await _context.Setores
+            .AsNoTracking()
+            .AnyAsync(s => s.GrupoId == chamado.GrupoId);
+
+        var possuiTipoOcorrencia = await _context.OcorrenciasTipo
+            .AsNoTracking()
+            .AnyAsync(t => t.GrupoId == chamado.GrupoId);
+
+        var possuiCategoria = await (
+            from categoria in _context.OcorrenciasCategoria.AsNoTracking()
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+            where tipo.GrupoId == chamado.GrupoId
+            select categoria.Id).AnyAsync();
+
+        var possuiSubcategoria = await (
+            from subcategoria in _context.OcorrenciasSubcategoria.AsNoTracking()
+            join categoria in _context.OcorrenciasCategoria.AsNoTracking() on subcategoria.CategoriaId equals categoria.Id
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+            where tipo.GrupoId == chamado.GrupoId
+            select subcategoria.Id).AnyAsync();
+
+        var podeEditarSetor = possuiSetor &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.SetorId, idUsuario.Value, chamado.CriadorChamadoId);
+        var podeEditarTipo = possuiTipoOcorrencia &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaTipoId, idUsuario.Value, chamado.CriadorChamadoId);
+        var podeEditarCategoria = possuiCategoria &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaCategoriaId, idUsuario.Value, chamado.CriadorChamadoId);
+        var podeEditarSubcategoria = possuiSubcategoria &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaSubcategoriaId, idUsuario.Value, chamado.CriadorChamadoId);
+        var podeEditarDataFinalizacao = (config?.ExibirDataFinalizacaoModal ?? true) &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.DataFinalizacao, idUsuario.Value, chamado.CriadorChamadoId);
+        var podeEditarPrazoResposta = (config?.ExibirPrazoRespostaModal ?? true) &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoResposta, idUsuario.Value, chamado.CriadorChamadoId);
+        var podeEditarPrazoConclusao = (config?.ExibirPrazoConclusaoModal ?? true) &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId);
+
         return new JsonResult(new
         {
             success = true,
             id = chamado.Id,
+            numeroChamadoGrupo = chamado.NumeroChamadoGrupo,
             titulo = chamado.Titulo,
             descricao = chamado.Descricao,
             solucao = chamado.Solucao,
@@ -233,22 +317,69 @@ public class HomeModel : PageModel
                 podeEditarTitulo = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Titulo, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarDescricao = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Descricao, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarSolucao = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Solucao, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarSetorId = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.SetorId, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarOcorrenciaTipoId = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaTipoId, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarOcorrenciaCategoriaId = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaCategoriaId, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarOcorrenciaSubcategoriaId = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaSubcategoriaId, idUsuario.Value, chamado.CriadorChamadoId),
+                podeEditarSetorId = podeEditarSetor,
+                podeEditarOcorrenciaTipoId = podeEditarTipo,
+                podeEditarOcorrenciaCategoriaId = podeEditarCategoria,
+                podeEditarOcorrenciaSubcategoriaId = podeEditarSubcategoria,
                 podeEditarAnexoChamado = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.AnexoChamado, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarPrioridade = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Prioridade, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarCriticidade = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Criticidade, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarUrgencia = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Urgencia, idUsuario.Value, chamado.CriadorChamadoId),
                 podeEditarStatus = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Status, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarDataFinalizacao = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.DataFinalizacao, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarPrazoResposta = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoResposta, idUsuario.Value, chamado.CriadorChamadoId),
-                podeEditarPrazoConclusao = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId),
+                podeEditarDataFinalizacao = podeEditarDataFinalizacao,
+                podeEditarPrazoResposta = podeEditarPrazoResposta,
+                podeEditarPrazoConclusao = podeEditarPrazoConclusao,
                 podeEditarPublico = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Publico, idUsuario.Value, chamado.CriadorChamadoId),
                 podeExcluir = GrupoPermissionService.PodeExcluirChamado(contextoMembro.Permissao, idUsuario.Value, chamado.CriadorChamadoId)
             }
         });
+    }
+
+    public async Task<IActionResult> OnGetAnexoChamadoAsync(int chamadoId, int grupoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (chamadoId <= 0 || grupoId <= 0)
+            return NotFound();
+
+        var contextoMembro = await _grupoAuthorizationService
+            .ObterContextoMembroAsync(idUsuario.Value, grupoId);
+
+        if (contextoMembro == null)
+            return Forbid();
+
+        var chamado = await _context.Chamados
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == chamadoId && c.GrupoId == grupoId && c.Status != StatusChamado.Excluido);
+
+        if (chamado == null || string.IsNullOrWhiteSpace(chamado.AnexoChamado))
+            return NotFound();
+
+        if (!GrupoPermissionService.PodeVerChamado(
+                contextoMembro.Permissao,
+                chamado.Publico,
+                idUsuario.Value,
+                chamado.CriadorChamadoId))
+        {
+            return Forbid();
+        }
+
+        var nomeArquivo = Path.GetFileName(chamado.AnexoChamado);
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return NotFound();
+
+        var caminhoFisico = Path.Combine(
+            _environment.ContentRootPath,
+            "uploads_privados",
+            "chamados",
+            nomeArquivo);
+
+        if (!System.IO.File.Exists(caminhoFisico))
+            return NotFound();
+
+        return PhysicalFile(caminhoFisico, ObterContentTypeAnexo(nomeArquivo), nomeArquivo);
     }
 
     public async Task<IActionResult> OnPostNovoChamadoAsync(int grupoId)
@@ -355,6 +486,8 @@ public class HomeModel : PageModel
                         };
 
                         _context.Chamados.Add(chamado);
+                        await _context.SaveChangesAsync();
+                        await _notificacaoService.CriarNotificacoesChamadoAbertoAsync(chamado, idUsuario.Value);
 
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
@@ -381,22 +514,22 @@ public class HomeModel : PageModel
                 if (!EhErroDuplicidade(ex))
                 {
                     _logger.LogError(ex, "Erro de banco ao criar chamado no grupo {GrupoId}.", grupoId);
-                    return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
+                    return BadRequest(new { success = false, message = "Não foi possível criar o chamado no momento." });
                 }
             }
             catch (DbUpdateException ex)
             {
                 _logger.LogError(ex, "Erro de banco ao criar chamado no grupo {GrupoId}.", grupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível criar o chamado no momento." });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao criar chamado no grupo {GrupoId}.", grupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível criar o chamado no momento." });
             }
         }
 
-        return BadRequest(new { success = false, message = "Nao foi possivel criar o chamado no momento." });
+        return BadRequest(new { success = false, message = "Não foi possível criar o chamado no momento." });
     }
 
     public async Task<IActionResult> OnPostCriarTarefaDeChamadoAsync([FromBody] CriarTarefaDeChamadoRequest request)
@@ -406,7 +539,7 @@ public class HomeModel : PageModel
             return Unauthorized();
 
         if (request == null || request.GrupoId <= 0 || request.ChamadoId <= 0)
-            return BadRequest(new { success = false, message = "Parametros invalidos." });
+            return BadRequest(new { success = false, message = "Parâmetros inválidos." });
 
         var contextoMembro = await _grupoAuthorizationService
             .ObterContextoMembroAsync(idUsuario.Value, request.GrupoId);
@@ -419,7 +552,7 @@ public class HomeModel : PageModel
             .FirstOrDefaultAsync(c => c.Id == request.ChamadoId && c.GrupoId == request.GrupoId);
 
         if (chamado == null)
-            return NotFound(new { success = false, message = "Chamado nao encontrado." });
+            return NotFound(new { success = false, message = "Chamado não encontrado." });
 
         if (!GrupoPermissionService.PodeVerChamado(
                 contextoMembro.Permissao,
@@ -525,7 +658,7 @@ public class HomeModel : PageModel
                         {
                             CartaoTarefa = cartao,
                             UsuarioId = idUsuario.Value,
-                            TipoAcao = "Cartao criado a partir de chamado",
+                            TipoAcao = "Cartão criado a partir de chamado",
                             CampoAlterado = "chamado_id",
                             ValorNovo = chamado.Id.ToString(),
                             DataAcao = DateTime.UtcNow
@@ -573,7 +706,7 @@ public class HomeModel : PageModel
             return Unauthorized();
 
         if (grupoId <= 0)
-            return BadRequest(new { success = false, message = "Grupo invalido." });
+            return BadRequest(new { success = false, message = "Grupo inválido." });
 
         var contextoMembro = await _grupoAuthorizationService
             .ObterContextoMembroAsync(idUsuario.Value, grupoId);
@@ -639,7 +772,7 @@ public class HomeModel : PageModel
         }
 
         if (chamado.Status == StatusChamado.Cancelado)
-            return new JsonResult(new { success = false, message = "O chamado ja esta cancelado." });
+            return new JsonResult(new { success = false, message = "O chamado já está cancelado." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -659,6 +792,7 @@ public class HomeModel : PageModel
 
                     RegistrarTransicaoStatusChamado(chamado, statusAnterior, StatusChamado.Cancelado, idUsuario.Value, false, "Cancelamento manual");
                     RegistrarHistoricoAlteracaoStatus(chamado, statusAnterior, StatusChamado.Cancelado, idUsuario.Value, "StatusManual");
+                    _notificacaoService.CriarNotificacaoChamadoAlteradoParaDono(chamado, idUsuario.Value, "cancelamento");
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -678,7 +812,7 @@ public class HomeModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "Nao foi possivel cancelar o chamado no momento."
+                message = "Não foi possível cancelar o chamado no momento."
             });
         }
     }
@@ -692,7 +826,8 @@ public class HomeModel : PageModel
         if (request == null || request.Id <= 0)
             return new JsonResult(new { success = false, message = "Chamado inválido." });
 
-        var chamado = await _context.Chamados.FirstOrDefaultAsync(c => c.Id == request.Id);
+        var chamado = await _context.Chamados
+            .FirstOrDefaultAsync(c => c.Id == request.Id && c.Status != StatusChamado.Excluido);
         if (chamado == null)
             return new JsonResult(new { success = false, message = "Chamado não encontrado." });
 
@@ -726,7 +861,7 @@ public class HomeModel : PageModel
                 return new JsonResult(new { success = false, message = "Arquivo excede o limite de 5 MB." });
 
             if (!await AssinaturaArquivoPermitidaAsync(request.AnexoArquivo, extensao))
-                return new JsonResult(new { success = false, message = "Conteudo do arquivo nao permitido." });
+                return new JsonResult(new { success = false, message = "Conteúdo do arquivo não permitido." });
         }
 
         if (!GrupoPermissionService.PodeVerChamado(
@@ -755,10 +890,10 @@ public class HomeModel : PageModel
             return new JsonResult(new { success = false, message = "Data de finalizacao invalida." });
 
         if (!TryNormalizarDataHoraNullable(request.PrazoResposta, out var prazoResposta))
-            return new JsonResult(new { success = false, message = "Prazo de resposta invalido." });
+            return new JsonResult(new { success = false, message = "Prazo de resposta inválido." });
 
         if (!TryNormalizarDataHoraNullable(request.PrazoConclusao, out var prazoConclusao))
-            return new JsonResult(new { success = false, message = "Prazo de conclusao invalido." });
+            return new JsonResult(new { success = false, message = "Prazo de conclusão inválido." });
 
         if (request.SetorId.HasValue)
         {
@@ -856,8 +991,96 @@ public class HomeModel : PageModel
             }
         }
 
+        var statusPermitidosEmEdicao = new HashSet<StatusChamado>
+        {
+            StatusChamado.Aberto,
+            StatusChamado.EmAndamento,
+            StatusChamado.Pendente,
+            StatusChamado.Concluido,
+            StatusChamado.Fechado,
+            StatusChamado.Reaberto,
+            StatusChamado.Cancelado
+        };
+
+        StatusChamado? novoStatus = null;
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (!Enum.TryParse<StatusChamado>(request.Status, out var statusConvertido))
+                return new JsonResult(new { success = false, message = "Status inválido." });
+
+            if (chamado.Status != statusConvertido && !statusPermitidosEmEdicao.Contains(statusConvertido))
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Status inv\u00e1lido para edi\u00e7\u00e3o manual."
+                });
+            }
+
+            novoStatus = statusConvertido;
+        }
+
+        var config = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GrupoId == chamado.GrupoId);
+
+        var publicoSolicitado = request.Publico;
+        if (config != null)
+        {
+            if (config.ObrigarSetor && request.SetorId == null)
+                return new JsonResult(new { success = false, message = "O setor \u00e9 obrigat\u00f3rio para este grupo." });
+
+            if (config.ObrigarTipoOcorrencia && request.OcorrenciaTipoId == null)
+                return new JsonResult(new { success = false, message = "O tipo de ocorr\u00eancia \u00e9 obrigat\u00f3rio para este grupo." });
+
+            if (config.ObrigarCategoria && request.OcorrenciaCategoriaId == null)
+                return new JsonResult(new { success = false, message = "A categoria \u00e9 obrigat\u00f3ria para este grupo." });
+
+            if (config.ObrigarSubcategoria && request.OcorrenciaSubcategoriaId == null)
+                return new JsonResult(new { success = false, message = "A subcategoria \u00e9 obrigat\u00f3ria para este grupo." });
+
+            if (!config.PermitirChamadoPublico && publicoSolicitado)
+                publicoSolicitado = false;
+
+            var podeEditarStatus = GrupoPermissionService.PodeEditarCampoChamado(
+                contextoMembro.Permissao,
+                ChamadoCampoEditavel.Status,
+                idUsuario.Value,
+                chamado.CriadorChamadoId);
+
+            var statusAposSalvar = podeEditarStatus && novoStatus.HasValue ? novoStatus.Value : chamado.Status;
+            if (config.ExigirSolucaoParaConcluir &&
+                statusAposSalvar is StatusChamado.Concluido or StatusChamado.Fechado &&
+                string.IsNullOrWhiteSpace(request.Solucao))
+            {
+                return new JsonResult(new { success = false, message = "Informe a solu\u00e7\u00e3o antes de concluir o chamado." });
+            }
+        }
+
+        var possuiSetor = await _context.Setores
+            .AsNoTracking()
+            .AnyAsync(s => s.GrupoId == chamado.GrupoId);
+
+        var possuiTipoOcorrencia = await _context.OcorrenciasTipo
+            .AsNoTracking()
+            .AnyAsync(t => t.GrupoId == chamado.GrupoId);
+
+        var possuiCategoria = await (
+            from categoria in _context.OcorrenciasCategoria.AsNoTracking()
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+            where tipo.GrupoId == chamado.GrupoId
+            select categoria.Id).AnyAsync();
+
+        var possuiSubcategoria = await (
+            from subcategoria in _context.OcorrenciasSubcategoria.AsNoTracking()
+            join categoria in _context.OcorrenciasCategoria.AsNoTracking() on subcategoria.CategoriaId equals categoria.Id
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+            where tipo.GrupoId == chamado.GrupoId
+            select subcategoria.Id).AnyAsync();
+
         var houveAlteracao = false;
         var statusAnteriorOriginal = chamado.Status;
+        var publicoAnteriorOriginal = chamado.Publico;
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Titulo, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.Titulo != request.Titulo)
@@ -880,28 +1103,32 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.SetorId, idUsuario.Value, chamado.CriadorChamadoId)
+        if (possuiSetor &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.SetorId, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.SetorId != request.SetorId)
         {
             chamado.SetorId = request.SetorId;
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaTipoId, idUsuario.Value, chamado.CriadorChamadoId)
+        if (possuiTipoOcorrencia &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaTipoId, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.OcorrenciaTipoId != request.OcorrenciaTipoId)
         {
             chamado.OcorrenciaTipoId = request.OcorrenciaTipoId;
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaCategoriaId, idUsuario.Value, chamado.CriadorChamadoId)
+        if (possuiCategoria &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaCategoriaId, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.OcorrenciaCategoriaId != request.OcorrenciaCategoriaId)
         {
             chamado.OcorrenciaCategoriaId = request.OcorrenciaCategoriaId;
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaSubcategoriaId, idUsuario.Value, chamado.CriadorChamadoId)
+        if (possuiSubcategoria &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.OcorrenciaSubcategoriaId, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.OcorrenciaSubcategoriaId != request.OcorrenciaSubcategoriaId)
         {
             chamado.OcorrenciaSubcategoriaId = request.OcorrenciaSubcategoriaId;
@@ -938,15 +1165,6 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        StatusChamado? novoStatus = null;
-        if (!string.IsNullOrWhiteSpace(request.Status))
-        {
-            if (!Enum.TryParse<StatusChamado>(request.Status, out var statusConvertido))
-                return new JsonResult(new { success = false, message = "Status invalido." });
-
-            novoStatus = statusConvertido;
-        }
-
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Status, idUsuario.Value, chamado.CriadorChamadoId)
             && novoStatus.HasValue
             && chamado.Status != novoStatus.Value)
@@ -978,7 +1196,8 @@ public class HomeModel : PageModel
             contextoMembro.Permissao,
             ChamadoCampoEditavel.DataFinalizacao,
             idUsuario.Value,
-            chamado.CriadorChamadoId);
+            chamado.CriadorChamadoId) &&
+            (config?.ExibirDataFinalizacaoModal ?? true);
 
         if ((podeEditarDataFinalizacao || dataFinalizacaoFoiAjustadaAutomaticamente)
             && chamado.DataFinalizacao != dataFinalizacao)
@@ -987,14 +1206,16 @@ public class HomeModel : PageModel
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoResposta, idUsuario.Value, chamado.CriadorChamadoId)
+        if ((config?.ExibirPrazoRespostaModal ?? true) &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoResposta, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.PrazoResposta != prazoResposta)
         {
             chamado.PrazoResposta = prazoResposta;
             houveAlteracao = true;
         }
 
-        if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId)
+        if ((config?.ExibirPrazoConclusaoModal ?? true) &&
+            GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId)
             && chamado.PrazoConclusao != prazoConclusao)
         {
             chamado.PrazoConclusao = prazoConclusao;
@@ -1002,9 +1223,9 @@ public class HomeModel : PageModel
         }
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Publico, idUsuario.Value, chamado.CriadorChamadoId)
-            && chamado.Publico != request.Publico)
+            && chamado.Publico != publicoSolicitado)
         {
-            chamado.Publico = request.Publico;
+            chamado.Publico = publicoSolicitado;
             houveAlteracao = true;
         }
 
@@ -1012,7 +1233,7 @@ public class HomeModel : PageModel
             && request.AnexoArquivo != null
             && request.AnexoArquivo.Length > 0)
         {
-            var uploadsRoot = Path.Combine(_environment.WebRootPath, "uploads", "chamados");
+            var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados");
             Directory.CreateDirectory(uploadsRoot);
 
             var extensao = Path.GetExtension(request.AnexoArquivo.FileName).ToLowerInvariant();
@@ -1021,7 +1242,7 @@ public class HomeModel : PageModel
                 return new JsonResult(new { success = false, message = "Tipo de arquivo não permitido." });
 
             if (!await AssinaturaArquivoPermitidaAsync(request.AnexoArquivo, extensao))
-                return new JsonResult(new { success = false, message = "Conteudo do arquivo nao permitido." });
+                return new JsonResult(new { success = false, message = "Conteúdo do arquivo não permitido." });
 
             var nomeArquivo = $"{Guid.NewGuid()}{extensao}";
             var caminhoFisico = Path.Combine(uploadsRoot, nomeArquivo);
@@ -1029,7 +1250,7 @@ public class HomeModel : PageModel
             await using var stream = new FileStream(caminhoFisico, FileMode.Create);
             await request.AnexoArquivo.CopyToAsync(stream);
 
-            chamado.AnexoChamado = $"/uploads/chamados/{nomeArquivo}";
+            chamado.AnexoChamado = nomeArquivo;
             houveAlteracao = true;
         }
 
@@ -1058,6 +1279,11 @@ public class HomeModel : PageModel
                         RegistrarHistoricoAlteracaoStatus(chamado, statusAnteriorOriginal, chamado.Status, idUsuario.Value, "StatusManual");
                     }
 
+                    _notificacaoService.CriarNotificacaoChamadoAlteradoParaDono(chamado, idUsuario.Value, "alteracao");
+
+                    if (!publicoAnteriorOriginal && chamado.Publico)
+                        await _notificacaoService.CriarNotificacoesChamadoPublicoAdicionadoAsync(chamado, idUsuario.Value);
+
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -1080,9 +1306,279 @@ public class HomeModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "Nao foi possivel salvar o chamado no momento."
+                message = "Não foi possível salvar o chamado no momento."
             });
         }
+    }
+
+    public async Task<IActionResult> OnGetComentariosChamadoAsync(int chamadoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+
+        var chamado = acesso.Chamado!;
+        var comentariosBase = await (
+            from comentario in _context.ComentariosChamados.AsNoTracking()
+            join usuario in _context.Usuarios.AsNoTracking() on comentario.UsuarioId equals usuario.Id
+            join info in _context.InfoUsuariosGrupos.AsNoTracking()
+                on new { UsuarioId = comentario.UsuarioId, GrupoId = chamado.GrupoId }
+                equals new { info.UsuarioId, info.GrupoId } into infoJoin
+            from infoUsuario in infoJoin.DefaultIfEmpty()
+            where comentario.ChamadoId == chamado.Id
+            orderby comentario.DataComentario ascending, comentario.Id ascending
+            select new
+            {
+                comentario.Id,
+                comentario.UsuarioId,
+                Autor = infoUsuario != null && !string.IsNullOrWhiteSpace(infoUsuario.Apelido)
+                    ? infoUsuario.Apelido
+                    : usuario.NomeUsuario,
+                Texto = comentario.Mensagem,
+                comentario.DataComentario,
+                comentario.AnexoComentario
+            })
+            .ToListAsync();
+
+        var comentarios = comentariosBase.Select(comentario => new
+        {
+            id = comentario.Id,
+            usuarioId = comentario.UsuarioId,
+            autor = comentario.Autor,
+            texto = comentario.Texto,
+            dataComentario = comentario.DataComentario,
+            anexoUrl = string.IsNullOrWhiteSpace(comentario.AnexoComentario)
+                ? null
+                : Url.Page("/Menu/Home", "AnexoComentarioChamado", new
+                {
+                    grupoId = chamado.GrupoId,
+                    chamadoId = chamado.Id,
+                    comentarioId = comentario.Id
+                })
+        }).ToList();
+
+        return new JsonResult(new { success = true, dados = new { chamadoId = chamado.Id, comentarios } });
+    }
+
+    public async Task<IActionResult> OnPostAdicionarComentarioChamadoAsync([FromForm] AdicionarComentarioChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamado inválido." });
+
+        var mensagem = (request.Mensagem ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(mensagem) && request.AnexoImagem == null)
+            return new JsonResult(new { success = false, message = "Informe um comentário ou selecione uma imagem." });
+
+        if (mensagem.Length > 500)
+            return new JsonResult(new { success = false, message = "O comentário não pode exceder 500 caracteres." });
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+
+        string? nomeArquivo = null;
+        string? caminhoArquivoSalvo = null;
+        if (request.AnexoImagem != null && request.AnexoImagem.Length > 0)
+        {
+            if (request.AnexoImagem.Length > 5 * 1024 * 1024)
+                return new JsonResult(new { success = false, message = "A imagem do comentário deve ter no máximo 5 MB." });
+
+            var extensao = Path.GetExtension(request.AnexoImagem.FileName).ToLowerInvariant();
+            var extensoesPermitidas = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+            if (!extensoesPermitidas.Contains(extensao))
+                return new JsonResult(new { success = false, message = "Formato de imagem não permitido." });
+
+            if (!await AssinaturaArquivoPermitidaAsync(request.AnexoImagem, extensao))
+                return new JsonResult(new { success = false, message = "Arquivo de imagem inválido." });
+
+            nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
+            var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
+            Directory.CreateDirectory(uploadsRoot);
+            caminhoArquivoSalvo = Path.Combine(uploadsRoot, nomeArquivo);
+            await using var stream = System.IO.File.Create(caminhoArquivoSalvo);
+            await request.AnexoImagem.CopyToAsync(stream);
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var usuario = await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value);
+                    var comentario = new ComentarioChamado
+                    {
+                        ChamadoId = acesso.Chamado!.Id,
+                        Chamado = acesso.Chamado,
+                        UsuarioId = idUsuario.Value,
+                        Usuario = usuario,
+                        Mensagem = string.IsNullOrWhiteSpace(mensagem) ? "Imagem anexada." : mensagem,
+                        AnexoComentario = nomeArquivo,
+                        DataComentario = DateTime.UtcNow
+                    };
+
+                    _context.ComentariosChamados.Add(comentario);
+                    _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+                    {
+                        ChamadoId = acesso.Chamado.Id,
+                        GrupoId = acesso.Chamado.GrupoId,
+                        UsuarioId = idUsuario.Value,
+                        CampoAlterado = "Comentario",
+                        ValorAlterado = nomeArquivo == null ? comentario.Mensagem : $"{comentario.Mensagem} [anexo]",
+                        TipoAlteracao = "ComentarioChamado",
+                        DataAlteracao = DateTime.UtcNow
+                    });
+                    await _notificacaoService.CriarNotificacoesComentarioChamadoAsync(acesso.Chamado, idUsuario.Value, ReferenciaTipoComentarioChamado);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        dados = new
+                        {
+                            chamadoId = acesso.Chamado.Id,
+                            comentarioId = comentario.Id,
+                            message = "Comentário adicionado com sucesso."
+                        }
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            if (!string.IsNullOrWhiteSpace(caminhoArquivoSalvo) && System.IO.File.Exists(caminhoArquivoSalvo))
+                System.IO.File.Delete(caminhoArquivoSalvo);
+
+            _logger.LogError(ex, "Erro ao adicionar comentario ao chamado {ChamadoId}.", request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível adicionar o comentário." });
+        }
+    }
+
+    public async Task<IActionResult> OnGetAnexoComentarioChamadoAsync(int chamadoId, int comentarioId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
+        if (!acesso.Success)
+            return Forbid();
+
+        var comentario = await _context.ComentariosChamados
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == comentarioId && c.ChamadoId == chamadoId);
+
+        if (comentario == null || string.IsNullOrWhiteSpace(comentario.AnexoComentario))
+            return NotFound();
+
+        var caminho = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios", comentario.AnexoComentario);
+        if (!System.IO.File.Exists(caminho))
+            return NotFound();
+
+        return PhysicalFile(caminho, ObterContentTypeAnexo(comentario.AnexoComentario), comentario.AnexoComentario);
+    }
+
+    public async Task<IActionResult> OnPostMarcarComentariosVisualizadosAsync([FromBody] MarcarComentariosVisualizadosRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamado inválido." });
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var notificacoes = await _context.Notificacoes
+                        .Where(n => n.UsuarioId == idUsuario.Value &&
+                                    n.GrupoId == GrupoId &&
+                                    !n.Lida &&
+                                    n.Tipo == TipoNotificacao.Chamado &&
+                                    (n.ReferenciaTipo == ReferenciaTipoComentarioChamado ||
+                                     n.ReferenciaTipo == ReferenciaTipoComentarioHistorico) &&
+                                    n.ReferenciaId == request.ChamadoId)
+                        .ToListAsync();
+
+                    var agora = DateTime.UtcNow;
+                    foreach (var notificacao in notificacoes)
+                    {
+                        notificacao.Lida = true;
+                        notificacao.DataLeitura = agora;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        dados = new { chamadoId = request.ChamadoId }
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao marcar comentarios visualizados do chamado {ChamadoId}.", request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível atualizar a visualização dos comentários." });
+        }
+    }
+
+    private async Task<ChamadoAcessoResultado> ObterChamadoComAcessoAsync(int usuarioId, int grupoId, int chamadoId)
+    {
+        if (grupoId <= 0 || chamadoId <= 0)
+            return ChamadoAcessoResultado.Fail("Parâmetros inválidos.");
+
+        var chamado = await _context.Chamados
+            .FirstOrDefaultAsync(c => c.Id == chamadoId && c.GrupoId == grupoId && c.Status != StatusChamado.Excluido);
+
+        if (chamado == null)
+            return ChamadoAcessoResultado.Fail("Chamado não encontrado.");
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(usuarioId, grupoId);
+        if (contextoMembro == null)
+            return ChamadoAcessoResultado.Fail("Você não pertence a este grupo.");
+
+        if (!GrupoPermissionService.PodeVerChamado(contextoMembro.Permissao, chamado.Publico, usuarioId, chamado.CriadorChamadoId))
+            return ChamadoAcessoResultado.Fail("Você não tem permissão para visualizar este chamado.");
+
+        return ChamadoAcessoResultado.Ok(chamado, contextoMembro);
     }
 
     private void RegistrarTransicaoStatusChamado(
@@ -1137,9 +1633,51 @@ public class HomeModel : PageModel
         return int.TryParse(claim, out var id) ? id : null;
     }
 
+    private async Task AtualizarUltimoAcessoGrupoAsync(int usuarioId, int grupoId)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var vinculo = await _context.UsuariosGrupos
+                    .FirstOrDefaultAsync(ug => ug.UsuarioId == usuarioId && ug.GrupoId == grupoId && ug.Ativo);
+
+                if (vinculo != null)
+                {
+                    vinculo.DataUltimoAcesso = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+    }
+
+    private static string ObterContentTypeAnexo(string nomeArquivo)
+    {
+        return Path.GetExtension(nomeArquivo).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".pdf" => "application/pdf",
+            _ => "application/octet-stream"
+        };
+    }
+
     private static async Task<bool> AssinaturaArquivoPermitidaAsync(IFormFile arquivo, string extensao)
     {
-        var buffer = new byte[8];
+        var buffer = new byte[12];
         await using var stream = arquivo.OpenReadStream();
         var bytesLidos = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length));
 
@@ -1163,6 +1701,22 @@ public class HomeModel : PageModel
                       buffer[1] == 0x50 &&
                       buffer[2] == 0x44 &&
                       buffer[3] == 0x46,
+            ".gif" => bytesLidos >= 6 &&
+                      buffer[0] == 0x47 &&
+                      buffer[1] == 0x49 &&
+                      buffer[2] == 0x46 &&
+                      buffer[3] == 0x38 &&
+                      (buffer[4] == 0x37 || buffer[4] == 0x39) &&
+                      buffer[5] == 0x61,
+            ".webp" => bytesLidos >= 12 &&
+                       buffer[0] == 0x52 &&
+                       buffer[1] == 0x49 &&
+                       buffer[2] == 0x46 &&
+                       buffer[3] == 0x46 &&
+                       buffer[8] == 0x57 &&
+                       buffer[9] == 0x45 &&
+                       buffer[10] == 0x42 &&
+                       buffer[11] == 0x50,
             _ => false
         };
     }
@@ -1171,21 +1725,21 @@ public class HomeModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "Usuario nao autenticado." });
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
         if (GrupoId <= 0 || tipoId <= 0)
-            return new JsonResult(new { success = false, message = "Parametros invalidos." });
+            return new JsonResult(new { success = false, message = "Parâmetros inválidos." });
 
         var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
         if (contextoMembro == null)
-            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+            return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
 
         var tipoValido = await _context.OcorrenciasTipo
             .AsNoTracking()
             .AnyAsync(t => t.Id == tipoId && t.GrupoId == GrupoId);
 
         if (!tipoValido)
-            return new JsonResult(new { success = false, message = "Tipo de ocorrencia invalido." });
+            return new JsonResult(new { success = false, message = "Tipo de ocorrência inválido." });
 
         var categorias = await ObterCategoriasPorTipoAsync(tipoId);
 
@@ -1196,14 +1750,14 @@ public class HomeModel : PageModel
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
-            return new JsonResult(new { success = false, message = "Usuario nao autenticado." });
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
         if (GrupoId <= 0 || categoriaId <= 0)
-            return new JsonResult(new { success = false, message = "Parametros invalidos." });
+            return new JsonResult(new { success = false, message = "Parâmetros inválidos." });
 
         var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
         if (contextoMembro == null)
-            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+            return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
 
         var categoriaValida = await (
             from categoria in _context.OcorrenciasCategoria.AsNoTracking()
@@ -1445,6 +1999,18 @@ public class HomeModel : PageModel
         public int? ColunaId { get; set; }
     }
 
+    public class AdicionarComentarioChamadoRequest
+    {
+        public int ChamadoId { get; set; }
+        public string? Mensagem { get; set; }
+        public IFormFile? AnexoImagem { get; set; }
+    }
+
+    public class MarcarComentariosVisualizadosRequest
+    {
+        public int ChamadoId { get; set; }
+    }
+
     public class EditarChamadoRequest
     {
         public int Id { get; set; }
@@ -1465,5 +2031,19 @@ public class HomeModel : PageModel
         public string? PrazoConclusao { get; set; }
         public bool Publico { get; set; }
         public IFormFile? AnexoArquivo { get; set; }
+    }
+
+    private class ChamadoAcessoResultado
+    {
+        public bool Success { get; init; }
+        public string? Message { get; init; }
+        public Chamado? Chamado { get; init; }
+        public GrupoMemberContext? ContextoMembro { get; init; }
+
+        public static ChamadoAcessoResultado Ok(Chamado chamado, GrupoMemberContext contextoMembro) =>
+            new() { Success = true, Chamado = chamado, ContextoMembro = contextoMembro };
+
+        public static ChamadoAcessoResultado Fail(string message) =>
+            new() { Success = false, Message = message };
     }
 }

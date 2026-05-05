@@ -83,6 +83,8 @@
                 <strong>@(Model.NomeUsuarioLogado ?? "Usuario")</strong>
             </a>
             <ul class="dropdown-menu text-small shadow">
+                <li><a class="dropdown-item" asp-page="/Account/Profile">Perfil</a></li>
+                <li><hr class="dropdown-divider" /></li>
                 <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
             </ul>
         </div>
@@ -93,7 +95,7 @@
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
                     <div>
-                        <div class="text-muted small mb-1">Configuracoes do grupo atual</div>
+                        <div class="text-muted small mb-1">Configurações do grupo atual</div>
                         <h1 class="h3 mb-1">@Model.GrupoAtual.Nome</h1>
                         <p class="text-muted mb-0">Centralize identidade, estrutura, regras, SLA, permissoes e auditoria deste grupo.</p>
                     </div>
@@ -180,9 +182,9 @@
                         @Switch("regraObrigarCategoria", "Obrigar categoria", Model.Configuracao.ObrigarCategoria)
                         @Switch("regraObrigarSubcategoria", "Obrigar subcategoria", Model.Configuracao.ObrigarSubcategoria)
                         @Switch("regraPermitirPublico", "Permitir chamados publicos", Model.Configuracao.PermitirChamadoPublico)
-                        @Switch("regraExigirSolucao", "Exigir solucao antes de concluir", Model.Configuracao.ExigirSolucaoParaConcluir)
+                        @Switch("regraExigirSolucao", "Exigir solução antes de concluir", Model.Configuracao.ExigirSolucaoParaConcluir)
                         <div class="col-md-4">
-                            <label class="form-label">Fechar concluidos apos dias</label>
+                            <label class="form-label">Fechar concluídos após dias</label>
                             <input type="number" min="0" max="365" class="form-control" id="regraFechamento" value="@Model.Configuracao.DiasParaFechamentoAutomatico">
                         </div>
                     </div>
@@ -193,9 +195,12 @@
             <section class="tab-pane fade" id="tabSla">
                 <div class="card section-card"><div class="card-body">
                     <div class="row g-3">
-                        @Switch("slaAtivo", "Mudar automaticamente para pendente quando houver prazo de conclusao", Model.Configuracao.AutomatizarPendentePorPrazoConclusao)
+                        @Switch("slaAtivo", "Mudar automaticamente para pendente quando houver prazo de conclusão", Model.Configuracao.AutomatizarPendentePorPrazoConclusao)
                         @Switch("slaNotificarAdmins", "Notificar administradores sobre risco de SLA", Model.Configuracao.NotificarAdministradoresSla)
-                        <div class="col-md-4"><label class="form-label">Horas apos vencimento para pendente</label><input type="number" min="0" max="720" class="form-control" id="slaHorasApos" value="@Model.Configuracao.HorasAposVencimentoParaPendente"></div>
+                        @Switch("slaExibirDataFinalizacao", "Exibir finalizacao no modal de edição", Model.Configuracao.ExibirDataFinalizacaoModal)
+                        @Switch("slaExibirPrazoResposta", "Exibir prazo de resposta no modal de edição", Model.Configuracao.ExibirPrazoRespostaModal)
+                        @Switch("slaExibirPrazoConclusao", "Exibir prazo de conclusão no modal de edição", Model.Configuracao.ExibirPrazoConclusaoModal)
+                        <div class="col-md-4"><label class="form-label">Horas após vencimento para pendente</label><input type="number" min="0" max="720" class="form-control" id="slaHorasApos" value="@Model.Configuracao.HorasAposVencimentoParaPendente"></div>
                         <div class="col-md-4"><label class="form-label">Horas antes do prazo para alerta</label><input type="number" min="0" max="720" class="form-control" id="slaHorasAntes" value="@Model.Configuracao.HorasAntesPrazoParaAlerta"></div>
                     </div>
                     <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" id="btnSalvarSla">Salvar SLA</button></div>
@@ -239,10 +244,31 @@
 const grupoId = document.getElementById("grupoIdAtual").value;
 const token = document.getElementById("requestVerificationToken").value;
 const feedback = document.getElementById("feedbackGrupo");
+const grupoTabStorageKey = `grupo:${grupoId}:abaAtiva`;
+
+restaurarAbaGrupo();
+document.querySelectorAll("#grupoTabs [data-bs-toggle='tab']").forEach(tab => {
+    tab.addEventListener("shown.bs.tab", event => {
+        const target = event.target?.getAttribute("data-bs-target");
+        if (target) sessionStorage.setItem(grupoTabStorageKey, target);
+    });
+});
 
 function showFeedback(type, text) {
     feedback.className = `alert alert-${type}`;
     feedback.textContent = text;
+}
+
+function getAbaGrupoAtiva() {
+    return document.querySelector("#grupoTabs .nav-link.active")?.getAttribute("data-bs-target") || "#tabGeral";
+}
+
+function restaurarAbaGrupo() {
+    const target = sessionStorage.getItem(grupoTabStorageKey);
+    if (!target) return;
+
+    const trigger = document.querySelector(`#grupoTabs [data-bs-target='${CSS.escape(target)}']`);
+    if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
 }
 async function post(handler, body) {
     const response = await fetch(`/Menu/Group?handler=${handler}&grupoId=${grupoId}`, {
@@ -251,8 +277,9 @@ async function post(handler, body) {
         body: JSON.stringify(body)
     });
     const data = await response.json().catch(() => ({ success:false, message:"Erro inesperado." }));
-    if (!response.ok || !data.success) throw new Error(data.message || "Nao foi possivel concluir.");
+    if (!response.ok || !data.success) throw new Error(data.message || "Não foi possível concluir.");
     showFeedback("success", data.message || "Salvo.");
+    sessionStorage.setItem(grupoTabStorageKey, getAbaGrupoAtiva());
     setTimeout(() => window.location.reload(), 650);
 }
 document.getElementById("btnSalvarGeral")?.addEventListener("click", () => post("SalvarGeral", {
@@ -265,6 +292,8 @@ document.getElementById("btnSalvarRegras")?.addEventListener("click", () => post
 }).catch(e => showFeedback("danger", e.message)));
 document.getElementById("btnSalvarSla")?.addEventListener("click", () => post("SalvarSla", {
     automatizarPendentePorPrazoConclusao: slaAtivo.checked, notificarAdministradoresSla: slaNotificarAdmins.checked,
+    exibirDataFinalizacaoModal: slaExibirDataFinalizacao.checked, exibirPrazoRespostaModal: slaExibirPrazoResposta.checked,
+    exibirPrazoConclusaoModal: slaExibirPrazoConclusao.checked,
     horasAposVencimentoParaPendente: slaHorasApos.value ? parseInt(slaHorasApos.value) : null,
     horasAntesPrazoParaAlerta: slaHorasAntes.value ? parseInt(slaHorasAntes.value) : null
 }).catch(e => showFeedback("danger", e.message)));

@@ -4,6 +4,7 @@
 @using CallStationApp.Models
 @{
   ViewData["Title"] = "Home";
+    ViewData["ActiveMenu"] = "Home";
 }
 
 <html lang="pt-br" data-bs-theme="light">
@@ -22,6 +23,9 @@
        body {
         min-height: 100vh;
         min-height: -webkit-fill-available;
+        background:
+          radial-gradient(circle at 16% 12%, rgba(59, 130, 246, .08), transparent 28rem),
+          linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%);
         overflow-y: auto; /* Permite scroll no body se necessário, mas isolado no conteúdo */
       }
 
@@ -41,7 +45,7 @@
 
       .content-wrapper {
         margin-left: 17.5rem; /* Espaço para a sidebar fixa */
-        padding: 1rem; /* Espaço interno no conteúdo */
+        padding: 1rem 1.35rem; /* Espaço interno no conteúdo */
         min-height: 100vh; /* Garante que o conteúdo ocupe a altura total */
         overflow-y: auto; /* Ativa scroll vertical apenas no conteúdo */
       }
@@ -181,37 +185,46 @@
       }
 
       .ticket-card {
+      position: relative;
       display: flex;
       align-items: center;
-      padding: 0.75rem 1.25rem;
+      padding: 0.9rem 1.55rem;
       border-radius: 5rem;
       width: 100%;
       max-width: 100%;
-      min-height: 6.25rem;
+      min-height: 6.75rem;
       font-weight: bold;
       font-size: clamp(1.05rem, 1.2vw + 0.7rem, 2rem);
       color: white;
-      gap: 1rem;
-      box-shadow: 0 0.25rem 0.625rem rgba(0, 0, 0, 0.1);
+      gap: 1.15rem;
+      border: 1px solid rgba(255, 255, 255, .42);
+      box-shadow: 0 1.05rem 2.1rem rgba(15, 23, 42, .16);
       animation: aparecer 0.3s ease-out;
       cursor: pointer;
       overflow: hidden;
+      transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+    }
+
+    .ticket-card:hover {
+      transform: translateY(-0.12rem);
+      box-shadow: 0 1.35rem 2.6rem rgba(15, 23, 42, .2);
+      filter: saturate(1.05);
     }
 
     .ticket-aberto {
-      background: linear-gradient(to right, #1cae88, #78d64b);
+      background: linear-gradient(135deg, #0f9f7a, #2fd37e 55%, #9be15d);
     }
 
     .ticket-pendente {
-      background: linear-gradient(to right, #d6a800, #f2d43d);
+      background: linear-gradient(135deg, #b7791f, #f1b82d 55%, #ffe066);
     }
 
     .ticket-em-andamento {
-      background: linear-gradient(to right, #1677c8, #4ea3f1);
+      background: linear-gradient(135deg, #1557b0, #2686df 55%, #63c7ff);
     }
 
     .ticket-reaberto {
-      background: linear-gradient(to right, #0f8f62, #49c17f);
+      background: linear-gradient(135deg, #116149, #16a06d 55%, #58d08a);
     }
 
       @@keyframes aparecer {
@@ -226,10 +239,11 @@
       }
 
       .ticket-icon {
-        width: 5rem;
-        height: 5rem;
+        width: 5.35rem;
+        height: 5.35rem;
         border-radius: 50%;
         flex-shrink: 0;
+        filter: drop-shadow(0 .35rem .55rem rgba(15, 23, 42, .18));
       }
 
       .ticket-text {
@@ -241,17 +255,47 @@
         word-break: break-word;
       }
 
+      .ticket-comment-alert {
+        position: absolute;
+        top: 1.28rem;
+        right: 1.82rem;
+        width: .72rem;
+        height: .72rem;
+        border-radius: 999px;
+        background: #dc3545;
+        border: 2px solid rgba(255,255,255,.95);
+        box-shadow: 0 .2rem .6rem rgba(15, 23, 42, .25);
+        z-index: 2;
+      }
+
+      .ticket-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.15rem;
+        height: 2.15rem;
+        margin-left: auto;
+        padding: 0 .7rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .94);
+        color: #0f172a;
+        font-size: .9rem;
+        font-weight: 900;
+        box-shadow: 0 .25rem .65rem rgba(15, 23, 42, .15);
+        flex-shrink: 0;
+      }
+
       #chamados-container {
         display: flex;
         flex-direction: column;
-        gap: 1.25rem;
-        padding: 1.5rem;
+        gap: 1.35rem;
+        padding: 1.2rem .85rem 1.5rem 1.2rem;
       }
 
       #chamados-container > .d-flex.align-items-center {
         width: 100%;
         max-width: 100%;
-        padding: 0 1.25rem;
+        padding: 0 1.55rem;
       }
 
       .logo-img {
@@ -275,13 +319,214 @@
       }
 
       .btn-novo-chamado {
-        width: 5rem;
-        height: 5rem;
+        width: 5.35rem;
+        height: 5.35rem;
       }
 
       .btn-novo-chamado img {
         max-width: 100%;
         height: auto;
+      }
+
+      .chamado-editor-card {
+        border: 1px solid rgba(148, 163, 184, .28);
+        border-radius: 1.5rem;
+        background: rgba(255, 255, 255, .88);
+        box-shadow: 0 1.15rem 2.8rem rgba(15, 23, 42, .12);
+        backdrop-filter: blur(10px);
+        overflow: hidden;
+      }
+
+      .chamado-editor-card .card-body {
+        padding: 1rem 1.05rem 1.1rem;
+      }
+
+      #formEdicaoChamado {
+        margin-top: .65rem !important;
+      }
+
+      #formEdicaoChamado .mb-2 {
+        margin-bottom: .55rem !important;
+      }
+
+      #formEdicaoChamado .row {
+        --bs-gutter-x: .65rem;
+        --bs-gutter-y: .15rem;
+      }
+
+      #formEdicaoChamado .form-label {
+        margin-bottom: .22rem;
+        color: #475569;
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .02em;
+      }
+
+      #formEdicaoChamado .form-control,
+      #formEdicaoChamado .form-select {
+        border-radius: .95rem;
+        border-color: #d8e0ea;
+        background-color: rgba(248, 250, 252, .92);
+        box-shadow: inset 0 .08rem .16rem rgba(15, 23, 42, .03);
+      }
+
+      #formEdicaoChamado .form-control:focus,
+      #formEdicaoChamado .form-select:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 .18rem rgba(96, 165, 250, .18);
+      }
+
+      #formEdicaoChamado textarea.form-control {
+        min-height: 4.8rem;
+        resize: vertical;
+      }
+
+      #formEdicaoChamado .form-text,
+      #textoDataCriacao {
+        font-size: .78rem;
+      }
+
+      #wrapEditPublico {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        border-radius: 1rem;
+        background: rgba(37, 99, 235, .07);
+        padding: .65rem .85rem .65rem 3rem;
+        min-height: 3.25rem;
+        overflow: visible;
+      }
+
+      #wrapEditPublico .form-check-input {
+        margin-top: 0;
+        margin-left: -2.25rem;
+        flex-shrink: 0;
+      }
+
+      #wrapEditPublico .form-check-label {
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      .comment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        max-height: 30rem;
+        overflow-y: auto;
+        padding-left: .45rem;
+      }
+
+      .comment-modal-grid {
+        display: grid;
+        grid-template-columns: minmax(16rem, .9fr) minmax(18rem, 1.1fr);
+        gap: 1.25rem;
+        align-items: stretch;
+      }
+
+      .comment-compose-panel {
+        border: 1px solid #e5e7eb;
+        border-radius: .8rem;
+        background: #f8fafc;
+        padding: 1rem;
+      }
+
+      .comment-compose-panel textarea {
+        min-height: 14rem;
+        resize: vertical;
+      }
+
+      .comment-timeline-panel {
+        border-left: 1px solid #e5e7eb;
+        padding-left: 1.25rem;
+      }
+
+      .comment-item {
+        position: relative;
+        padding: 0 0 1rem 1.2rem;
+      }
+
+      .comment-item::before {
+        content: "";
+        position: absolute;
+        left: .18rem;
+        top: .4rem;
+        width: .55rem;
+        height: .55rem;
+        border-radius: 999px;
+        background: #2563eb;
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 1px #bfdbfe;
+      }
+
+      .comment-item::after {
+        content: "";
+        position: absolute;
+        left: .43rem;
+        top: 1.05rem;
+        bottom: 0;
+        width: 1px;
+        background: #e5e7eb;
+      }
+
+      .comment-item:last-child::after {
+        display: none;
+      }
+
+      .comment-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        background: #fff;
+        padding: .8rem;
+        box-shadow: 0 .45rem 1rem rgba(15, 23, 42, .06);
+      }
+
+      .comment-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: .75rem;
+        color: #64748b;
+        font-size: .78rem;
+        margin-bottom: .35rem;
+      }
+
+      .comment-author {
+        color: #0f172a;
+        font-weight: 800;
+      }
+
+      .comment-text {
+        color: #1f2937;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .comment-attachment {
+        display: inline-flex;
+        margin-top: .65rem;
+        border-radius: .85rem;
+        overflow: hidden;
+        border: 1px solid #dbeafe;
+        background: #eff6ff;
+      }
+
+      .comment-attachment img {
+        display: block;
+        max-width: min(100%, 28rem);
+        max-height: 16rem;
+        object-fit: contain;
+      }
+
+      @@media (max-width: 991.98px) {
+        .comment-modal-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .comment-timeline-panel {
+          border-left: 0;
+          padding-left: 0;
+        }
       }
 
       .chamado-topo {
@@ -291,9 +536,9 @@
           "titulo chamado"
           "meta status";
         column-gap: 1rem;
-        row-gap: 0.9rem;
+        row-gap: 0.55rem;
         align-items: center;
-        margin-bottom: 1.25rem;
+        margin-bottom: 0.85rem;
       }
 
       .chamado-topo-titulos {
@@ -326,8 +571,9 @@
       }
 
       .card-title {
-        font-size: 2rem;
+        font-size: 1.55rem;
         line-height: 1.1;
+        color: #0f172a;
       }
 
       .meta-inline {
@@ -343,12 +589,12 @@
       }
 
       .badge-chamado-selecionado {
-        background: #e9ecef;
-        color: #212529 !important;
-        border: 1px solid #d7dce1;
-        font-size: 1.15rem;
+        background: #dbeafe;
+        color: #1e3a8a !important;
+        border: 1px solid #bfdbfe;
+        font-size: .98rem;
         font-weight: 700;
-        padding: 0.45rem 0.95rem;
+        padding: 0.38rem 0.8rem;
       }
 
       .meta-badge {
@@ -451,6 +697,11 @@
         #chamados-container > .d-flex.align-items-center {
           padding: 0 1rem;
         }
+
+        .btn-novo-chamado {
+          width: 4rem;
+          height: 4rem;
+        }
       }
 
       @@media (max-width: 768px) {
@@ -460,6 +711,11 @@
         }
 
         .ticket-icon {
+          width: 3.5rem;
+          height: 3.5rem;
+        }
+
+        .btn-novo-chamado {
           width: 3.5rem;
           height: 3.5rem;
         }
@@ -502,89 +758,19 @@
       </symbol>
     </svg>
     <main>
-        <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-            <a asp-page="/Menu/Menu"
-               class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
-                <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
-            </a>
-
-            <hr />
-
-            <ul class="nav nav-pills flex-column mb-auto">
-                <li class="nav-item">
-                    <a href="#" class="nav-link active" aria-current="page">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#home"></use></svg>
-                        Chamados
-                    </a>
-                </li>
-                <li>
-                    <a asp-page="/Menu/Tasks"
-                       asp-route-grupoId="@Model.GrupoId"
-                       class="nav-link link-body-emphasis"
-                       id="navTarefasDrop"
-                       data-tasks-url="@Url.Page("/Menu/Tasks", new { grupoId = Model.GrupoId })">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#table"></use></svg>
-                        Tarefas
-                    </a>
-                </li>
-                <li>
-                    <a href="#" class="nav-link link-body-emphasis">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#speedometer2"></use></svg>
-                        Dashboard
-                    </a>
-                </li>
-                <li>
-                    <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <svg class="bi pe-none me-2 icon-svg" aria-hidden="true"><use xlink:href="#grid"></use></svg>
-                        Histórico
-                    </a>
-                </li>
-                <li>
-                    <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
-                        Membros
-                    </a>
-                </li>
-                @if (Model.UsuarioLogadoEhAdministrador)
-                {
-                    <li>
-                        <a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                            <i class="bi bi-sliders2-vertical me-2 icon-svg" aria-hidden="true"></i>
-                            Grupo
-                        </a>
-                    </li>
-                }
-            </ul>
-
-            <hr />
-
-            <div class="dropdown">
-                <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle"
-                   data-bs-toggle="dropdown" aria-expanded="false">
-                    <img src=@(Model.FotoUsuarioLogado ?? "/images/default-user.png") alt="" class="user-img rounded-circle me-2" loading="lazy">
-                    <strong>@(Model.NomeUsuarioLogado ?? "Usuário")</strong>
-                </a>
-                <ul class="dropdown-menu text-small shadow">
-                    <li><a class="dropdown-item" href="#">Nova organização...</a></li>
-                    <li><a class="dropdown-item" href="#">Configurações</a></li>
-                    <li><a class="dropdown-item" href="#">Perfil</a></li>
-                    <li><hr class="dropdown-divider" /></li>
-                    <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
-                </ul>
-            </div>
-        </div>
+        @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
 
         <div class="content-wrapper">
             <div class="row mt-3">
-                <div class="col-12 col-md-6 mb-3">
+                <div class="col-12 col-xl-7 mb-3">
                     <div id="chamados-container">
                         @foreach (var chamado in Model.Chamados)
                         {
-                            var tituloOuNumero =
-                                !string.IsNullOrWhiteSpace(chamado.Titulo) &&
-                                !string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
-                                    ? chamado.Titulo
-                                    : $"Chamado {chamado.NumeroChamadoGrupo}";
+                            var possuiTitulo = !string.IsNullOrWhiteSpace(chamado.Titulo) &&
+                                !string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase);
+                            var textoTicket = possuiTitulo
+                                ? chamado.Titulo
+                                : $"Chamado {chamado.NumeroChamadoGrupo}";
 
                             var classeStatus = chamado.Status switch
                             {
@@ -596,11 +782,16 @@
                             };
 
                             <div class="ticket-card @classeStatus" data-id="@chamado.Id" role="button" draggable="true">
+                                @if (chamado.TemComentariosNaoLidos)
+                                {
+                                    <span class="ticket-comment-alert" data-comment-badge title="Novo comentário"></span>
+                                }
                                 <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="eager" />
                                 <span class="ticket-text">
-                                    @tituloOuNumero -
+                                    @textoTicket -
                                     <span class="cronometro" data-criado-em="@DateTime.SpecifyKind(chamado.DataCriacao, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")"></span>
                                 </span>
+                                <span class="ticket-number">#@chamado.NumeroChamadoGrupo</span>
                             </div>
                         }
 
@@ -656,8 +847,8 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-md-6 mb-3">
-                    <div class="card">
+                <div class="col-12 col-xl-5 mb-3">
+                    <div class="card chamado-editor-card">
                         <div class="card-body">
                             <div class="chamado-topo">
                                 <div class="chamado-topo-titulos">
@@ -694,12 +885,18 @@
 
                                 <div class="mb-2" id="wrapEditDescricao">
                                     <label for="editDescricao" class="form-label">Descrição</label>
-                                    <textarea class="form-control" id="editDescricao" rows="3" maxlength="500"></textarea>
+                                    <textarea class="form-control" id="editDescricao" rows="2" maxlength="500"></textarea>
                                 </div>
 
                                 <div class="mb-2" id="wrapEditSolucao">
                                     <label for="editSolucao" class="form-label">Solução</label>
-                                    <textarea class="form-control" id="editSolucao" rows="3" maxlength="500"></textarea>
+                                    <textarea class="form-control" id="editSolucao" rows="2" maxlength="500"></textarea>
+                                </div>
+
+                                <div class="mb-2">
+                                    <button type="button" class="btn btn-outline-primary" id="btnAbrirComentariosChamado">
+                                        Comentarios
+                                    </button>
                                 </div>
 
                                 <div class="mb-2" id="wrapEditSetorId">
@@ -714,7 +911,7 @@
                                 </div>
 
                                 <div class="row">
-                                    <div class="col-md-12 mb-2" id="wrapEditOcorrenciaTipoId">
+                                    <div class="col-md-6 mb-2" id="wrapEditOcorrenciaTipoId">
                                         <label for="editOcorrenciaTipoId" class="form-label">Tipo de Ocorrência</label>
                                         <select id="editOcorrenciaTipoId" class="form-select">
                                             <option value="">Selecione</option>
@@ -725,26 +922,18 @@
                                         </select>
                                     </div>
 
-                                    <div class="col-md-12 mb-2" id="wrapEditOcorrenciaCategoriaId">
+                                    <div class="col-md-6 mb-2" id="wrapEditOcorrenciaCategoriaId">
                                         <label for="editOcorrenciaCategoriaId" class="form-label">Categoria</label>
                                         <select id="editOcorrenciaCategoriaId" class="form-select">
                                             <option value="">Selecione o tipo primeiro</option>
                                         </select>
                                     </div>
 
-                                    <div class="col-md-12 mb-2" id="wrapEditOcorrenciaSubcategoriaId">
+                                    <div class="col-md-6 mb-2" id="wrapEditOcorrenciaSubcategoriaId">
                                         <label for="editOcorrenciaSubcategoriaId" class="form-label">Subcategoria</label>
                                         <select id="editOcorrenciaSubcategoriaId" class="form-select">
                                             <option value="">Selecione a categoria primeiro</option>
                                         </select>
-                                    </div>
-                                </div>
-
-                                <div class="mb-2" id="wrapEditAnexoArquivo">
-                                    <label for="editAnexoArquivo" class="form-label">Anexo (imagem)</label>
-                                    <input type="file" class="form-control form-control-sm" id="editAnexoArquivo" accept="image/*,.pdf,application/pdf">
-                                    <div class="form-text">
-                                        Arquivo atual: <span id="anexoAtualTexto">Nenhum</span>
                                     </div>
                                 </div>
 
@@ -842,6 +1031,37 @@
             </div>
         </div>
     </main>
+
+    <div class="modal fade" id="modalComentariosChamado" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content chamado-editor-card">
+                <div class="modal-header">
+                    <h5 class="modal-title">Comentarios do chamado</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="comentariosChamadoId" />
+                    <div class="comment-modal-grid">
+                        <div class="comment-compose-panel">
+                            <label for="textoNovoComentarioChamado" class="form-label">Novo comentário</label>
+                            <textarea id="textoNovoComentarioChamado" class="form-control mb-2" rows="8" maxlength="500" placeholder="Escreva um comentário..."></textarea>
+                            <label for="anexoNovoComentarioChamado" class="form-label">Anexo de imagem</label>
+                            <input type="file" class="form-control form-control-sm" id="anexoNovoComentarioChamado" accept="image/*">
+                            <div class="form-text">O comentário pode ser somente texto. Formatos permitidos: jpg, png, gif ou webp. Limite de 5 MB.</div>
+                            <div class="d-flex justify-content-end mt-3">
+                                <button type="button" class="btn btn-primary" id="btnEnviarComentarioChamado">Enviar comentário</button>
+                            </div>
+                        </div>
+                        <div class="comment-timeline-panel">
+                            <div id="listaComentariosChamado" class="comment-list">
+                                <div class="text-muted small">Carregando comentários...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal fade" id="modalSelecionarListaTarefa" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">

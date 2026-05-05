@@ -103,8 +103,15 @@ public class CadastroModel : PageModel
         novoUsuario.Senha = _passwordHasher.HashPassword(novoUsuario, Senha);
         
         Context.Usuarios.Add(novoUsuario);
-        await Context.SaveChangesAsync();
-        Console.WriteLine("Usuário salvo no banco");
+        try
+        {
+            await Context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+        {
+            ModelState.AddModelError(string.Empty, "Nome de usuário ou e-mail já cadastrado.");
+            return Page();
+        }
         
         //Sucesso
         SuccessMessage = "Cadastro realizado com sucesso!";

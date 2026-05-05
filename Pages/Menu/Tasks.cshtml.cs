@@ -30,6 +30,7 @@ public class TasksModel : PageModel
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
+    public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
     public Grupo? GrupoAtual { get; set; }
     public QuadroTarefa Quadro { get; set; } = null!;
     public List<ColunaBoardViewModel> Colunas { get; set; } = new();
@@ -50,6 +51,10 @@ public class TasksModel : PageModel
             return RedirectToPage("/Menu/Menu");
 
         UsuarioLogadoEhAdministrador = GrupoPermissionService.PodeGerenciarGrupo(contexto.Permissao);
+        UsuarioLogadoPermissao = contexto.Permissao;
+
+        if (contexto.Permissao == PermissaoUsuario.Nenhuma)
+            return Forbid();
 
         GrupoAtual = await _context.Grupos.AsNoTracking().FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (GrupoAtual == null)
@@ -76,13 +81,13 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
         var nome = request.Nome?.Trim();
         if (string.IsNullOrWhiteSpace(nome) || nome.Length > 60)
-            return BadRequest(new { success = false, message = "Nome da lista invalido." });
+            return BadRequest(new { success = false, message = "Nome da lista inválido." });
 
         const int maxTentativas = 3;
         for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
@@ -144,16 +149,16 @@ public class TasksModel : PageModel
                     return BadRequest(new { success = false, message = "Ja existe uma lista com este nome." });
 
                 if (tentativa == maxTentativas)
-                    return BadRequest(new { success = false, message = "Nao foi possivel criar a lista no momento." });
+                    return BadRequest(new { success = false, message = "Não foi possível criar a lista no momento." });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao criar lista no grupo {GrupoId}.", request.GrupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel criar a lista no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível criar a lista no momento." });
             }
         }
 
-        return BadRequest(new { success = false, message = "Nao foi possivel criar a lista no momento." });
+        return BadRequest(new { success = false, message = "Não foi possível criar a lista no momento." });
     }
 
     public async Task<IActionResult> OnPostRenomearListaAsync([FromBody] RenomearListaRequest request)
@@ -162,13 +167,13 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
         var nome = request.Nome?.Trim();
         if (request.ColunaId <= 0 || string.IsNullOrWhiteSpace(nome) || nome.Length > 60)
-            return BadRequest(new { success = false, message = "Nome da lista invalido." });
+            return BadRequest(new { success = false, message = "Nome da lista inválido." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -212,7 +217,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao renomear lista {ColunaId} no grupo {GrupoId}.", request.ColunaId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel renomear a lista no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível renomear a lista no momento." });
         }
     }
 
@@ -222,7 +227,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -274,7 +279,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao arquivar cartoes da lista {ColunaId} no grupo {GrupoId}.", request.ColunaId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel arquivar os cartoes da lista no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível arquivar os cartoes da lista no momento." });
         }
     }
 
@@ -284,7 +289,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -345,7 +350,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao excluir lista {ColunaId} no grupo {GrupoId}.", request.ColunaId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel excluir a lista no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível excluir a lista no momento." });
         }
     }
 
@@ -363,7 +368,7 @@ public class TasksModel : PageModel
             .FirstOrDefaultAsync(c => c.Id == id && c.GrupoId == grupoId);
 
         if (cartao == null)
-            return NotFound(new { success = false, message = "Cartao nao encontrado." });
+            return NotFound(new { success = false, message = "Cartao não encontrado." });
 
         if (!await PodeVerCartaoAsync(cartao, usuarioId.Value))
             return Forbid();
@@ -452,8 +457,74 @@ public class TasksModel : PageModel
             chamadosVinculados = chamados,
             chamadosOpcoes,
             podeEditar = PodeEditarCartao(cartao, usuarioId.Value, membros),
+            podeSairVinculo = cartao.CriadorId != usuarioId.Value && membros.Contains(usuarioId.Value),
             atividade
         });
+    }
+
+    public async Task<IActionResult> OnPostSairCartaoAsync([FromBody] SairCartaoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        if (request == null || request.CartaoId <= 0 || request.GrupoId <= 0)
+            return BadRequest(new { success = false, message = "Tarefa invalida." });
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var cartao = await _context.CartoesTarefas
+                        .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
+
+                    if (cartao == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Tarefa nao encontrada." });
+
+                    if (cartao.CriadorId == usuarioId.Value)
+                        return (IActionResult)BadRequest(new { success = false, message = "O criador não pode sair da própria tarefa." });
+
+                    var vinculo = await _context.CartoesTarefasUsuarios
+                        .FirstOrDefaultAsync(x => x.CartaoTarefaId == cartao.Id && x.UsuarioId == usuarioId.Value);
+
+                    if (vinculo == null)
+                        return (IActionResult)BadRequest(new { success = false, message = "Você não está vinculado diretamente a esta tarefa." });
+
+                    _context.CartoesTarefasUsuarios.Remove(vinculo);
+                    cartao.DataAtualizacao = DateTime.UtcNow;
+                    RegistrarHistorico(cartao.Id, usuarioId.Value, "Usuario saiu da tarefa");
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = "Você saiu da tarefa."
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao sair da tarefa {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
+            return BadRequest(new { success = false, message = "Não foi possível sair da tarefa no momento." });
+        }
     }
 
     public async Task<IActionResult> OnGetChamadosPermitidosAsync(int grupoId, int? cartaoId, string? membrosIds, bool compartilharGrupo)
@@ -476,7 +547,7 @@ public class TasksModel : PageModel
                 .FirstOrDefaultAsync(c => c.Id == cartaoIdValor && c.GrupoId == grupoId);
 
             if (cartao == null)
-                return NotFound(new { success = false, message = "Cartao nao encontrado." });
+                return NotFound(new { success = false, message = "Cartao não encontrado." });
 
             var membrosAtuais = await _context.CartoesTarefasUsuarios
                 .AsNoTracking()
@@ -534,7 +605,7 @@ public class TasksModel : PageModel
             .FirstOrDefaultAsync(c => c.Id == cartaoId && c.GrupoId == grupoId);
 
         if (cartao == null)
-            return NotFound(new { success = false, message = "Cartao nao encontrado." });
+            return NotFound(new { success = false, message = "Cartao não encontrado." });
 
         var membrosAtuais = await _context.CartoesTarefasUsuarios
             .AsNoTracking()
@@ -575,7 +646,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -632,7 +703,7 @@ public class TasksModel : PageModel
             catch (DbUpdateException ex)
             {
                 _logger.LogError(ex, "Erro de banco ao salvar cartao no grupo {GrupoId}.", request.GrupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel salvar o cartao no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível salvar o cartão no momento." });
             }
             catch (UnauthorizedAccessException)
             {
@@ -641,7 +712,7 @@ public class TasksModel : PageModel
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao salvar cartao no grupo {GrupoId}.", request.GrupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel salvar o cartao no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível salvar o cartão no momento." });
             }
         }
 
@@ -654,7 +725,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -673,7 +744,7 @@ public class TasksModel : PageModel
                         .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
                     if (cartao == null)
-                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao não encontrado." });
 
                     var atuais = await _context.CartoesTarefasUsuarios
                         .Where(x => x.CartaoTarefaId == cartao.Id)
@@ -694,7 +765,7 @@ public class TasksModel : PageModel
                         : new List<int>();
 
                     if (idsValidos.Count != idsSolicitados.Count)
-                        return (IActionResult)BadRequest(new { success = false, message = "Um ou mais membros sao invalidos." });
+                        return (IActionResult)BadRequest(new { success = false, message = "Um ou mais membros são inválidos." });
 
                     var idsDesejados = idsValidos
                         .Append(cartao.CriadorId)
@@ -736,7 +807,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao salvar membros do cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel salvar os membros no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível salvar os membros no momento." });
         }
     }
 
@@ -746,7 +817,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -765,7 +836,7 @@ public class TasksModel : PageModel
                         .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
                     if (cartao == null)
-                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao não encontrado." });
 
                     var membrosAtuais = await _context.CartoesTarefasUsuarios
                         .AsNoTracking()
@@ -782,7 +853,7 @@ public class TasksModel : PageModel
                         : new HashSet<int>();
 
                     if (chamadosPermitidos.Count != chamadosIds.Count)
-                        return (IActionResult)BadRequest(new { success = false, message = "Um ou mais chamados nao podem ser vinculados a esta tarefa." });
+                        return (IActionResult)BadRequest(new { success = false, message = "Um ou mais chamados não podem ser vinculados a esta tarefa." });
 
                     var atuais = await _context.CartoesTarefasChamados
                         .Where(x => x.CartaoTarefaId == cartao.Id)
@@ -828,7 +899,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao salvar chamados do cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel salvar os chamados no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível salvar os chamados no momento." });
         }
     }
 
@@ -838,7 +909,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -912,15 +983,15 @@ public class TasksModel : PageModel
             .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
         if (cartao == null)
-            return NotFound(new { success = false, message = "Cartao nao encontrado." });
+            return NotFound(new { success = false, message = "Cartao não encontrado." });
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, cartao.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, cartao.GrupoId);
         if (contexto == null || !await PodeVerCartaoAsync(cartao, usuarioId.Value))
             return Forbid();
 
         var texto = request.Mensagem?.Trim();
         if (string.IsNullOrWhiteSpace(texto) || texto.Length > 500)
-            return BadRequest(new { success = false, message = "Comentario invalido." });
+            return BadRequest(new { success = false, message = "Comentário inválido." });
 
         _context.ComentariosTarefas.Add(new ComentarioTarefa
         {
@@ -940,7 +1011,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -961,7 +1032,7 @@ public class TasksModel : PageModel
 
         var quadroIds = colunas.Select(c => c.QuadroId).Distinct().ToList();
         if (quadroIds.Count != 1)
-            return BadRequest(new { success = false, message = "As listas informadas nao pertencem ao mesmo quadro." });
+            return BadRequest(new { success = false, message = "As listas informadas não pertencem ao mesmo quadro." });
 
         var quadroId = quadroIds[0];
         var totalColunasAtivas = await _context.ColunasQuadro
@@ -1012,7 +1083,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao reordenar listas no grupo {GrupoId}.", request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel salvar a ordem das listas." });
+            return BadRequest(new { success = false, message = "Não foi possível salvar a ordem das listas." });
         }
     }
 
@@ -1026,9 +1097,9 @@ public class TasksModel : PageModel
             .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
         if (cartao == null)
-            return NotFound(new { success = false, message = "Cartao nao encontrado." });
+            return NotFound(new { success = false, message = "Cartao não encontrado." });
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, cartao.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, cartao.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -1050,7 +1121,7 @@ public class TasksModel : PageModel
         cartao.PercentualConclusao = concluido ? 100m : 0m;
         cartao.DataAtualizacao = DateTime.UtcNow;
 
-        RegistrarHistorico(cartao.Id, usuarioId.Value, concluido ? "Cartao concluido" : "Cartao reaberto");
+        RegistrarHistorico(cartao.Id, usuarioId.Value, concluido ? "Cartao concluído" : "Cartao reaberto");
         await _context.SaveChangesAsync();
 
         return new JsonResult(new { success = true, concluido });
@@ -1062,20 +1133,20 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
         var nome = request.NomeTemplate?.Trim();
         if (string.IsNullOrWhiteSpace(nome) || nome.Length > 100)
-            return BadRequest(new { success = false, message = "Nome do template invalido." });
+            return BadRequest(new { success = false, message = "Nome do template inválido." });
 
         var cartao = await _context.CartoesTarefas
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
         if (cartao == null)
-            return NotFound(new { success = false, message = "Cartao nao encontrado." });
+            return NotFound(new { success = false, message = "Cartao não encontrado." });
 
         if (!await PodeVerCartaoAsync(cartao, usuarioId.Value))
             return Forbid();
@@ -1132,7 +1203,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao salvar cartao {CartaoId} como template no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel salvar o template no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível salvar o template no momento." });
         }
     }
 
@@ -1142,7 +1213,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -1160,7 +1231,7 @@ public class TasksModel : PageModel
                         .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
                     if (cartao == null)
-                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao não encontrado." });
 
                     var membrosAtuais = await _context.CartoesTarefasUsuarios
                         .AsNoTracking()
@@ -1190,7 +1261,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao arquivar cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel arquivar o cartao no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível arquivar o cartão no momento." });
         }
     }
 
@@ -1200,7 +1271,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -1218,7 +1289,7 @@ public class TasksModel : PageModel
                         .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
                     if (cartao == null)
-                        return (IActionResult)NotFound(new { success = false, message = "Cartao nao encontrado." });
+                        return (IActionResult)NotFound(new { success = false, message = "Cartao não encontrado." });
 
                     var membrosAtuais = await _context.CartoesTarefasUsuarios
                         .AsNoTracking()
@@ -1244,7 +1315,7 @@ public class TasksModel : PageModel
                             return (IActionResult)BadRequest(new
                             {
                                 success = false,
-                                message = "Crie uma lista ativa antes de restaurar este cartao."
+                                message = "Crie uma lista ativa antes de restaurar este cartão."
                             });
                         }
                     }
@@ -1269,7 +1340,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao restaurar cartao {CartaoId} no grupo {GrupoId}.", request.CartaoId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel restaurar o cartao no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível restaurar o cartão no momento." });
         }
     }
 
@@ -1342,7 +1413,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -1370,7 +1441,7 @@ public class TasksModel : PageModel
                             .FirstOrDefaultAsync(t => t.Id == request.TemplateId && t.GrupoId == request.GrupoId && t.Ativo);
 
                         if (template == null)
-                            return (IActionResult)NotFound(new { success = false, message = "Template nao encontrado." });
+                            return (IActionResult)NotFound(new { success = false, message = "Template não encontrado." });
 
                         var cartao = await CriarCartaoBaseAsync(coluna.QuadroId, coluna.Id, request.GrupoId, usuarioId.Value, template.Nome);
                         cartao.Descricao = template.Descricao;
@@ -1424,16 +1495,16 @@ public class TasksModel : PageModel
             catch (DbUpdateException ex)
             {
                 _logger.LogError(ex, "Erro de banco ao criar cartao pelo template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel criar o cartao pelo template no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível criar o cartão pelo template no momento." });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao criar cartao pelo template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
-                return BadRequest(new { success = false, message = "Nao foi possivel criar o cartao pelo template no momento." });
+                return BadRequest(new { success = false, message = "Não foi possível criar o cartão pelo template no momento." });
             }
         }
 
-        return BadRequest(new { success = false, message = "Nao foi possivel criar o cartao pelo template no momento." });
+        return BadRequest(new { success = false, message = "Não foi possível criar o cartão pelo template no momento." });
     }
 
     public async Task<IActionResult> OnPostCriarTemplateAsync([FromBody] EditarTemplateRequest request)
@@ -1442,18 +1513,18 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
         var nome = request.Nome?.Trim();
         if (string.IsNullOrWhiteSpace(nome) || nome.Length > 100)
-            return BadRequest(new { success = false, message = "Nome do template invalido." });
+            return BadRequest(new { success = false, message = "Nome do template inválido." });
 
         if (!TryParseNullableEnum<PrioridadeChamado>(request.Prioridade, out var prioridade) ||
             !TryParseNullableEnum<CriticidadeChamado>(request.Criticidade, out var criticidade) ||
             !TryParseNullableEnum<UrgenciaChamado>(request.Urgencia, out var urgencia))
-            return BadRequest(new { success = false, message = "Dados do template invalidos." });
+            return BadRequest(new { success = false, message = "Dados do template inválidos." });
 
         var existe = await _context.TemplatesCartoesTarefas
             .AsNoTracking()
@@ -1507,7 +1578,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao criar template no grupo {GrupoId}.", request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel salvar o template no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível salvar o template no momento." });
         }
     }
 
@@ -1517,24 +1588,24 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
         var nome = request.Nome?.Trim();
         if (request.TemplateId <= 0 || string.IsNullOrWhiteSpace(nome) || nome.Length > 100)
-            return BadRequest(new { success = false, message = "Nome do template invalido." });
+            return BadRequest(new { success = false, message = "Nome do template inválido." });
 
         if (!TryParseNullableEnum<PrioridadeChamado>(request.Prioridade, out var prioridade) ||
             !TryParseNullableEnum<CriticidadeChamado>(request.Criticidade, out var criticidade) ||
             !TryParseNullableEnum<UrgenciaChamado>(request.Urgencia, out var urgencia))
-            return BadRequest(new { success = false, message = "Dados do template invalidos." });
+            return BadRequest(new { success = false, message = "Dados do template inválidos." });
 
         var template = await _context.TemplatesCartoesTarefas
             .FirstOrDefaultAsync(t => t.Id == request.TemplateId && t.GrupoId == request.GrupoId && t.Ativo);
 
         if (template == null)
-            return NotFound(new { success = false, message = "Template nao encontrado." });
+            return NotFound(new { success = false, message = "Template não encontrado." });
 
         var existe = await _context.TemplatesCartoesTarefas
             .AsNoTracking()
@@ -1580,7 +1651,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao editar template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel salvar o template no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível salvar o template no momento." });
         }
     }
 
@@ -1590,7 +1661,7 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
-        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
 
@@ -1598,7 +1669,7 @@ public class TasksModel : PageModel
             .FirstOrDefaultAsync(t => t.Id == request.TemplateId && t.GrupoId == request.GrupoId);
 
         if (template == null)
-            return NotFound(new { success = false, message = "Template nao encontrado." });
+            return NotFound(new { success = false, message = "Template não encontrado." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -1627,7 +1698,7 @@ public class TasksModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao excluir template {TemplateId} no grupo {GrupoId}.", request.TemplateId, request.GrupoId);
-            return BadRequest(new { success = false, message = "Nao foi possivel excluir o template no momento." });
+            return BadRequest(new { success = false, message = "Não foi possível excluir o template no momento." });
         }
     }
 
@@ -1672,14 +1743,20 @@ public class TasksModel : PageModel
         if (colunasInativas.Count == 0)
             return;
 
+        var colunaIds = colunasInativas.Select(c => c.Id).ToList();
+        var cartoesPorColuna = await _context.CartoesTarefas
+            .Where(c => colunaIds.Contains(c.ColunaId) && c.GrupoId == grupoId)
+            .GroupBy(c => c.ColunaId)
+            .ToDictionaryAsync(g => g.Key, g => g.ToList());
+
         ColunaQuadro? colunaArquivo = null;
         var agora = DateTime.UtcNow;
 
         foreach (var coluna in colunasInativas)
         {
-            var cartoes = await _context.CartoesTarefas
-                .Where(c => c.ColunaId == coluna.Id && c.GrupoId == grupoId)
-                .ToListAsync();
+            var cartoes = cartoesPorColuna.TryGetValue(coluna.Id, out var cartoesColuna)
+                ? cartoesColuna
+                : new List<CartaoTarefa>();
 
             if (cartoes.Count > 0)
             {
@@ -1692,7 +1769,7 @@ public class TasksModel : PageModel
 
                     cartao.ColunaId = colunaArquivo.Id;
                     cartao.DataAtualizacao = agora;
-                    RegistrarHistorico(cartao.Id, usuarioId, "Cartao arquivado por limpeza de lista excluida");
+                    RegistrarHistorico(cartao.Id, usuarioId, "Cartao arquivado por limpeza de lista excluída");
                 }
             }
 
@@ -1932,7 +2009,7 @@ public class TasksModel : PageModel
             .FirstOrDefaultAsync(q => q.Id == coluna.QuadroId && q.GrupoId == request.GrupoId && q.Ativo);
 
         if (quadro == null)
-            throw new InvalidOperationException("Quadro invalido.");
+            throw new InvalidOperationException("Quadro inválido.");
 
         CartaoTarefa cartao;
         var novo = request.Id.GetValueOrDefault() <= 0;
@@ -1946,7 +2023,7 @@ public class TasksModel : PageModel
         {
             cartao = await _context.CartoesTarefas
                 .FirstOrDefaultAsync(c => c.Id == request.Id && c.GrupoId == request.GrupoId)
-                ?? throw new InvalidOperationException("Cartao nao encontrado.");
+                ?? throw new InvalidOperationException("Cartao não encontrado.");
 
             var membrosAtuais = await _context.CartoesTarefasUsuarios
                 .AsNoTracking()
@@ -2034,7 +2111,7 @@ public class TasksModel : PageModel
             : new List<int>();
 
         if (idsValidos.Count != chamadosIds.Distinct().Count())
-            throw new UnauthorizedAccessException("Um ou mais chamados nao podem ser vinculados a esta tarefa.");
+            throw new UnauthorizedAccessException("Um ou mais chamados não podem ser vinculados a esta tarefa.");
 
         var atuais = await _context.CartoesTarefasChamados
             .Where(x => x.CartaoTarefaId == cartao.Id)
@@ -2148,6 +2225,14 @@ public class TasksModel : PageModel
         if (idsFiltro is { Count: > 0 })
             query = query.Where(c => idsFiltro.Contains(c.Id));
 
+        var membrosRestritos = membros
+            .Where(m => m.Permissao is PermissaoUsuario.Nenhuma or PermissaoUsuario.Colaborador)
+            .Select(m => m.UsuarioId)
+            .ToList();
+
+        if (membrosRestritos.Count > 0)
+            query = query.Where(c => c.Publico || membrosRestritos.Contains(c.CriadorChamadoId));
+
         IQueryable<Chamado> chamadosQuery = query.OrderByDescending(c => c.DataCriacao);
 
         if (idsFiltro is { Count: > 0 })
@@ -2222,7 +2307,7 @@ public class TasksModel : PageModel
 
         if (alterou)
         {
-            RegistrarHistorico(cartaoId, usuarioId, "Chamados desvinculados por permissao");
+            RegistrarHistorico(cartaoId, usuarioId, "Chamados desvinculados por permissão");
             await _context.SaveChangesAsync();
         }
     }
@@ -2268,6 +2353,12 @@ public class TasksModel : PageModel
             return null;
 
         return await _grupoAuthorizationService.ObterContextoMembroAsync(usuarioId, grupoId);
+    }
+
+    private async Task<GrupoMemberContext?> ValidarMembroComPermissaoAsync(int usuarioId, int grupoId)
+    {
+        var contexto = await ValidarMembroAsync(usuarioId, grupoId);
+        return contexto?.Permissao == PermissaoUsuario.Nenhuma ? null : contexto;
     }
 
     private async Task<List<MembroViewModel>> ObterMembrosAsync(int grupoId)
@@ -2451,6 +2542,12 @@ public class TasksModel : PageModel
         public int CartaoId { get; set; }
         public int GrupoId { get; set; }
         public List<int> ChamadosIds { get; set; } = new();
+    }
+
+    public class SairCartaoRequest
+    {
+        public int CartaoId { get; set; }
+        public int GrupoId { get; set; }
     }
 
     public class ReordenarCartoesRequest

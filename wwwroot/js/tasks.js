@@ -19,6 +19,7 @@ let cartaoAtualEstado = {
     compartilharGrupo: false,
     arquivado: false,
     podeEditar: false,
+    podeSairVinculo: false,
     titulo: "",
     colunaId: null
 };
@@ -68,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("formTemplateCartao")?.addEventListener("submit", salvarTemplate);
     document.getElementById("btnAdicionarComentario")?.addEventListener("click", adicionarComentario);
     document.getElementById("btnArquivarCartao")?.addEventListener("click", alternarArquivamentoCartao);
+    document.getElementById("btnSairCartao")?.addEventListener("click", sairCartao);
     document.getElementById("btnMostrarSalvarTemplate")?.addEventListener("click", mostrarSalvarComoTemplate);
     document.getElementById("btnConfirmarSalvarTemplate")?.addEventListener("click", salvarComoTemplate);
     document.getElementById("btnNovoTemplateModal")?.addEventListener("click", abrirModalTemplateNovo);
@@ -360,7 +362,7 @@ async function renomearLista(colunaId) {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel renomear a lista.");
+            mostrarToast(data.message || "Não foi possível renomear a lista.");
             return;
         }
 
@@ -376,14 +378,14 @@ async function renomearLista(colunaId) {
         modalAcoesLista?.hide();
         mostrarToast("Lista renomeada com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel renomear a lista.");
+        mostrarToast(error.message || "Não foi possível renomear a lista.");
     }
 }
 
 async function arquivarCartoesListaAtual() {
     const colunaId = listaAcoesAtualId;
     if (!colunaId) return;
-    if (!confirm("Arquivar todos os cartões desta lista?")) return;
+    if (!confirm("Arquivar todos os cartoes desta lista?")) return;
 
     try {
         const data = await fetchJson("?handler=ArquivarCartoesLista", {
@@ -392,7 +394,7 @@ async function arquivarCartoesListaAtual() {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel arquivar os cartoes da lista.");
+            mostrarToast(data.message || "Não foi possível arquivar os cartoes da lista.");
             return;
         }
 
@@ -402,14 +404,14 @@ async function arquivarCartoesListaAtual() {
         modalAcoesLista?.hide();
         mostrarToast("Cartoes arquivados com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel arquivar os cartoes da lista.");
+        mostrarToast(error.message || "Não foi possível arquivar os cartoes da lista.");
     }
 }
 
 async function excluirListaAtual() {
     const colunaId = listaAcoesAtualId;
     if (!colunaId) return;
-    if (!confirm("Excluir esta lista? Todos os cartões dentro dela serão arquivados.")) return;
+    if (!confirm("Excluir esta lista? Todos os cartoes dentro dela serão arquivados.")) return;
 
     try {
         const data = await fetchJson("?handler=ExcluirLista", {
@@ -418,7 +420,7 @@ async function excluirListaAtual() {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel excluir a lista.");
+            mostrarToast(data.message || "Não foi possível excluir a lista.");
             return;
         }
 
@@ -427,7 +429,7 @@ async function excluirListaAtual() {
         modalAcoesLista?.hide();
         mostrarToast("Lista excluida com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel excluir a lista.");
+        mostrarToast(error.message || "Não foi possível excluir a lista.");
     }
 }
 
@@ -449,6 +451,7 @@ function abrirModalCartaoNovo(colunaId) {
         compartilharGrupo: false,
         arquivado: false,
         podeEditar: true,
+        podeSairVinculo: false,
         titulo: "",
         colunaId
     };
@@ -457,6 +460,7 @@ function abrirModalCartaoNovo(colunaId) {
     atualizarResumoChamados();
     ocultarSalvarComoTemplate();
     document.getElementById("btnArquivarCartao")?.classList.add("d-none");
+    document.getElementById("btnSairCartao")?.classList.add("d-none");
     modalCartao.show();
     setTimeout(() => document.getElementById("cartaoTitulo")?.focus(), 150);
 }
@@ -506,6 +510,7 @@ async function abrirModalCartaoExistente(id) {
         compartilharGrupo: !!data.compartilharGrupo,
         arquivado: !!data.arquivado,
         podeEditar: !!data.podeEditar,
+        podeSairVinculo: !!data.podeSairVinculo,
         titulo: data.titulo || "",
         colunaId: data.colunaId
     };
@@ -517,6 +522,36 @@ async function abrirModalCartaoExistente(id) {
 
     configurarEdicao(!!data.podeEditar);
     modalCartao.show();
+}
+
+async function sairCartao() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId || !cartaoAtualEstado.podeSairVinculo) {
+        mostrarToast("Não é possível sair desta tarefa.");
+        return;
+    }
+
+    if (!confirm("Deseja sair desta tarefa? Você deixará de ter acesso direto a ela.")) {
+        return;
+    }
+
+    try {
+        const data = await fetchJson("?handler=SairCartao", {
+            cartaoId,
+            grupoId: getGrupoId()
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível sair da tarefa.");
+            return;
+        }
+
+        mostrarToast(data.message || "Você saiu da tarefa.", "success");
+        modalCartao?.hide();
+        window.location.reload();
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível sair da tarefa.");
+    }
 }
 
 async function salvarCartao(event) {
@@ -568,7 +603,7 @@ async function salvarOrdemBoard() {
         });
     } catch (error) {
         console.error(error);
-        mostrarToast("Não foi possível salvar a nova ordem dos cartões.");
+        mostrarToast("Não foi possível salvar a nova ordem dos cartoes.");
         window.location.reload();
     }
 }
@@ -581,7 +616,7 @@ async function salvarOrdemListas(colunasIds = capturarSnapshotListas()) {
         });
     } catch (error) {
         console.error(error);
-        mostrarToast("NÃ£o foi possÃ­vel salvar a nova ordem das listas.");
+        mostrarToast("Não foi possível salvar a nova ordem das listas.");
         window.location.reload();
     }
 }
@@ -626,7 +661,7 @@ async function alternarArquivamentoCartao() {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel arquivar o cartao.");
+            mostrarToast(data.message || "Não foi possível arquivar o cartão.");
             return;
         }
 
@@ -637,7 +672,7 @@ async function alternarArquivamentoCartao() {
         modalCartao?.hide();
         mostrarToast("Cartao arquivado com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel arquivar o cartao.");
+        mostrarToast(error.message || "Não foi possível arquivar o cartão.");
     }
 }
 
@@ -649,7 +684,7 @@ async function restaurarCartao(cartaoId) {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel restaurar o cartao.");
+            mostrarToast(data.message || "Não foi possível restaurar o cartão.");
             return;
         }
 
@@ -660,15 +695,15 @@ async function restaurarCartao(cartaoId) {
         if (colunaCards) {
             inserirCardNoBoard(cartaoId, {
                 colunaId: data.colunaId,
-                titulo: cartaoAtualEstado.titulo || getValue("cartaoTitulo") || "Cartao",
+                titulo: cartaoAtualEstado.titulo || getValue("cartaoTitulo") || "Cartão",
                 compartilharGrupo: cartaoAtualEstado.compartilharGrupo
             });
             mostrarToast("Cartao restaurado com sucesso.", "success");
         } else {
-            mostrarToast("Cartão restaurado. Atualize a página para ver na lista correta.", "success");
+            mostrarToast("Cartao restaurado. Atualize a página para ver na lista correta.", "success");
         }
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel restaurar o cartao.");
+        mostrarToast(error.message || "Não foi possível restaurar o cartão.");
     }
 }
 
@@ -700,13 +735,13 @@ async function abrirPainelArquivados() {
 
         const data = await response.json();
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel carregar os cartoes arquivados.");
+            mostrarToast(data.message || "Não foi possível carregar os cartoes arquivados.");
             return;
         }
 
         renderizarCartoesArquivados(data.cartoes || []);
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel carregar os cartoes arquivados.");
+        mostrarToast(error.message || "Não foi possível carregar os cartoes arquivados.");
         lista.innerHTML = '<div class="text-muted small">Nenhum cartão arquivado.</div>';
     }
 }
@@ -727,7 +762,7 @@ function renderizarCartoesArquivados(cartoes) {
                 <button type="button" class="list-group-item list-group-item-action mb-2 border rounded-1 overflow-hidden p-0" data-arquivado-id="${cartao.id}">
                     ${cor}
                     <div class="p-2">
-                        <div class="fw-semibold">${escapeHtml(cartao.titulo || "Cartao")}</div>
+                        <div class="fw-semibold">${escapeHtml(cartao.titulo || "Cartão")}</div>
                         <div class="small text-muted">${escapeHtml(cartao.nomeColuna || "Lista")}</div>
                         <div class="small text-muted">${escapeHtml(data)}</div>
                     </div>
@@ -912,14 +947,14 @@ async function carregarTemplatesPainel() {
 
         const data = await response.json();
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel carregar os templates.");
+            mostrarToast(data.message || "Não foi possível carregar os templates.");
             return;
         }
 
         templatesAtuais = data.templates || [];
         renderizarPainelTemplates();
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel carregar os templates.");
+        mostrarToast(error.message || "Não foi possível carregar os templates.");
         fecharPainelTemplates();
     }
 }
@@ -1025,7 +1060,7 @@ async function usarTemplate(templateId) {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel criar o cartao pelo template.");
+            mostrarToast(data.message || "Não foi possível criar o cartão pelo template.");
             return;
         }
 
@@ -1037,9 +1072,9 @@ async function usarTemplate(templateId) {
         });
         modalSelecionarTemplate?.hide();
         fecharPainelTemplates();
-        mostrarToast("Cartao criado pelo template com sucesso.", "success");
+        mostrarToast("Cartão criado pelo template com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel criar o cartao pelo template.");
+        mostrarToast(error.message || "Não foi possível criar o cartão pelo template.");
     }
 }
 
@@ -1087,7 +1122,7 @@ async function salvarTemplate(event) {
     try {
         const data = await fetchJson(templateId ? "?handler=EditarTemplate" : "?handler=CriarTemplate", payload);
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel salvar o template.");
+            mostrarToast(data.message || "Não foi possível salvar o template.");
             return;
         }
 
@@ -1097,7 +1132,7 @@ async function salvarTemplate(event) {
         renderizarTemplatesModal();
         mostrarToast("Template salvo com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel salvar o template.");
+        mostrarToast(error.message || "Não foi possível salvar o template.");
     }
 }
 
@@ -1111,23 +1146,23 @@ async function excluirTemplate(templateId) {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel excluir o template.");
+            mostrarToast(data.message || "Não foi possível excluir o template.");
             return;
         }
 
         templatesAtuais = templatesAtuais.filter(item => Number(item.id) !== templateId);
         renderizarPainelTemplates();
         renderizarTemplatesModal();
-        mostrarToast("Template excluido com sucesso.", "success");
+        mostrarToast("Template excluído com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel excluir o template.");
+        mostrarToast(error.message || "Não foi possível excluir o template.");
     }
 }
 
 function mostrarSalvarComoTemplate() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
     if (!cartaoId) {
-        mostrarToast("Salve o cartao antes de criar um template.");
+        mostrarToast("Salve o cartão antes de criar um template.");
         return;
     }
 
@@ -1154,14 +1189,14 @@ async function salvarComoTemplate() {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel salvar o template.");
+            mostrarToast(data.message || "Não foi possível salvar o template.");
             return;
         }
 
         ocultarSalvarComoTemplate();
         mostrarToast("Template salvo com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel salvar o template.");
+        mostrarToast(error.message || "Não foi possível salvar o template.");
     }
 }
 
@@ -1172,7 +1207,7 @@ function normalizarCorTemplate(cor) {
 async function abrirModalMembrosCartao() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
     if (!cartaoId) {
-        mostrarToast("Salve o cartao antes de editar os membros.");
+        mostrarToast("Salve o cartão antes de editar os membros.");
         return;
     }
 
@@ -1187,7 +1222,7 @@ async function abrirModalMembrosCartao() {
 
         const data = await response.json();
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel carregar os membros.");
+            mostrarToast(data.message || "Não foi possível carregar os membros.");
             return;
         }
 
@@ -1195,7 +1230,7 @@ async function abrirModalMembrosCartao() {
         atualizarMembrosModalGrupoTodo();
         modalMembrosCartao?.show();
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel carregar os membros.");
+        mostrarToast(error.message || "Não foi possível carregar os membros.");
     }
 }
 
@@ -1255,7 +1290,7 @@ async function salvarMembrosCartao() {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel salvar os membros.");
+            mostrarToast(data.message || "Não foi possível salvar os membros.");
             return;
         }
 
@@ -1269,14 +1304,14 @@ async function salvarMembrosCartao() {
         modalMembrosCartao?.hide();
         mostrarToast("Membros atualizados com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel salvar os membros.");
+        mostrarToast(error.message || "Não foi possível salvar os membros.");
     }
 }
 
 async function abrirModalChamadosCartao() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
     if (!cartaoId) {
-        mostrarToast("Salve o cartao antes de vincular chamados.");
+        mostrarToast("Salve o cartão antes de vincular chamados.");
         return;
     }
 
@@ -1286,14 +1321,14 @@ async function abrirModalChamadosCartao() {
 
         const data = await response.json();
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel carregar os chamados.");
+            mostrarToast(data.message || "Não foi possível carregar os chamados.");
             return;
         }
 
         renderizarChamadosCartao(data.chamados || []);
         modalChamadosCartao?.show();
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel carregar os chamados.");
+        mostrarToast(error.message || "Não foi possível carregar os chamados.");
     }
 }
 
@@ -1341,7 +1376,7 @@ async function salvarChamadosCartao() {
         });
 
         if (!data.success) {
-            mostrarToast(data.message || "Nao foi possivel salvar os chamados.");
+            mostrarToast(data.message || "Não foi possível salvar os chamados.");
             return;
         }
 
@@ -1352,7 +1387,7 @@ async function salvarChamadosCartao() {
         modalChamadosCartao?.hide();
         mostrarToast("Chamados atualizados com sucesso.", "success");
     } catch (error) {
-        mostrarToast(error.message || "Nao foi possivel salvar os chamados.");
+        mostrarToast(error.message || "Não foi possível salvar os chamados.");
     }
 }
 
@@ -1524,6 +1559,12 @@ function configurarEdicao(podeEditar) {
         btnArquivar.classList.toggle("btn-outline-danger", !cartaoAtualEstado.arquivado);
         btnArquivar.classList.toggle("btn-outline-success", cartaoAtualEstado.arquivado);
     }
+
+    const btnSair = document.getElementById("btnSairCartao");
+    if (btnSair) {
+        const cartaoId = toNullableInt(getValue("cartaoId"));
+        btnSair.classList.toggle("d-none", !cartaoId || !cartaoAtualEstado.podeSairVinculo);
+    }
 }
 
 function renderizarAtividade(itens) {
@@ -1583,6 +1624,7 @@ function atualizarEstadoModalCartao() {
     modal.dataset.chamados = (cartaoAtualEstado.chamados || []).join(",");
     modal.dataset.compartilharGrupo = String(!!cartaoAtualEstado.compartilharGrupo);
     modal.dataset.arquivado = String(!!cartaoAtualEstado.arquivado);
+    modal.dataset.podeSairVinculo = String(!!cartaoAtualEstado.podeSairVinculo);
 }
 
 function getBoard() {

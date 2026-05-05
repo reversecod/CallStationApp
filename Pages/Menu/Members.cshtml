@@ -4,6 +4,7 @@
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Membros do Grupo";
+    ViewData["ActiveMenu"] = "Members";
 }
 
 <html lang="pt-br" data-bs-theme="light">
@@ -194,81 +195,7 @@
     </svg>
 
     <main>
-        <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-            <a asp-page="/Menu/Menu"
-               class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
-    
-                <img src="~/images/logocompletopreto.png"
-                     alt="Logo"
-                     class="logo-img me-2"
-                     loading="lazy">
-            </a>
-
-            <hr />
-
-            <ul class="nav nav-pills flex-column mb-auto">
-                <li class="nav-item">
-                    <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <i class="bi bi-house-door me-2 icon-svg" aria-hidden="true"></i>
-                        Chamados
-                    </a>
-                </li>
-                <li>
-                    <a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <i class="bi bi-table me-2 icon-svg" aria-hidden="true"></i>
-                        Tarefas
-                    </a>
-                </li>
-                <li>
-                    <a href="#" class="nav-link link-body-emphasis">
-                        <i class="bi bi-speedometer2 me-2 icon-svg" aria-hidden="true"></i>
-                        Dashboard
-                    </a>
-                </li>
-                <li>
-                    <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <i class="bi bi-grid me-2 icon-svg" aria-hidden="true"></i>
-                        Histórico
-                    </a>
-                </li>
-                <li>
-                    <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page">
-                        <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
-                        Membros
-                    </a>
-                </li>
-                @if (Model.UsuarioLogadoEhAdministrador)
-                {
-                    <li>
-                        <a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                            <i class="bi bi-sliders2-vertical me-2 icon-svg" aria-hidden="true"></i>
-                            Grupo
-                        </a>
-                    </li>
-                }
-            </ul>
-
-            <hr />
-
-            <div class="dropdown">
-                <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle"
-                   data-bs-toggle="dropdown" aria-expanded="false">
-                    <img src="https://github.com/mdo.png" alt="" class="user-img rounded-circle me-2" loading="lazy">
-                    <strong>@(Model.NomeUsuarioLogado ?? "Usuário")</strong>
-                </a>
-                <ul class="dropdown-menu text-small shadow">
-                    <li><a class="dropdown-item" href="#">Nova organização...</a></li>
-                    <li><a class="dropdown-item" href="#">Configurações</a></li>
-                    <li><a class="dropdown-item" href="#">Perfil</a></li>
-                    <li><hr class="dropdown-divider" /></li>
-                    <li>
-                        <form method="post" asp-page="/Logout" class="m-0 p-0">
-                            <button type="submit" class="dropdown-item">Sair</button>
-                        </form>
-                    </li>
-                </ul>
-            </div>
-        </div>
+        @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
 
         <div class="content-wrapper">
             <div class="card page-header-card mb-4">

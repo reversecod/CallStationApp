@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CallStationApp.Pages.Auth
 {
@@ -14,10 +15,12 @@ namespace CallStationApp.Pages.Auth
     {   
         public readonly AppDbContext Context;
         private readonly PasswordHasher<Usuario> _passwordHasher;
+        private readonly IMemoryCache _memoryCache;
 
-        public LoginModel(AppDbContext context)
+        public LoginModel(AppDbContext context, IMemoryCache memoryCache)
         {
             Context = context;
+            _memoryCache = memoryCache;
             _passwordHasher = new PasswordHasher<Usuario>();
         }
         
@@ -41,6 +44,15 @@ namespace CallStationApp.Pages.Auth
                 ErrorMessage = "Preencha todos os campos.";
                 return Page();
             }
+
+            var loginNormalizado = UsernameOrEmail.Trim().ToLowerInvariant();
+            var chaveTentativas = $"login_tentativas_{loginNormalizado}";
+
+            if (_memoryCache.TryGetValue<int>(chaveTentativas, out var tentativas) && tentativas >= 5)
+            {
+                ErrorMessage = "Muitas tentativas. Aguarde 5 minutos antes de tentar novamente.";
+                return Page();
+            }
             
             var user = await Context.Usuarios
                 .FirstOrDefaultAsync(u =>
@@ -48,6 +60,7 @@ namespace CallStationApp.Pages.Auth
             
             if (user == null)
             {
+                _memoryCache.Set(chaveTentativas, tentativas + 1, TimeSpan.FromMinutes(5));
                 ErrorMessage = "Usuário ou senha inválidos.";
                 return Page();
             }
@@ -56,9 +69,12 @@ namespace CallStationApp.Pages.Auth
 
             if (result != PasswordVerificationResult.Success)
             {
+                _memoryCache.Set(chaveTentativas, tentativas + 1, TimeSpan.FromMinutes(5));
                 ErrorMessage = "Usuário ou senha inválidos.";
                 return Page();
             }
+
+            _memoryCache.Remove(chaveTentativas);
             
             var claims = new List<Claim>
             {

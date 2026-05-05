@@ -4,6 +4,7 @@
 @using CallStationApp.Models
 @{
     ViewData["Title"] = "Tarefas";
+    ViewData["ActiveMenu"] = "Tasks";
 }
 
 <!DOCTYPE html>
@@ -57,73 +58,9 @@
     </symbol>
 </svg>
 <main>
-    <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-        <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
-            <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
-        </a>
+        @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
 
-        <hr />
-
-        <ul class="nav nav-pills flex-column mb-auto">
-            <li class="nav-item">
-                <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                    <i class="bi bi-house-door me-2 icon-svg" aria-hidden="true"></i>
-                    Chamados
-                </a>
-            </li>
-            <li>
-                <a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page">
-                    <i class="bi bi-table me-2 icon-svg" aria-hidden="true"></i>
-                    Tarefas
-                </a>
-            </li>
-            <li>
-                <a href="#" class="nav-link link-body-emphasis">
-                    <i class="bi bi-speedometer2 me-2 icon-svg" aria-hidden="true"></i>
-                    Dashboard
-                </a>
-            </li>
-            <li>
-                <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                    <i class="bi bi-grid me-2 icon-svg" aria-hidden="true"></i>
-                    Histórico
-                </a>
-            </li>
-            <li>
-                <a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                    <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
-                    Membros
-                </a>
-            </li>
-            @if (Model.UsuarioLogadoEhAdministrador)
-            {
-                <li>
-                    <a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
-                        <i class="bi bi-sliders2-vertical me-2 icon-svg" aria-hidden="true"></i>
-                        Grupo
-                    </a>
-                </li>
-            }
-        </ul>
-
-        <hr />
-
-        <div class="dropdown">
-            <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle"
-               data-bs-toggle="dropdown" aria-expanded="false">
-                <img src="@(Model.FotoUsuarioLogado ?? "/images/default-user.png")" alt="" class="user-img rounded-circle me-2" loading="lazy">
-                <strong>@(Model.NomeUsuarioLogado ?? "Usuário")</strong>
-            </a>
-            <ul class="dropdown-menu text-small shadow">
-                <li><a class="dropdown-item" href="#">Configuracoes</a></li>
-                <li><a class="dropdown-item" href="#">Perfil</a></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
-            </ul>
-        </div>
-    </div>
-
-    <div class="tasks-content">
+        <div class="tasks-content">
         <header class="tasks-header">
             <div>
                 <div class="text-white-50 small">@(Model.GrupoAtual?.Nome ?? "Grupo")</div>
@@ -203,7 +140,7 @@
                     <div class="d-flex align-items-center gap-1 px-2 pb-2">
                         <button type="button" class="btn-add-card flex-grow-1 m-0" style="width:auto;" data-add-card-column="@coluna.Id">
                             <i class="bi bi-plus-lg"></i>
-                            Adicionar cartão
+                            Adicionar cartao
                         </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-template-column="@coluna.Id" title="Templates">
                             <i class="bi bi-layout-text-sidebar"></i>
@@ -381,7 +318,7 @@
                                 </div>
                                 <label class="form-label" for="cartaoMembros">Membros com acesso</label>
                                 <div id="cartaoMembrosResumo" class="selection-summary text-muted small">Nenhum membro selecionado.</div>
-                                <div class="form-text">Ao criar, o cartão nasce privado. Usuários só veem se forem adicionados ou se o grupo todo for incluído.</div>
+                                <div class="form-text">Ao criar, o cartao nasce privado. Usuários só veem se forem adicionados ou se o grupo todo for incluído.</div>
                             </div>
 
                             <div class="side-panel mt-3" id="secaoChamados">
@@ -405,6 +342,10 @@
 
                 <div class="modal-footer justify-content-between">
                     <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-outline-danger d-none" id="btnSairCartao">
+                            <i class="bi bi-box-arrow-right me-1"></i>
+                            Sair da tarefa
+                        </button>
                         <button type="button" class="btn btn-outline-danger d-none" id="btnArquivarCartao">Arquivar</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMostrarSalvarTemplate">
                             <i class="bi bi-layout-text-sidebar me-1"></i>
@@ -417,7 +358,7 @@
                     </div>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Salvar cartão</button>
+                        <button type="submit" class="btn btn-primary">Salvar cartao</button>
                     </div>
                 </div>
             </form>

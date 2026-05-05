@@ -13,10 +13,19 @@ public class HistoryModel : PageModel
 {
     private const int TamanhoPagina = 20;
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
+    private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
     private static readonly StatusChamado[] StatusFinais =
     {
         StatusChamado.Concluido,
         StatusChamado.Fechado,
+        StatusChamado.Cancelado
+    };
+
+    private static readonly StatusChamado[] StatusAlteraveisHistorico =
+    {
+        StatusChamado.Concluido,
+        StatusChamado.Fechado,
+        StatusChamado.Reaberto,
         StatusChamado.Cancelado
     };
 
@@ -38,6 +47,7 @@ public class HistoryModel : PageModel
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
+    public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
     public bool UsuarioLogadoPodeComentarHistorico { get; set; }
     public bool UsuarioLogadoPodeAlterarStatusHistorico { get; set; }
     public Grupo? GrupoAtual { get; set; }
@@ -59,6 +69,10 @@ public class HistoryModel : PageModel
             return Forbid();
 
         UsuarioLogadoEhAdministrador = contextoMembro.Permissao == PermissaoUsuario.Administracao;
+        UsuarioLogadoPermissao = contextoMembro.Permissao;
+        if (contextoMembro.Permissao == PermissaoUsuario.Nenhuma)
+            return Forbid();
+
         UsuarioLogadoPodeComentarHistorico = PodeGerenciarChamadoNoHistorico(contextoMembro.Permissao);
         UsuarioLogadoPodeAlterarStatusHistorico = PodeGerenciarChamadoNoHistorico(contextoMembro.Permissao);
 
@@ -116,52 +130,108 @@ public class HistoryModel : PageModel
                       x.PublicoHistorico == "1");
         }
 
-        Chamados = await queryComVisibilidade
+        var chamadosPagina = await queryComVisibilidade
             .OrderBy(x => x.Chamado.NumeroChamadoGrupo)
             .ThenBy(x => x.Chamado.Id)
             .Skip((Math.Max(PaginaAtual, 1) - 1) * TamanhoPagina)
             .Take(TamanhoPagina + 1)
-            .Select(x => new HistoricoChamadoVm
+            .Select(x => new
             {
-                Id = x.Chamado.Id,
-                NumeroChamadoGrupo = x.Chamado.NumeroChamadoGrupo,
-                Titulo = x.Chamado.Titulo,
-                Status = x.Chamado.Status,
-                DataCriacao = x.Chamado.DataCriacao,
-                DataFinal = _context.HistoricoStatusChamados
-                    .Where(h => h.ChamadoId == x.Chamado.Id &&
-                                (h.StatusNovo == StatusNovoChamado.Concluido ||
-                                 h.StatusNovo == StatusNovoChamado.Fechado ||
-                                 h.StatusNovo == StatusNovoChamado.Cancelado))
-                    .OrderByDescending(h => h.DataTransicao)
-                    .Select(h => (DateTime?)h.DataTransicao)
-                    .FirstOrDefault() ?? x.Chamado.DataFinalizacao,
-                CriadoPor = (
+                x.Chamado.Id,
+                x.Chamado.GrupoId,
+                x.Chamado.NumeroChamadoGrupo,
+                x.Chamado.Titulo,
+                x.Chamado.Status,
+                x.Chamado.DataCriacao,
+                x.Chamado.DataFinalizacao,
+                x.Chamado.CriadorChamadoId
+            })
+            .ToListAsync();
+
+        var chamadosPaginaIds = chamadosPagina.Select(c => c.Id).ToList();
+        var criadorIds = chamadosPagina.Select(c => c.CriadorChamadoId).Distinct().ToList();
+
+        var historicosFinais = chamadosPaginaIds.Count == 0
+            ? new List<HistoricoFinalResumo>()
+            : await _context.HistoricoStatusChamados
+                .AsNoTracking()
+                .Where(h => chamadosPaginaIds.Contains(h.ChamadoId) &&
+                            (h.StatusNovo == StatusNovoChamado.Concluido ||
+                             h.StatusNovo == StatusNovoChamado.Fechado ||
+                             h.StatusNovo == StatusNovoChamado.Cancelado))
+                .OrderByDescending(h => h.DataTransicao)
+                .Select(h => new HistoricoFinalResumo
+                {
+                    ChamadoId = h.ChamadoId,
+                    DataTransicao = h.DataTransicao,
+                    UsuarioId = h.UsuarioId,
+                    OrigemAutomatica = h.OrigemAutomatica
+                })
+                .ToListAsync();
+
+        var ultimoHistoricoFinalPorChamado = historicosFinais
+            .GroupBy(h => h.ChamadoId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var criadoresPorId = criadorIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await (
                     from usuarioGrupo in _context.UsuariosGrupos.AsNoTracking()
                     join usuarioCriador in _context.Usuarios.AsNoTracking() on usuarioGrupo.UsuarioId equals usuarioCriador.Id
                     join info in _context.InfoUsuariosGrupos.AsNoTracking()
                         on new { usuarioGrupo.UsuarioId, usuarioGrupo.GrupoId } equals new { info.UsuarioId, info.GrupoId } into infoJoin
                     from infoUsuario in infoJoin.DefaultIfEmpty()
-                    where usuarioGrupo.UsuarioId == x.Chamado.CriadorChamadoId && usuarioGrupo.GrupoId == x.Chamado.GrupoId
-                    select infoUsuario != null && !string.IsNullOrWhiteSpace(infoUsuario.Apelido)
-                        ? infoUsuario.Apelido!
-                        : usuarioCriador.NomeUsuario
-                ).FirstOrDefault() ?? "Nao registrado",
-                FinalizadoPor = (
-                    from historico in _context.HistoricoStatusChamados.AsNoTracking()
-                    join usuarioFinal in _context.Usuarios.AsNoTracking() on historico.UsuarioId equals usuarioFinal.Id into usuarioJoin
-                    from usuarioFinal in usuarioJoin.DefaultIfEmpty()
-                    where historico.ChamadoId == x.Chamado.Id &&
-                          (historico.StatusNovo == StatusNovoChamado.Concluido ||
-                           historico.StatusNovo == StatusNovoChamado.Fechado ||
-                           historico.StatusNovo == StatusNovoChamado.Cancelado)
-                    orderby historico.DataTransicao descending
-                    select historico.OrigemAutomatica
+                    where usuarioGrupo.GrupoId == GrupoId && criadorIds.Contains(usuarioGrupo.UsuarioId)
+                    select new
+                    {
+                        usuarioGrupo.UsuarioId,
+                        Nome = infoUsuario != null && !string.IsNullOrWhiteSpace(infoUsuario.Apelido)
+                            ? infoUsuario.Apelido!
+                            : usuarioCriador.NomeUsuario
+                    })
+                .ToDictionaryAsync(x => x.UsuarioId, x => x.Nome);
+
+        var finalizadorIds = historicosFinais
+            .Where(h => !h.OrigemAutomatica && h.UsuarioId.HasValue)
+            .Select(h => h.UsuarioId!.Value)
+            .Distinct()
+            .ToList();
+
+        var finalizadoresPorId = finalizadorIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.Usuarios
+                .AsNoTracking()
+                .Where(u => finalizadorIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.NomeUsuario);
+
+        Chamados = chamadosPagina
+            .Select(chamado =>
+            {
+                ultimoHistoricoFinalPorChamado.TryGetValue(chamado.Id, out var historicoFinal);
+                var finalizadoPor = "Não registrado";
+
+                if (historicoFinal != null)
+                {
+                    finalizadoPor = historicoFinal.OrigemAutomatica
                         ? "Sistema"
-                        : (usuarioFinal != null ? usuarioFinal.NomeUsuario : "Nao registrado")
-                ).FirstOrDefault() ?? "Nao registrado"
+                        : historicoFinal.UsuarioId.HasValue
+                            ? finalizadoresPorId.GetValueOrDefault(historicoFinal.UsuarioId.Value, "Não registrado")
+                            : "Não registrado";
+                }
+
+                return new HistoricoChamadoVm
+                {
+                    Id = chamado.Id,
+                    NumeroChamadoGrupo = chamado.NumeroChamadoGrupo,
+                    Titulo = chamado.Titulo,
+                    Status = chamado.Status,
+                    DataCriacao = chamado.DataCriacao,
+                    DataFinal = historicoFinal?.DataTransicao ?? chamado.DataFinalizacao,
+                    CriadoPor = criadoresPorId.GetValueOrDefault(chamado.CriadorChamadoId, "Não registrado"),
+                    FinalizadoPor = finalizadoPor
+                };
             })
-            .ToListAsync();
+            .ToList();
 
         TemProximaPagina = Chamados.Count > TamanhoPagina;
         if (TemProximaPagina)
@@ -173,9 +243,11 @@ public class HistoryModel : PageModel
             var chamadosComComentariosNaoLidos = await _context.Notificacoes
                 .AsNoTracking()
                 .Where(n => n.UsuarioId == usuarioId.Value &&
+                            n.GrupoId == GrupoId &&
                             !n.Lida &&
                             n.Tipo == TipoNotificacao.Chamado &&
-                            n.ReferenciaTipo == ReferenciaTipoComentarioHistorico &&
+                            (n.ReferenciaTipo == ReferenciaTipoComentarioHistorico ||
+                             n.ReferenciaTipo == ReferenciaTipoComentarioChamado) &&
                             n.ReferenciaId.HasValue &&
                             chamadosIds.Contains(n.ReferenciaId.Value))
                 .Select(n => n.ReferenciaId!.Value)
@@ -223,9 +295,27 @@ public class HistoryModel : PageModel
                     ? infoUsuario.Apelido
                     : usuario.NomeUsuario,
                 texto = comentario.Mensagem,
+                anexo = comentario.AnexoComentario,
                 dataComentario = comentario.DataComentario
             })
             .ToListAsync();
+
+        var comentariosComAnexo = comentarios.Select(comentario => new
+        {
+            comentario.id,
+            comentario.usuarioId,
+            comentario.autor,
+            comentario.texto,
+            comentario.dataComentario,
+            anexoUrl = string.IsNullOrWhiteSpace(comentario.anexo)
+                ? null
+                : Url.Page("/Menu/Home", "AnexoComentarioChamado", new
+                {
+                    grupoId = chamado.GrupoId,
+                    chamadoId = chamado.Id,
+                    comentarioId = comentario.id
+                })
+        }).ToList();
 
         return new JsonResult(new
         {
@@ -234,7 +324,7 @@ public class HistoryModel : PageModel
             {
                 chamadoId = chamado.Id,
                 podeComentar = PodeGerenciarChamadoNoHistorico(contextoMembro.Permissao),
-                comentarios
+                comentarios = comentariosComAnexo
             }
         });
     }
@@ -246,7 +336,7 @@ public class HistoryModel : PageModel
             return Unauthorized();
 
         if (request == null || request.ChamadoId <= 0)
-            return new JsonResult(new { success = false, message = "Chamado invalido." });
+            return new JsonResult(new { success = false, message = "Chamado inválido." });
 
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoAcesso.Success)
@@ -264,9 +354,11 @@ public class HistoryModel : PageModel
                 {
                     var notificacoes = await _context.Notificacoes
                         .Where(n => n.UsuarioId == usuarioId.Value &&
+                                    n.GrupoId == GrupoId &&
                                     !n.Lida &&
                                     n.Tipo == TipoNotificacao.Chamado &&
-                                    n.ReferenciaTipo == ReferenciaTipoComentarioHistorico &&
+                                    (n.ReferenciaTipo == ReferenciaTipoComentarioHistorico ||
+                                     n.ReferenciaTipo == ReferenciaTipoComentarioChamado) &&
                                     n.ReferenciaId == request.ChamadoId)
                         .ToListAsync();
 
@@ -295,7 +387,7 @@ public class HistoryModel : PageModel
         }
         catch (Exception)
         {
-            return new JsonResult(new { success = false, message = "Nao foi possivel atualizar a visualizacao dos comentarios." });
+            return new JsonResult(new { success = false, message = "Não foi possível atualizar a visualização dos comentários." });
         }
     }
 
@@ -306,7 +398,7 @@ public class HistoryModel : PageModel
             return Unauthorized();
 
         if (request == null || request.ChamadoId <= 0 || string.IsNullOrWhiteSpace(request.Mensagem))
-            return new JsonResult(new { success = false, message = "Comentario invalido." });
+            return new JsonResult(new { success = false, message = "Comentário inválido." });
 
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoAcesso.Success)
@@ -317,13 +409,13 @@ public class HistoryModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "Voce nao tem permissao para comentar neste chamado."
+                message = "Você não tem permissão para comentar neste chamado."
             });
         }
 
         var mensagem = request.Mensagem.Trim();
         if (mensagem.Length > 500)
-            return new JsonResult(new { success = false, message = "O comentario nao pode exceder 500 caracteres." });
+            return new JsonResult(new { success = false, message = "O comentário não pode exceder 500 caracteres." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -376,9 +468,10 @@ public class HistoryModel : PageModel
                         .Select(membro => new Notificacao
                         {
                             UsuarioId = membro.UsuarioId,
+                            GrupoId = resultadoAcesso.Chamado.GrupoId,
                             Tipo = TipoNotificacao.Chamado,
-                            Titulo = "Novo comentario em chamado",
-                            Mensagem = $"Chamado #{resultadoAcesso.Chamado.NumeroChamadoGrupo}: novo comentario registrado.",
+                            Titulo = "Novo comentário em chamado",
+                            Mensagem = $"Chamado #{resultadoAcesso.Chamado.NumeroChamadoGrupo}: novo comentário registrado.",
                             ReferenciaId = resultadoAcesso.Chamado.Id,
                             ReferenciaTipo = ReferenciaTipoComentarioHistorico,
                             LinkDestino = Url.Page("/Menu/History", new { grupoId = resultadoAcesso.Chamado.GrupoId }),
@@ -399,7 +492,7 @@ public class HistoryModel : PageModel
                         {
                             chamadoId = resultadoAcesso.Chamado.Id,
                             comentarioId = comentario.Id,
-                            message = "Comentario adicionado com sucesso."
+                            message = "Comentário adicionado com sucesso."
                         }
                     });
                 }
@@ -412,7 +505,7 @@ public class HistoryModel : PageModel
         }
         catch (Exception)
         {
-            return new JsonResult(new { success = false, message = "Nao foi possivel adicionar o comentario." });
+            return new JsonResult(new { success = false, message = "Não foi possível adicionar o comentário." });
         }
     }
 
@@ -423,7 +516,7 @@ public class HistoryModel : PageModel
             return Unauthorized();
 
         if (request == null || request.ChamadoId <= 0 || string.IsNullOrWhiteSpace(request.Status))
-            return new JsonResult(new { success = false, message = "Dados invalidos para alteracao de status." });
+            return new JsonResult(new { success = false, message = "Dados inválidos para alteração de status." });
 
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoAcesso.Success)
@@ -434,12 +527,15 @@ public class HistoryModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "Voce nao tem permissao para alterar o status deste chamado."
+                message = "Você não tem permissão para alterar o status deste chamado."
             });
         }
 
         if (!Enum.TryParse<StatusChamado>(request.Status.Trim(), out var novoStatus))
-            return new JsonResult(new { success = false, message = "Status invalido." });
+            return new JsonResult(new { success = false, message = "Status inválido." });
+
+        if (!StatusAlteraveisHistorico.Contains(novoStatus))
+            return new JsonResult(new { success = false, message = "Status não permitido para alteração pelo histórico." });
 
         var statusAnterior = resultadoAcesso.Chamado!.Status;
         if (statusAnterior == novoStatus)
@@ -447,7 +543,7 @@ public class HistoryModel : PageModel
             return new JsonResult(new
             {
                 success = false,
-                message = "O chamado ja esta com este status."
+                message = "O chamado já está com este status."
             });
         }
 
@@ -469,7 +565,7 @@ public class HistoryModel : PageModel
                     else if (statusAnterior is StatusChamado.Concluido or StatusChamado.Fechado or StatusChamado.Cancelado)
                         resultadoAcesso.Chamado.DataFinalizacao = null;
 
-                    RegistrarTransicaoStatusChamado(resultadoAcesso.Chamado, statusAnterior, novoStatus, usuarioId.Value, false, "Atualizacao manual pelo historico");
+                    RegistrarTransicaoStatusChamado(resultadoAcesso.Chamado, statusAnterior, novoStatus, usuarioId.Value, false, "Atualização manual pelo historico");
                     RegistrarHistoricoAlteracaoStatus(resultadoAcesso.Chamado, statusAnterior, novoStatus, usuarioId.Value, "StatusManual");
 
                     await _context.SaveChangesAsync();
@@ -501,7 +597,7 @@ public class HistoryModel : PageModel
         }
         catch (Exception)
         {
-            return new JsonResult(new { success = false, message = "Nao foi possivel alterar o status do chamado." });
+            return new JsonResult(new { success = false, message = "Não foi possível alterar o status do chamado." });
         }
     }
 
@@ -522,25 +618,25 @@ public class HistoryModel : PageModel
     private async Task<ChamadoHistoricoAcessoResult> ObterChamadoHistoricoComAcessoAsync(int usuarioId, int grupoId, int chamadoId)
     {
         if (grupoId <= 0 || chamadoId <= 0)
-            return ChamadoHistoricoAcessoResult.Falha("Chamado invalido.");
+            return ChamadoHistoricoAcessoResult.Falha("Chamado inválido.");
 
         var chamado = await _context.Chamados
             .FirstOrDefaultAsync(c => c.Id == chamadoId && c.GrupoId == grupoId && c.Status != StatusChamado.Excluido);
 
         if (chamado == null)
-            return ChamadoHistoricoAcessoResult.Falha("Chamado nao encontrado.");
+            return ChamadoHistoricoAcessoResult.Falha("Chamado não encontrado.");
 
         if (!StatusFinais.Contains(chamado.Status))
-            return ChamadoHistoricoAcessoResult.Falha("O chamado nao esta mais no historico.");
+            return ChamadoHistoricoAcessoResult.Falha("O chamado não está mais no histórico.");
 
         var contextoMembro = await ValidarMembroAsync(usuarioId, grupoId);
         if (contextoMembro == null)
-            return ChamadoHistoricoAcessoResult.Falha("Voce nao pertence a este grupo.");
+            return ChamadoHistoricoAcessoResult.Falha("Você não pertence a este grupo.");
 
         var estaPublicoNoHistorico = await ObterVisibilidadeHistoricoAsync(chamado);
         if (!GrupoPermissionService.PodeVerChamado(contextoMembro.Permissao, estaPublicoNoHistorico, usuarioId, chamado.CriadorChamadoId))
         {
-            return ChamadoHistoricoAcessoResult.Falha("Voce nao tem permissao para visualizar este chamado.");
+            return ChamadoHistoricoAcessoResult.Falha("Você não tem permissão para visualizar este chamado.");
         }
 
         return ChamadoHistoricoAcessoResult.Sucesso(chamado, contextoMembro, estaPublicoNoHistorico);
@@ -638,6 +734,14 @@ public class HistoryModel : PageModel
             DataFinal.HasValue && DataFinal.Value >= DataCriacao
                 ? DataFinal.Value - DataCriacao
                 : null;
+    }
+
+    private class HistoricoFinalResumo
+    {
+        public int ChamadoId { get; set; }
+        public DateTime DataTransicao { get; set; }
+        public int? UsuarioId { get; set; }
+        public bool OrigemAutomatica { get; set; }
     }
 
     public class ChamadoHistoricoRequest

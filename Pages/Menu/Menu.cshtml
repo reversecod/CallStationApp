@@ -245,7 +245,7 @@
                             data-bs-toggle="modal"
                             data-bs-target="#modalNotificacoes"
                             id="btnAbrirNotificacoes"
-                            aria-label="Notificações">
+                            aria-label="Notificacoes">
                         <i class="bi bi-bell fs-5"></i>
 
                         @if (Model.TotalNotificacoesNaoLidas > 0)
@@ -271,8 +271,8 @@
                                 <small class="text-muted">Sua conta</small>
                             </li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#">Meu perfil</a></li>
-                            <li><a class="dropdown-item" href="#">Configurações</a></li>
+                            <li><a class="dropdown-item" asp-page="/Account/Profile">Meu perfil</a></li>
+                            <li><a class="dropdown-item" href="#">Configuracoes</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
                         </ul>
@@ -482,7 +482,7 @@
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalNotificacoesLabel">
                         <i class="bi bi-bell me-2"></i>
-                        Notificações
+                        Notificacoes
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                 </div>
@@ -491,15 +491,15 @@
                     <div id="listaNotificacoes" class="notificacoes-lista">
                         <div class="text-center text-muted py-4">
                             <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
-                            Nenhuma notificação no momento.
+                            Nenhuma notificacao no momento.
                         </div>
                     </div>
                 </div>
 
                 <div class="modal-footer d-flex justify-content-between">
-                <a asp-page="/Menu/Notifications" class="btn btn-primary">
+                <a asp-page="/Menu/Menu" asp-page-handler="AbrirNotificacoes" class="btn btn-primary">
                     <i class="bi bi-clock-history me-2"></i>
-                    Histórico
+                    Historico
                 </a>
 
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
@@ -524,7 +524,7 @@
             listaNotificacoes.innerHTML = "";
             const erro = document.createElement("div");
             erro.className = "text-center text-muted py-4";
-            erro.textContent = mensagem || "Não foi possível carregar as notificações.";
+            erro.textContent = mensagem || "Não foi possível carregar as notificacoes.";
             listaNotificacoes.appendChild(erro);
         }
 
@@ -537,7 +537,7 @@
 
                 const icone = document.createElement("i");
                 icone.className = "bi bi-bell-slash fs-3 d-block mb-2";
-                vazio.append(icone, document.createTextNode("Nenhuma notificação no momento."));
+                vazio.append(icone, document.createTextNode("Nenhuma notificacao no momento."));
                 listaNotificacoes.appendChild(vazio);
                 return;
             }
@@ -561,13 +561,23 @@
                 mensagem.className = "notificacao-mensagem mb-2";
                 mensagem.textContent = n.mensagem || "";
 
+                const grupo = document.createElement("div");
+                grupo.className = "small text-muted mb-2";
+                grupo.textContent = n.nomeGrupo ? `Grupo: ${n.nomeGrupo}` : "";
+
                 const link = document.createElement("a");
-                link.href = "/Menu/Notifications";
+                const urlBase = n.linkDestino || (n.grupoId ? `/Menu/Notifications?grupoId=${encodeURIComponent(n.grupoId)}` : "?handler=AbrirNotificacoes");
+                const separador = urlBase.includes("?") ? "&" : "?";
+                link.href = n.id ? `${urlBase}${separador}notificacaoId=${encodeURIComponent(n.id)}#notificacao-${encodeURIComponent(n.id)}` : urlBase;
                 link.className = "small text-decoration-none";
                 link.textContent = "Abrir";
 
                 topo.append(titulo, data);
-                item.append(topo, mensagem, link);
+                item.append(topo, mensagem);
+                if (n.nomeGrupo) {
+                    item.appendChild(grupo);
+                }
+                item.appendChild(link);
                 listaNotificacoes.appendChild(item);
             });
         }
@@ -575,12 +585,12 @@
         async function carregarNotificacoes() {
             try {
                 const response = await fetch('?handler=ListarNotificacoes');
-                if (!response.ok) throw new Error("Falha ao carregar notificações.");
+                if (!response.ok) throw new Error("Falha ao carregar notificacoes.");
 
                 const data = await response.json();
 
                 if (!data.success) {
-                    exibirErroNotificacoes(data.message || "Não foi possível carregar as notificações.");
+                    exibirErroNotificacoes(data.message || "Não foi possível carregar as notificacoes.");
                     return false;
                 }
 
@@ -594,7 +604,7 @@
                     badgeNotificacoes.textContent = '0';
                 }
             } catch {
-                exibirErroNotificacoes("Não foi possível carregar as notificações.");
+                exibirErroNotificacoes("Não foi possível carregar as notificacoes.");
                 return false;
             }
         }
@@ -610,7 +620,7 @@
                     }
                 });
 
-                if (!response.ok) throw new Error("Falha ao marcar notificações.");
+                if (!response.ok) throw new Error("Falha ao marcar notificacoes.");
 
                 badgeNotificacoes.classList.add('d-none');
                 badgeNotificacoes.textContent = '0';

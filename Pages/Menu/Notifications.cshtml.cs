@@ -1,5 +1,7 @@
+using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Models;
+using CallStationApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -11,13 +13,27 @@ namespace CallStationApp.Pages.Menu;
 public class NotificationsModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly NotificacaoService _notificacaoService;
     private readonly ILogger<NotificationsModel> _logger;
 
-    public NotificationsModel(AppDbContext context, ILogger<NotificationsModel> logger)
+    public NotificationsModel(
+        AppDbContext context,
+        GrupoAuthorizationService grupoAuthorizationService,
+        NotificacaoService notificacaoService,
+        ILogger<NotificationsModel> logger)
     {
         _context = context;
+        _grupoAuthorizationService = grupoAuthorizationService;
+        _notificacaoService = notificacaoService;
         _logger = logger;
     }
+
+    [BindProperty(SupportsGet = true)]
+    public int GrupoId { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public int? NotificacaoId { get; set; }
 
     public Usuario? UsuarioLogado { get; set; }
     public List<NotificacaoViewModel> Notificacoes { get; set; } = new();
@@ -28,6 +44,7 @@ public class NotificationsModel : PageModel
         public int Id { get; set; }
         public string Tipo { get; set; } = string.Empty;
         public string Titulo { get; set; } = string.Empty;
+        public string NomeGrupo { get; set; } = string.Empty;
         public string Mensagem { get; set; } = string.Empty;
         public string MensagemModal { get; set; } = string.Empty;
         public bool Lida { get; set; }
@@ -63,10 +80,45 @@ public class NotificationsModel : PageModel
         if (UsuarioLogado == null)
             return RedirectToPage("/Auth/Login");
 
+        if (GrupoId <= 0)
+        {
+            var grupoNotificacao = await _context.Notificacoes
+                .AsNoTracking()
+                .Where(n => n.UsuarioId == idUsuario.Value)
+                .OrderByDescending(n => !n.Lida)
+                .ThenByDescending(n => n.DataCriacao)
+                .Select(n => (int?)n.GrupoId)
+                .FirstOrDefaultAsync();
+
+            var grupoAcesso = grupoNotificacao ?? await _context.UsuariosGrupos
+                .AsNoTracking()
+                .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
+                .OrderByDescending(ug => ug.DataUltimoAcesso ?? ug.DataAdicao)
+                .Select(ug => (int?)ug.GrupoId)
+                .FirstOrDefaultAsync();
+
+            if (!grupoAcesso.HasValue)
+                return Page();
+
+            GrupoId = grupoAcesso.Value;
+        }
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
+        if (contextoMembro == null)
+        {
+            var possuiNotificacaoNoGrupo = await _context.Notificacoes
+                .AsNoTracking()
+                .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId);
+
+            if (!possuiNotificacaoNoGrupo)
+                return RedirectToPage("/Menu/Menu");
+        }
+
         var convitesPendentesIds = await _context.ConvitesGrupo
             .AsNoTracking()
             .Where(c =>
                 c.DestinatarioUsuarioId == idUsuario.Value &&
+                c.GrupoId == GrupoId &&
                 c.Status == StatusConviteGrupo.Pendente)
             .Select(c => c.Id)
             .ToListAsync();
@@ -75,13 +127,14 @@ public class NotificationsModel : PageModel
 
         Notificacoes = await _context.Notificacoes
             .AsNoTracking()
-            .Where(n => n.UsuarioId == idUsuario.Value)
+            .Where(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId)
             .OrderByDescending(n => n.DataCriacao)
             .Select(n => new NotificacaoViewModel
             {
                 Id = n.Id,
                 Tipo = n.Tipo.ToString(),
                 Titulo = n.Titulo,
+                NomeGrupo = n.Grupo != null ? n.Grupo.Nome : string.Empty,
                 Mensagem = n.Mensagem,
                 Lida = n.Lida,
                 DataCriacao = n.DataCriacao,
@@ -129,6 +182,30 @@ public class NotificationsModel : PageModel
         return Page();
     }
 
+    public async Task<IActionResult> OnGetContarNaoLidasAsync(int grupoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (grupoId <= 0)
+            return new JsonResult(new { success = false, message = "Grupo inválido." });
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, grupoId);
+        if (contextoMembro == null)
+            return Forbid();
+
+        var totalNaoLidas = await _context.Notificacoes
+            .AsNoTracking()
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == grupoId && !n.Lida);
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = new { totalNaoLidas }
+        });
+    }
+
     public async Task<IActionResult> OnPostMarcarTodasComoLidasAsync()
     {
         var idUsuario = GetUsuarioLogadoId();
@@ -140,8 +217,27 @@ public class NotificationsModel : PageModel
             };
         }
 
+        if (GrupoId <= 0)
+            return new JsonResult(new { success = false, message = "Grupo inválido." });
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
+        if (contextoMembro == null)
+        {
+            var possuiNotificacaoNoGrupo = await _context.Notificacoes
+                .AsNoTracking()
+                .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId);
+
+            if (!possuiNotificacaoNoGrupo)
+            {
+                return new JsonResult(new { success = false, message = "Você não pertence a este grupo." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+        }
+
         var notificacoes = await _context.Notificacoes
-            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
+            .Where(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId && !n.Lida)
             .ToListAsync();
 
         if (!notificacoes.Any())
@@ -149,7 +245,7 @@ public class NotificationsModel : PageModel
             return new JsonResult(new
             {
                 success = true,
-                message = "Não há notificações pendentes."
+                message = "Não há notificacoes pendentes."
             });
         }
 
@@ -166,7 +262,7 @@ public class NotificationsModel : PageModel
         return new JsonResult(new
         {
             success = true,
-            message = "Notificações marcadas como lidas com sucesso.",
+            message = "Notificacoes marcadas como lidas com sucesso.",
             totalNaoLidas = 0
         });
     }
@@ -184,31 +280,65 @@ public class NotificationsModel : PageModel
 
         if (request == null || request.NotificacaoId <= 0)
         {
-            return new JsonResult(new { success = false, message = "Notificação inválida." })
+            return new JsonResult(new { success = false, message = "Notificacao inválida." })
             {
                 StatusCode = StatusCodes.Status400BadRequest
             };
         }
 
         var notificacao = await _context.Notificacoes
-            .FirstOrDefaultAsync(n => n.Id == request.NotificacaoId && n.UsuarioId == idUsuario.Value);
+            .FirstOrDefaultAsync(n =>
+                n.Id == request.NotificacaoId &&
+                n.UsuarioId == idUsuario.Value &&
+                n.GrupoId == GrupoId);
 
         if (notificacao == null)
         {
-            return new JsonResult(new { success = false, message = "Notificação não encontrada." })
+            return new JsonResult(new { success = false, message = "Notificacao não encontrada." })
             {
                 StatusCode = StatusCodes.Status404NotFound
             };
         }
 
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, notificacao.GrupoId);
+        if (contextoMembro == null)
+        {
+            var possuiNotificacaoNoGrupo = await _context.Notificacoes
+                .AsNoTracking()
+                .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId);
+
+            if (!possuiNotificacaoNoGrupo)
+            {
+                return new JsonResult(new { success = false, message = "Você não pertence a este grupo." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+        }
+
         notificacao.Lida = !notificacao.Lida;
         notificacao.DataLeitura = notificacao.Lida ? DateTime.UtcNow : null;
 
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
 
         var totalNaoLidas = await _context.Notificacoes
             .AsNoTracking()
-            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId && !n.Lida);
 
         return new JsonResult(new
         {
@@ -217,8 +347,8 @@ public class NotificationsModel : PageModel
             dataLeitura = notificacao.DataLeitura,
             totalNaoLidas,
             message = notificacao.Lida
-                ? "Notificação marcada como lida."
-                : "Notificação marcada como não lida."
+                ? "Notificacao marcada como lida."
+                : "Notificacao marcada como não lida."
         });
     }
 
@@ -275,6 +405,7 @@ public class NotificationsModel : PageModel
                         var notificacaoExistenteAtivo = await _context.Notificacoes
                             .FirstOrDefaultAsync(n =>
                                 n.UsuarioId == idUsuario.Value &&
+                                n.GrupoId == convite.GrupoId &&
                                 n.ReferenciaId == convite.Id &&
                                 n.ReferenciaTipo == "ConviteGrupo");
 
@@ -325,6 +456,7 @@ public class NotificationsModel : PageModel
                     var notificacao = await _context.Notificacoes
                         .FirstOrDefaultAsync(n =>
                             n.UsuarioId == idUsuario.Value &&
+                            n.GrupoId == convite.GrupoId &&
                             n.ReferenciaId == convite.Id &&
                             n.ReferenciaTipo == "ConviteGrupo");
 
@@ -340,6 +472,7 @@ public class NotificationsModel : PageModel
                     _context.Notificacoes.Add(new Notificacao
                     {
                         UsuarioId = convite.RemetenteUsuarioId,
+                        GrupoId = convite.GrupoId,
                         Tipo = TipoNotificacao.ConviteGrupo,
                         Titulo = "Convite aceito",
                         Mensagem = $"{usuarioDestinatario ?? "Um usuário"} aceitou seu convite para o grupo {nomeGrupo ?? "selecionado"}.",
@@ -347,8 +480,10 @@ public class NotificationsModel : PageModel
                         DataCriacao = DateTime.UtcNow,
                         ReferenciaId = convite.Id,
                         ReferenciaTipo = "ConviteGrupoRespondidoAceito",
-                        LinkDestino = "/Menu/Notifications"
+                        LinkDestino = $"/Menu/Notifications?grupoId={convite.GrupoId}"
                     });
+
+                    await _notificacaoService.CriarNotificacoesEntradaGrupoPorConviteAsync(convite.GrupoId, idUsuario.Value);
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -422,6 +557,7 @@ public class NotificationsModel : PageModel
         var notificacao = await _context.Notificacoes
         .FirstOrDefaultAsync(n =>
             n.UsuarioId == idUsuario.Value &&
+            n.GrupoId == convite.GrupoId &&
             n.ReferenciaId == convite.Id &&
             n.ReferenciaTipo == "ConviteGrupo");
 
@@ -437,6 +573,7 @@ public class NotificationsModel : PageModel
         _context.Notificacoes.Add(new Notificacao
         {
             UsuarioId = convite.RemetenteUsuarioId,
+            GrupoId = convite.GrupoId,
             Tipo = TipoNotificacao.ConviteGrupo,
             Titulo = "Convite recusado",
             Mensagem = $"{usuarioDestinatario ?? "Um usuário"} recusou seu convite para o grupo {nomeGrupo ?? "selecionado"}.",
@@ -444,10 +581,25 @@ public class NotificationsModel : PageModel
             DataCriacao = DateTime.UtcNow,
             ReferenciaId = convite.Id,
             ReferenciaTipo = "ConviteGrupoRespondidoRecusado",
-            LinkDestino = "/Menu/Notifications"
+            LinkDestino = $"/Menu/Notifications?grupoId={convite.GrupoId}"
         });
 
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
 
         return new JsonResult(new
         {

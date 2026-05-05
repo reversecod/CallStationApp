@@ -40,6 +40,7 @@ CREATE TABLE Usuarios_grupos (
     permissao ENUM('Nenhuma','Colaborador','Tecnico','Administracao')
         NOT NULL DEFAULT 'Nenhuma',
     data_adicao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    data_ultimo_acesso DATETIME NULL,
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
     data_remocao DATETIME NULL,
     removido_por_usuario_id INT NULL,
@@ -54,6 +55,9 @@ CREATE TABLE Usuarios_grupos (
 
 CREATE INDEX idx_ug_usuario_grupo_ativo
     ON Usuarios_grupos (usuario_id, grupo_id, ativo);
+
+CREATE INDEX idx_ug_usuario_ativo_ultimo_acesso
+    ON Usuarios_grupos (usuario_id, ativo, data_ultimo_acesso);
 
 CREATE INDEX idx_ug_grupo_ativo_permissao
     ON Usuarios_grupos (grupo_id, ativo, permissao);
@@ -231,6 +235,12 @@ CREATE TABLE Comentarios_chamados (
     CONSTRAINT fk_comentario_usuario
         FOREIGN KEY (usuario_id) REFERENCES Usuarios(id)
 );
+
+CREATE INDEX idx_comentario_chamado_data
+    ON Comentarios_chamados(chamado_id, data_comentario);
+
+CREATE INDEX idx_comentario_usuario_data
+    ON Comentarios_chamados(usuario_id, data_comentario);
 
 -- =========================================================
 -- 1) QUADROS DE TAREFAS
@@ -748,6 +758,7 @@ CREATE UNIQUE INDEX uq_convites_grupo_pendente
 CREATE TABLE Notificacoes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL,
+    grupo_id INT NOT NULL,
 
     tipo ENUM('ConviteGrupo','Sistema','Chamado','Tarefa')
         NOT NULL DEFAULT 'Sistema',
@@ -764,11 +775,19 @@ CREATE TABLE Notificacoes (
     link_destino VARCHAR(255) NULL,
 
     CONSTRAINT fk_notificacao_usuario
-        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id)
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id),
+    CONSTRAINT fk_notificacao_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id)
 );
 
 CREATE INDEX idx_notificacao_usuario_lida
     ON Notificacoes(usuario_id, lida, data_criacao);
+
+CREATE INDEX idx_notificacao_usuario_grupo_lida_data
+    ON Notificacoes(usuario_id, grupo_id, lida, data_criacao);
+
+CREATE INDEX idx_notificacao_usuario_referencia_lida
+    ON Notificacoes(usuario_id, lida, tipo, referencia_tipo, referencia_id);
     
 -- ==========================
 -- HISTÓRICO DE ALTERAÇÕES
@@ -855,6 +874,9 @@ CREATE TABLE Grupos_configuracoes (
     horas_apos_vencimento_para_pendente INT NULL,
     horas_antes_prazo_para_alerta INT NULL,
     notificar_administradores_sla BOOLEAN NOT NULL DEFAULT TRUE,
+    exibir_data_finalizacao_modal BOOLEAN NOT NULL DEFAULT TRUE,
+    exibir_prazo_resposta_modal BOOLEAN NOT NULL DEFAULT TRUE,
+    exibir_prazo_conclusao_modal BOOLEAN NOT NULL DEFAULT TRUE,
     atualizado_por_usuario_id INT NULL,
     data_atualizacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

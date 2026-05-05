@@ -190,6 +190,21 @@ namespace CallStationApp.Data
                     .HasColumnType("boolean")
                     .HasDefaultValue(true);
 
+                entity.Property(c => c.ExibirDataFinalizacaoModal)
+                    .HasColumnName("exibir_data_finalizacao_modal")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(c => c.ExibirPrazoRespostaModal)
+                    .HasColumnName("exibir_prazo_resposta_modal")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
+                entity.Property(c => c.ExibirPrazoConclusaoModal)
+                    .HasColumnName("exibir_prazo_conclusao_modal")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(true);
+
                 entity.Property(c => c.DataAtualizacao)
                     .HasColumnName("data_atualizacao")
                     .HasColumnType("datetime")
@@ -325,6 +340,10 @@ namespace CallStationApp.Data
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                entity.Property(ug => ug.DataUltimoAcesso)
+                    .HasColumnName("data_ultimo_acesso")
+                    .HasColumnType("datetime");
+
                 entity.Property(ug => ug.Ativo)
                     .HasColumnName("ativo")
                     .HasColumnType("boolean")
@@ -347,6 +366,9 @@ namespace CallStationApp.Data
 
                 entity.HasIndex(ug => new { ug.UsuarioId, ug.Ativo })
                     .HasDatabaseName("idx_ug_usuario_ativo");
+
+                entity.HasIndex(ug => new { ug.UsuarioId, ug.Ativo, ug.DataUltimoAcesso })
+                    .HasDatabaseName("idx_ug_usuario_ativo_ultimo_acesso");
 
                 entity.HasIndex(ug => new { ug.UsuarioId, ug.GrupoId, ug.Ativo })
                     .HasDatabaseName("idx_ug_usuario_grupo_ativo");
@@ -655,8 +677,8 @@ namespace CallStationApp.Data
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.HasIndex(c => new { c.ChamadoId }).HasDatabaseName("idx_comentario_chamado");
-                entity.HasIndex(c => new { c.UsuarioId }).HasDatabaseName("idx_comentario_usuario_chamado");
+                entity.HasIndex(c => new { c.ChamadoId, c.DataComentario }).HasDatabaseName("idx_comentario_chamado_data");
+                entity.HasIndex(c => new { c.UsuarioId, c.DataComentario }).HasDatabaseName("idx_comentario_usuario_data");
             });
 
             // ===== Quadros e tarefas =====
@@ -972,6 +994,10 @@ namespace CallStationApp.Data
                     .HasColumnType("ENUM('ConviteGrupo','Sistema','Chamado','Tarefa')")
                     .HasDefaultValue(TipoNotificacao.Sistema);
 
+                entity.Property(n => n.GrupoId)
+                    .HasColumnName("grupo_id")
+                    .IsRequired();
+
                 entity.Property(n => n.Titulo)
                     .IsRequired()
                     .HasColumnType("varchar(150)")
@@ -1007,6 +1033,17 @@ namespace CallStationApp.Data
 
                 entity.HasIndex(n => new { n.UsuarioId, n.Lida, n.DataCriacao })
                     .HasDatabaseName("idx_notificacao_usuario_lida");
+
+                entity.HasIndex(n => new { n.UsuarioId, n.GrupoId, n.Lida, n.DataCriacao })
+                    .HasDatabaseName("idx_notificacao_usuario_grupo_lida_data");
+
+                entity.HasIndex(n => new { n.UsuarioId, n.Lida, n.Tipo, n.ReferenciaTipo, n.ReferenciaId })
+                    .HasDatabaseName("idx_notificacao_usuario_referencia_lida");
+
+                entity.HasOne(n => n.Grupo)
+                    .WithMany()
+                    .HasForeignKey(n => n.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
             modelBuilder.Entity<HistoricoAlteracaoChamado>(entity =>
             {

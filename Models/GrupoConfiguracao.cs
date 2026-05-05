@@ -61,6 +61,18 @@ namespace CallStationApp.Models
         [Column("notificar_administradores_sla")]
         public bool NotificarAdministradoresSla { get; set; } = true;
 
+        [Required]
+        [Column("exibir_data_finalizacao_modal")]
+        public bool ExibirDataFinalizacaoModal { get; set; } = true;
+
+        [Required]
+        [Column("exibir_prazo_resposta_modal")]
+        public bool ExibirPrazoRespostaModal { get; set; } = true;
+
+        [Required]
+        [Column("exibir_prazo_conclusao_modal")]
+        public bool ExibirPrazoConclusaoModal { get; set; } = true;
+
         [Column("atualizado_por_usuario_id")]
         public int? AtualizadoPorUsuarioId { get; set; }
 

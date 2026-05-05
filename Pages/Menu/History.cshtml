@@ -3,7 +3,8 @@
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @using CallStationApp.Models
 @{
-    ViewData["Title"] = "Historico";
+    ViewData["Title"] = "Histórico";
+    ViewData["ActiveMenu"] = "History";
 }
 
 <!DOCTYPE html>
@@ -11,7 +12,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Historico</title>
+    <title>Histórico</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
@@ -278,15 +279,72 @@
         .comment-list {
             display:flex;
             flex-direction:column;
-            gap:.75rem;
-            max-height:24rem;
+            gap:0;
+            max-height:30rem;
             overflow-y:auto;
+            padding-left:.45rem;
+        }
+
+        .comment-modal-grid {
+            display:grid;
+            grid-template-columns:minmax(16rem, .9fr) minmax(18rem, 1.1fr);
+            gap:1.25rem;
+            align-items:stretch;
+        }
+
+        .comment-compose-panel {
+            border:1px solid #e5e7eb;
+            border-radius:.8rem;
+            background:#f8fafc;
+            padding:1rem;
+        }
+
+        .comment-compose-panel textarea {
+            min-height:14rem;
+            resize:vertical;
+        }
+
+        .comment-timeline-panel {
+            border-left:1px solid #e5e7eb;
+            padding-left:1.25rem;
         }
 
         .comment-item {
+            position:relative;
+            padding:0 0 1rem 1.2rem;
+        }
+
+        .comment-item::before {
+            content:"";
+            position:absolute;
+            left:.18rem;
+            top:.4rem;
+            width:.55rem;
+            height:.55rem;
+            border-radius:999px;
+            background:#2563eb;
+            border:2px solid #fff;
+            box-shadow:0 0 0 1px #bfdbfe;
+        }
+
+        .comment-item::after {
+            content:"";
+            position:absolute;
+            left:.43rem;
+            top:1.05rem;
+            bottom:0;
+            width:1px;
+            background:#e5e7eb;
+        }
+
+        .comment-item:last-child::after {
+            display:none;
+        }
+
+        .comment-card {
             border:1px solid #e5e7eb;
-            border-radius:1rem;
-            padding:.85rem .95rem;
+            border-radius:.8rem;
+            padding:.8rem .9rem;
             background:#fff;
         }
 
@@ -309,6 +367,22 @@
             word-break:break-word;
             color:#111827;
             font-size:.95rem;
+        }
+
+        .comment-attachment {
+            display:inline-flex;
+            margin-top:.65rem;
+            border-radius:.85rem;
+            overflow:hidden;
+            border:1px solid #dbeafe;
+            background:#eff6ff;
+        }
+
+        .comment-attachment img {
+            display:block;
+            max-width:min(100%, 28rem);
+            max-height:16rem;
+            object-fit:contain;
         }
 
         .history-empty {
@@ -346,40 +420,16 @@
             .ticket-side-actions { top:.65rem; right:.6rem; gap:.3rem; }
             .ticket-comment-button { width:1.55rem; height:1.55rem; }
             .ticket-comment-button .bi { font-size:.8rem; }
+            .comment-modal-grid { grid-template-columns:1fr; }
+            .comment-timeline-panel { border-left:0; padding-left:0; }
         }
     </style>
 </head>
 <body>
 <main>
-    <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-        <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
-            <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
-        </a>
-        <hr />
-        <ul class="nav nav-pills flex-column mb-auto">
-            <li class="nav-item"><a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-house-door me-2 icon-svg"></i>Chamados</a></li>
-            <li><a asp-page="/Menu/Tasks" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-table me-2 icon-svg"></i>Tarefas</a></li>
-            <li><a href="#" class="nav-link link-body-emphasis"><i class="bi bi-speedometer2 me-2 icon-svg"></i>Dashboard</a></li>
-            <li><a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" class="nav-link active" aria-current="page"><i class="bi bi-grid me-2 icon-svg"></i>Historico</a></li>
-            <li><a asp-page="/Menu/Members" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-people me-2 icon-svg"></i>Membros</a></li>
-            @if (Model.UsuarioLogadoEhAdministrador)
-            {
-                <li><a asp-page="/Menu/Group" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis"><i class="bi bi-sliders2-vertical me-2 icon-svg"></i>Grupo</a></li>
-            }
-        </ul>
-        <hr />
-        <div class="dropdown">
-            <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown">
-                <img src="@(Model.FotoUsuarioLogado ?? "/images/default-user.png")" alt="" class="user-img rounded-circle me-2" loading="lazy">
-                <strong>@(Model.NomeUsuarioLogado ?? "Usuario")</strong>
-            </a>
-            <ul class="dropdown-menu text-small shadow">
-                <li><a class="dropdown-item" asp-page="/Logout">Sair</a></li>
-            </ul>
-        </div>
-    </div>
+        @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
 
-    <div class="content-wrapper">
+        <div class="content-wrapper">
         <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
         <div class="filter-bar" id="historySortBar">
             <div class="history-columns-grid">
@@ -429,7 +479,10 @@
                 <div id="historyCardsContainer">
                 @foreach (var chamado in Model.Chamados)
                 {
-                    var titulo = !string.IsNullOrWhiteSpace(chamado.Titulo) ? chamado.Titulo : $"Chamado {chamado.NumeroChamadoGrupo}";
+                    var titulo = !string.IsNullOrWhiteSpace(chamado.Titulo) &&
+                                !string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
+                        ? chamado.Titulo
+                        : "Chamado";
                     var statusTexto = FormatarStatus(chamado.Status);
                     var classeStatus = ObterClasseStatus(statusTexto);
 
@@ -448,7 +501,6 @@
                             <div class="ticket-header">
                                 <div class="ticket-title-wrap">
                                     <h2 class="ticket-title">@titulo</h2>
-                                    <span class="ticket-subinfo">Chamado #@chamado.Id</span>
                                 </div>
                             </div>
 
@@ -474,7 +526,7 @@
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Data de encerramento</div>
-                                        <div class="history-value">@(chamado.DataFinal?.ToString("dd/MM/yyyy HH:mm") ?? "Nao registrado")</div>
+                                        <div class="history-value">@(chamado.DataFinal?.ToString("dd/MM/yyyy HH:mm") ?? "Não registrado")</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
@@ -555,7 +607,7 @@
                     <i class="bi bi-grid fs-1 text-secondary"></i>
                     <div>
                         <h2 class="h4 mt-3">Nenhum chamado finalizado</h2>
-                        <p class="text-muted mb-0">Quando chamados forem concluidos, fechados ou cancelados, eles aparecerao aqui.</p>
+                        <p class="text-muted mb-0">Quando chamados forem concluídos, fechados ou cancelados, eles aparecerão aqui.</p>
                     </div>
                 </div>
             }
@@ -564,7 +616,7 @@
 </main>
 
 <div class="modal fade" id="modalComentariosHistorico" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Comentarios do chamado</h5>
@@ -572,20 +624,23 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="comentariosChamadoId" />
-                <div id="listaComentariosHistorico" class="comment-list">
-                    <div class="text-muted small">Carregando comentarios...</div>
-                </div>
-                <div class="mt-3 @(Model.UsuarioLogadoPodeComentarHistorico ? string.Empty : "d-none")" id="secaoNovoComentarioHistorico">
-                    <label for="textoNovoComentarioHistorico" class="form-label">Novo comentario</label>
-                    <textarea id="textoNovoComentarioHistorico" class="form-control" rows="3" maxlength="500" placeholder="Escreva um comentario..."></textarea>
+                <div class="comment-modal-grid">
+                    <div class="comment-compose-panel @(Model.UsuarioLogadoPodeComentarHistorico ? string.Empty : "d-none")" id="secaoNovoComentarioHistorico">
+                        <label for="textoNovoComentarioHistorico" class="form-label">Novo comentário</label>
+                        <textarea id="textoNovoComentarioHistorico" class="form-control" rows="8" maxlength="500" placeholder="Escreva um comentário..."></textarea>
+                        <div class="d-flex justify-content-end mt-3">
+                            <button type="button" class="btn btn-primary" id="btnEnviarComentarioHistorico">Enviar comentário</button>
+                        </div>
+                    </div>
+                    <div class="comment-timeline-panel">
+                        <div id="listaComentariosHistorico" class="comment-list">
+                            <div class="text-muted small">Carregando comentários...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
-                @if (Model.UsuarioLogadoPodeComentarHistorico)
-                {
-                    <button type="button" class="btn btn-primary" id="btnEnviarComentarioHistorico">Enviar comentario</button>
-                }
             </div>
         </div>
     </div>
@@ -602,9 +657,6 @@
                 <input type="hidden" id="statusHistoricoChamadoId" />
                 <label class="form-label" for="selectNovoStatusHistorico">Novo status</label>
                 <select id="selectNovoStatusHistorico" class="form-select">
-                    <option value="Aberto">Aberto</option>
-                    <option value="EmAndamento">Em andamento</option>
-                    <option value="Pendente">Pendente</option>
                     <option value="Concluido">Concluido</option>
                     <option value="Fechado">Fechado</option>
                     <option value="Reaberto">Reaberto</option>
@@ -637,6 +689,7 @@
         const selectNovoStatus = document.getElementById("selectNovoStatusHistorico");
         const btnSalvarStatus = document.getElementById("btnSalvarStatusHistorico");
         const collator = new Intl.Collator("pt-BR", { sensitivity: "base", numeric: true });
+        const historyGrupoId = @Model.GrupoId;
 
         let activeField = null;
         let activeDirection = null;
@@ -682,26 +735,26 @@
             const chamadoId = Number(comentariosChamadoIdInput?.value);
             const mensagem = (textoNovoComentario?.value || "").trim();
             if (!chamadoId || !mensagem) {
-                mostrarToast("Informe um comentario antes de enviar.");
+                mostrarToast("Informe um comentário antes de enviar.");
                 return;
             }
 
             try {
-                const data = await fetchJson("?handler=AdicionarComentario", {
+                const data = await fetchJson(`?handler=AdicionarComentario&grupoId=${encodeURIComponent(historyGrupoId)}`, {
                     chamadoId,
                     mensagem
                 });
 
                 if (!data.success) {
-                    mostrarToast(data.message || "Nao foi possivel adicionar o comentario.");
+                    mostrarToast(data.message || "Não foi possível adicionar o comentário.");
                     return;
                 }
 
                 if (textoNovoComentario) textoNovoComentario.value = "";
-                mostrarToast(data.dados?.message || "Comentario adicionado com sucesso.", "success");
+                mostrarToast(data.dados?.message || "Comentário adicionado com sucesso.", "success");
                 await carregarComentarios(chamadoId, true);
             } catch (error) {
-                mostrarToast(error.message || "Nao foi possivel adicionar o comentario.");
+                mostrarToast(error.message || "Não foi possível adicionar o comentário.");
             }
         });
 
@@ -714,13 +767,13 @@
             }
 
             try {
-                const data = await fetchJson("?handler=AlterarStatusHistorico", {
+                const data = await fetchJson(`?handler=AlterarStatusHistorico&grupoId=${encodeURIComponent(historyGrupoId)}`, {
                     chamadoId,
                     status
                 });
 
                 if (!data.success) {
-                    mostrarToast(data.message || "Nao foi possivel alterar o status.");
+                    mostrarToast(data.message || "Não foi possível alterar o status.");
                     return;
                 }
 
@@ -728,7 +781,7 @@
                 statusModal?.hide();
                 mostrarToast(data.dados?.message || "Status atualizado com sucesso.", "success");
             } catch (error) {
-                mostrarToast(error.message || "Nao foi possivel alterar o status.");
+                mostrarToast(error.message || "Não foi possível alterar o status.");
             }
         });
 
@@ -798,24 +851,24 @@
 
         async function carregarComentarios(chamadoId, marcarVisualizacao) {
             if (!listaComentarios) return;
-            listaComentarios.innerHTML = '<div class="text-muted small">Carregando comentarios...</div>';
+            listaComentarios.innerHTML = '<div class="text-muted small">Carregando comentários...</div>';
 
             try {
                 const response = await fetch(`?handler=Comentarios&grupoId=@Model.GrupoId&chamadoId=${encodeURIComponent(chamadoId)}`);
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || "Nao foi possivel carregar os comentarios.");
+                    throw new Error(data.message || "Não foi possível carregar os comentários.");
                 }
 
                 renderizarComentarios(data.dados?.comentarios || []);
 
                 if (marcarVisualizacao) {
-                    await fetchJson("?handler=MarcarComentariosVisualizados", { chamadoId });
+                    await fetchJson(`?handler=MarcarComentariosVisualizados&grupoId=${encodeURIComponent(historyGrupoId)}`, { chamadoId });
                     removerIndicadorComentario(chamadoId);
                 }
             } catch (error) {
-                listaComentarios.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Nao foi possivel carregar os comentarios.")}</div>`;
+                listaComentarios.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar os comentários.")}</div>`;
             }
         }
 
@@ -823,19 +876,28 @@
             if (!listaComentarios) return;
 
             if (!comentarios || comentarios.length === 0) {
-                listaComentarios.innerHTML = '<div class="text-muted small">Nenhum comentario registrado para este chamado.</div>';
+                listaComentarios.innerHTML = '<div class="text-muted small">Nenhum comentário registrado para este chamado.</div>';
                 return;
             }
 
-            listaComentarios.innerHTML = comentarios.map(comentario => `
-                <div class="comment-item">
-                    <div class="comment-meta">
-                        <span class="comment-author">${escapeHtml(comentario.autor || "Nao registrado")}</span>
-                        <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+            listaComentarios.innerHTML = comentarios.map(comentario => {
+                const anexo = comentario.anexoUrl
+                    ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentário"></a>`
+                    : "";
+
+                return `
+                    <div class="comment-item">
+                        <div class="comment-card">
+                            <div class="comment-meta">
+                                <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
+                                <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                            </div>
+                            <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                            ${anexo}
+                        </div>
                     </div>
-                    <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
-                </div>
-            `).join("");
+                `;
+            }).join("");
         }
 
         function removerIndicadorComentario(chamadoId) {
@@ -1021,7 +1083,7 @@
     private static string FormatarTempo(TimeSpan? tempo)
     {
         if (!tempo.HasValue)
-            return "Nao registrado";
+            return "Não registrado";
 
         var valor = tempo.Value;
         if (valor.TotalDays >= 1)

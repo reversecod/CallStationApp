@@ -1,0 +1,295 @@
+@page
+@model CallStationApp.Pages.Menu.DashboardModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@using CallStationApp.Models
+@{
+    ViewData["Title"] = "Dashboard";
+    ViewData["ActiveMenu"] = "Dashboard";
+}
+
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { min-height:100vh; background:#f8fafc; }
+        main { min-height:100vh; }
+        .sidebar { position:fixed; top:0; left:0; width:17.5rem; height:100vh; z-index:1000; }
+        .content-wrapper { margin-left:17.5rem; padding:1.5rem; min-height:100vh; }
+        .logo-img { width:100%; height:auto; }
+        .dashboard-header {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:1rem;
+            margin-bottom:1rem;
+        }
+        .dashboard-title { margin:0; font-weight:800; color:#111827; }
+        .dashboard-subtitle { color:#64748b; font-size:.92rem; }
+        .filter-bar {
+            display:flex;
+            flex-wrap:wrap;
+            align-items:end;
+            gap:.7rem;
+            padding:.75rem .95rem;
+            margin-bottom:1rem;
+            background:#ececec;
+            border:1px solid #d8dde3;
+            border-radius:1.35rem;
+            box-shadow:0 10px 30px rgba(0,0,0,.04);
+        }
+        .filter-field { min-width:9rem; flex:1 1 9rem; }
+        .filter-field-sm { max-width:8.5rem; }
+        .filter-field label {
+            display:block;
+            font-size:.68rem;
+            font-weight:800;
+            color:#334155;
+            text-transform:uppercase;
+            margin-bottom:.25rem;
+        }
+        .dashboard-section {
+            background:#fff;
+            border:1px solid #e5e7eb;
+            border-radius:.5rem;
+            padding:1rem;
+            box-shadow:0 .5rem 1.25rem rgba(15, 23, 42, .04);
+        }
+        .chart-panel-main { min-height:26rem; }
+        .chart-wrap { position:relative; height:20rem; max-height:20rem; overflow:hidden; }
+        .chart-wrap-sm { position:relative; height:16rem; max-height:16rem; overflow:hidden; }
+        .chart-wrap canvas,
+        .chart-wrap-sm canvas {
+            display:block;
+            width:100% !important;
+            height:100% !important;
+            max-width:100%;
+            max-height:100%;
+        }
+        .metric-grid {
+            display:grid;
+            grid-template-columns:repeat(4, minmax(0, 1fr));
+            gap:.85rem;
+        }
+        .metric-card {
+            border:1px solid #e5e7eb;
+            border-radius:.5rem;
+            padding:.9rem;
+            background:#fff;
+        }
+        .metric-label { color:#64748b; font-size:.75rem; font-weight:700; text-transform:uppercase; }
+        .metric-value { font-size:1.65rem; font-weight:800; color:#0f172a; line-height:1.1; }
+        .dashboard-grid {
+            display:grid;
+            grid-template-columns:repeat(2, minmax(0, 1fr));
+            gap:1rem;
+        }
+        .dashboard-table { font-size:.9rem; }
+        .state-box {
+            min-height:8rem;
+            height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:#64748b;
+            text-align:center;
+        }
+        @@media (max-width: 992px) {
+            .sidebar { position:static; width:100%; height:auto; }
+            .content-wrapper { margin-left:0; padding:1rem; }
+            .dashboard-header { align-items:flex-start; flex-direction:column; }
+            .metric-grid, .dashboard-grid { grid-template-columns:1fr; }
+            .filter-field, .filter-field-sm { max-width:none; flex-basis:100%; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
+
+    <div class="content-wrapper">
+        <header class="dashboard-header">
+            <div>
+                <div class="dashboard-subtitle">@(Model.GrupoAtual?.Nome ?? "Grupo")</div>
+                <h1 class="dashboard-title">Dashboard</h1>
+            </div>
+            <span class="badge text-bg-light border">Dados do grupo atual</span>
+        </header>
+
+        <section class="filter-bar" aria-label="Filtros do dashboard">
+            <div class="filter-field">
+                <label for="dashboardDataInicial">Data inicial</label>
+                <input type="date" class="form-control form-control-sm" id="dashboardDataInicial">
+            </div>
+            <div class="filter-field">
+                <label for="dashboardDataFinal">Data final</label>
+                <input type="date" class="form-control form-control-sm" id="dashboardDataFinal">
+            </div>
+            <div class="filter-field filter-field-sm">
+                <label for="dashboardMes">Mes</label>
+                <select class="form-select form-select-sm" id="dashboardMes">
+                    <option value="">Todos</option>
+                    <option value="1">Janeiro</option>
+                    <option value="2">Fevereiro</option>
+                    <option value="3">Marco</option>
+                    <option value="4">Abril</option>
+                    <option value="5">Maio</option>
+                    <option value="6">Junho</option>
+                    <option value="7">Julho</option>
+                    <option value="8">Agosto</option>
+                    <option value="9">Setembro</option>
+                    <option value="10">Outubro</option>
+                    <option value="11">Novembro</option>
+                    <option value="12">Dezembro</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="dashboardSetor">Setor</label>
+                <select class="form-select form-select-sm" id="dashboardSetor">
+                    <option value="">Todos</option>
+                    @foreach (var setor in Model.Setores)
+                    {
+                        <option value="@setor.Id">@setor.Nome</option>
+                    }
+                </select>
+            </div>
+            @if (Model.UsuarioPodeVerUsuarios)
+            {
+                <div class="filter-field">
+                    <label for="dashboardUsuario">Usuario</label>
+                    <select class="form-select form-select-sm" id="dashboardUsuario">
+                        <option value="">Todos</option>
+                        @foreach (var usuario in Model.Usuarios)
+                        {
+                            <option value="@usuario.Id">@usuario.Nome</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="filter-field">
+                <label for="dashboardTipo">Tipo de problema</label>
+                <select class="form-select form-select-sm" id="dashboardTipo">
+                    <option value="">Todos</option>
+                    @foreach (var tipo in Model.TiposProblema)
+                    {
+                        <option value="@tipo.Id">@tipo.Nome</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="dashboardStatus">Status</label>
+                <select class="form-select form-select-sm" id="dashboardStatus">
+                    <option value="">Todos</option>
+                    @foreach (var status in Enum.GetNames<StatusChamado>().Where(s => s != nameof(StatusChamado.Excluido)))
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="dashboardDimensao">Grafico principal</label>
+                <select class="form-select form-select-sm" id="dashboardDimensao">
+                    <option value="evolucao">Evolucao mensal</option>
+                    <option value="status">Status</option>
+                    <option value="setor">Setor</option>
+                    <option value="tipo">Tipo de problema</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label for="dashboardMetrica">Metrica</label>
+                <select class="form-select form-select-sm" id="dashboardMetrica">
+                    <option value="quantidade">Quantidade</option>
+                    <option value="tempoSolucao">Tempo de solução</option>
+                    <option value="reabertos">Reabertos</option>
+                </select>
+            </div>
+            <div class="d-flex flex-wrap gap-3 align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="dashboardFechados">
+                    <label class="form-check-label small" for="dashboardFechados">Fechados</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="dashboardReabertos">
+                    <label class="form-check-label small" for="dashboardReabertos">Reabertos</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="dashboardPrevisao" checked>
+                    <label class="form-check-label small" for="dashboardPrevisao">Previsao</label>
+                </div>
+            </div>
+            <button type="button" class="btn btn-dark btn-sm ms-auto" id="btnAplicarDashboard">
+                <i class="bi bi-funnel me-1"></i>
+                Aplicar
+            </button>
+        </section>
+
+        <section class="dashboard-section chart-panel-main mb-3">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+                <div>
+                    <h2 class="h5 mb-1" id="dashboardTituloPrincipal">Evolucao mensal de chamados</h2>
+                    <div class="text-muted small">Grafico principal carregado primeiro para leitura rapida da operacao.</div>
+                </div>
+                <div class="spinner-border spinner-border-sm text-secondary d-none" id="dashboardLoadingPrincipal" role="status"></div>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="dashboardGraficoPrincipal"></canvas>
+                <div class="state-box d-none" id="dashboardEstadoPrincipal">Sem dados para o periodo selecionado.</div>
+            </div>
+        </section>
+
+        <section class="metric-grid mb-3" id="dashboardIndicadores">
+            <div class="metric-card"><div class="metric-label">Chamados</div><div class="metric-value" data-metric="totalChamados">-</div></div>
+            <div class="metric-card"><div class="metric-label">Fechados</div><div class="metric-value" data-metric="totalFechados">-</div></div>
+            <div class="metric-card"><div class="metric-label">Reabertos</div><div class="metric-value" data-metric="totalReabertos">-</div></div>
+            <div class="metric-card"><div class="metric-label">Tempo médio de solução</div><div class="metric-value" data-metric="tempoMedioSolucaoHoras">-</div></div>
+        </section>
+
+        <div class="dashboard-grid mb-3" id="dashboardBlocos" data-lazy-dashboard="true">
+            <section class="dashboard-section">
+                <h2 class="h6 mb-3">Chamados por setor</h2>
+                <div class="chart-wrap-sm"><canvas id="dashboardGraficoSetor"></canvas></div>
+            </section>
+            <section class="dashboard-section">
+                <h2 class="h6 mb-3">Chamados por tipo</h2>
+                <div class="chart-wrap-sm"><canvas id="dashboardGraficoTipo"></canvas></div>
+            </section>
+            <section class="dashboard-section">
+                <h2 class="h6 mb-3">Chamados por status</h2>
+                <div class="chart-wrap-sm"><canvas id="dashboardGraficoStatus"></canvas></div>
+            </section>
+            <section class="dashboard-section">
+                <h2 class="h6 mb-3">Tarefas por status</h2>
+                <div class="chart-wrap-sm"><canvas id="dashboardGraficoTarefas"></canvas></div>
+            </section>
+            @if (Model.UsuarioPodeVerUsuarios)
+            {
+                <section class="dashboard-section">
+                    <h2 class="h6 mb-3">Chamados por usuário</h2>
+                    <div class="chart-wrap-sm"><canvas id="dashboardGraficoUsuario"></canvas></div>
+                </section>
+            }
+            <section class="dashboard-section">
+                <h2 class="h6 mb-3">Principais problemas reabertos</h2>
+                <div id="dashboardTabelaReabertos" class="table-responsive"></div>
+            </section>
+            <section class="dashboard-section">
+                <h2 class="h6 mb-3">Previsao</h2>
+                <div id="dashboardPrevisaoResultado" class="state-box">Carregando previsao...</div>
+            </section>
+        </div>
+    </div>
+</main>
+
+<input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
+<input type="hidden" id="dashboardGrupoId" value="@Model.GrupoId" />
+<input type="hidden" id="dashboardPodeVerUsuarios" value="@Model.UsuarioPodeVerUsuarios.ToString().ToLowerInvariant()" />
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+<script src="~/js/dashboard.js" asp-append-version="true" defer></script>
+</body>
+</html>
