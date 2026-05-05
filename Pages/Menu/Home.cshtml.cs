@@ -60,6 +60,7 @@ public class HomeModel : PageModel
     public bool PodeCriarChamado { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
     public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
+    public long ServerNowUnixMs { get; set; }
     public bool TemPaginaAnterior => PaginaAtual > 1;
     public bool TemProximaPagina { get; set; }
 
@@ -76,6 +77,8 @@ public class HomeModel : PageModel
 
     public async Task<IActionResult> OnGetAsync()
     {
+        ServerNowUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
             return RedirectToPage("/Auth/Login");

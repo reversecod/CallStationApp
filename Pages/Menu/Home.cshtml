@@ -806,6 +806,7 @@
                             }
 
                             <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
+                            <input type="hidden" id="serverNowUnixMs" value="@Model.ServerNowUnixMs" />
                             <input type="hidden" id="requestVerificationToken"
                                    value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
                         </div>

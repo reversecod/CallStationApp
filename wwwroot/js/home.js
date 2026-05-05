@@ -1,4 +1,6 @@
 const cronometrosAtivos = [];
+const cronometroBaseServidorMs = Number(document.getElementById("serverNowUnixMs")?.value) || Date.now();
+const cronometroBasePerformanceMs = performance.now();
 let chamadoSelecionadoId = null;
 let modalSelecionarListaTarefa = null;
 let modalComentariosChamado = null;
@@ -285,7 +287,7 @@ async function criarNovoChamado() {
 
     const spanCronometro = document.createElement("span");
     spanCronometro.className = "cronometro";
-    spanCronometro.dataset.criadoEm = new Date().toISOString();
+    spanCronometro.dataset.criadoEm = new Date(getAgoraServidorMs()).toISOString();
     spanCronometro.textContent = "00:00";
 
     const spanNumero = document.createElement("span");
@@ -336,18 +338,17 @@ async function criarNovoChamado() {
 }
 
 function atualizarCronometros() {
-    const agora = new Date();
+    const agoraMs = getAgoraServidorMs();
 
     cronometrosAtivos.forEach(span => {
-        const criadoEmTexto = span.dataset.criadoEm;
-        const criadoEm = new Date(criadoEmTexto);
+        const criadoEmMs = Date.parse(span.dataset.criadoEm || "");
 
-        if (isNaN(criadoEm.getTime())) {
+        if (!Number.isFinite(criadoEmMs)) {
             span.textContent = "00:00";
             return;
         }
 
-        const diffMs = agora - criadoEm;
+        const diffMs = agoraMs - criadoEmMs;
         const totalSegundos = Math.max(0, Math.floor(diffMs / 1000));
 
         const dias = Math.floor(totalSegundos / 86400);
@@ -372,6 +373,10 @@ function atualizarCronometros() {
                 `${String(segundos).padStart(2, "0")}`;
         }
     });
+}
+
+function getAgoraServidorMs() {
+    return cronometroBaseServidorMs + (performance.now() - cronometroBasePerformanceMs);
 }
 
 async function carregarChamado(id) {
