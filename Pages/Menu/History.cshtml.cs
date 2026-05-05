@@ -12,6 +12,7 @@ namespace CallStationApp.Pages.Menu;
 public class HistoryModel : PageModel
 {
     private const int TamanhoPagina = 20;
+    private const int TamanhoPaginaComentarios = 30;
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
     private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
     private static readonly StatusChamado[] StatusFinais =
@@ -264,7 +265,7 @@ public class HistoryModel : PageModel
         return Page();
     }
 
-    public async Task<IActionResult> OnGetComentariosAsync(int chamadoId)
+    public async Task<IActionResult> OnGetComentariosAsync(int chamadoId, int page = 1)
     {
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
@@ -277,6 +278,7 @@ public class HistoryModel : PageModel
         var chamado = resultadoAcesso.Chamado!;
         var contextoMembro = resultadoAcesso.ContextoMembro!;
 
+        var pagina = Math.Max(page, 1);
         var comentarios = await (
             from comentario in _context.ComentariosChamados.AsNoTracking()
             join usuario in _context.Usuarios.AsNoTracking()
@@ -286,7 +288,7 @@ public class HistoryModel : PageModel
                 equals new { info.UsuarioId, info.GrupoId } into infoJoin
             from infoUsuario in infoJoin.DefaultIfEmpty()
             where comentario.ChamadoId == chamado.Id
-            orderby comentario.DataComentario ascending, comentario.Id ascending
+            orderby comentario.DataComentario descending, comentario.Id descending
             select new
             {
                 id = comentario.Id,
@@ -298,7 +300,13 @@ public class HistoryModel : PageModel
                 anexo = comentario.AnexoComentario,
                 dataComentario = comentario.DataComentario
             })
+            .Skip((pagina - 1) * TamanhoPaginaComentarios)
+            .Take(TamanhoPaginaComentarios + 1)
             .ToListAsync();
+
+        var temMais = comentarios.Count > TamanhoPaginaComentarios;
+        if (temMais)
+            comentarios.RemoveAt(comentarios.Count - 1);
 
         var comentariosComAnexo = comentarios.Select(comentario => new
         {
@@ -315,7 +323,9 @@ public class HistoryModel : PageModel
                     chamadoId = chamado.Id,
                     comentarioId = comentario.id
                 })
-        }).ToList();
+        })
+        .Reverse()
+        .ToList();
 
         return new JsonResult(new
         {
@@ -324,7 +334,9 @@ public class HistoryModel : PageModel
             {
                 chamadoId = chamado.Id,
                 podeComentar = PodeGerenciarChamadoNoHistorico(contextoMembro.Permissao),
-                comentarios = comentariosComAnexo
+                comentarios = comentariosComAnexo,
+                pagina,
+                temMais
             }
         });
     }

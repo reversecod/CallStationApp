@@ -301,8 +301,20 @@ document.querySelectorAll("[data-create]").forEach(btn => btn.addEventListener("
     const tipo = btn.dataset.create;
     const input = document.querySelector(`[data-input='${tipo}']`);
     const body = { nome: input.value.trim() };
-    if (tipo === "categoria") body.tipoId = parseInt(document.getElementById("selectTipoCategoria").value);
-    if (tipo === "subcategoria") body.categoriaId = parseInt(document.getElementById("selectCategoriaSubcategoria").value);
+    if (tipo === "categoria") {
+        body.tipoId = parseInt(document.getElementById("selectTipoCategoria").value);
+        if (!body.tipoId) {
+            showFeedback("danger", "Selecione um tipo de ocorrência para criar a categoria.");
+            return;
+        }
+    }
+    if (tipo === "subcategoria") {
+        body.categoriaId = parseInt(document.getElementById("selectCategoriaSubcategoria").value);
+        if (!body.categoriaId) {
+            showFeedback("danger", "Selecione uma categoria para criar a subcategoria.");
+            return;
+        }
+    }
     if (tipo === "tipoChamado") body.descricao = document.getElementById("tipoChamadoDescricao").value.trim();
     const handler = { setor:"CriarSetor", tipoOcorrencia:"CriarTipoOcorrencia", categoria:"CriarCategoria", subcategoria:"CriarSubcategoria", tipoChamado:"CriarTipoChamado" }[tipo];
     post(handler, body).catch(e => showFeedback("danger", e.message));

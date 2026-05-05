@@ -602,7 +602,7 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editSetorId", data.setorId);
     setValueIfExists("editOcorrenciaTipoId", data.ocorrenciaTipoId);
     await carregarCategorias(data.ocorrenciaTipoId, data.ocorrenciaCategoriaId);
-    await carregarSubcategorias(data.ocorrenciaCategoriaId, data.ocorrenciaSubcategoriaId);
+    await carregarSubcategorias(getValue("editOcorrenciaCategoriaId"), data.ocorrenciaSubcategoriaId);
 
     if (textoDataCriacao) {
         textoDataCriacao.textContent = data.dataCriacao
@@ -671,7 +671,6 @@ function inicializarBotoesEdicao() {
     if (selectTipo) {
         selectTipo.addEventListener("change", async function () {
             await carregarCategorias(this.value, null);
-            await carregarSubcategorias(null, null);
         });
     }
 
@@ -729,26 +728,28 @@ async function abrirComentariosChamado(chamadoId) {
     const input = document.getElementById("comentariosChamadoId");
     if (input) input.value = chamadoId;
     modalComentariosChamado.show();
-    await carregarComentariosChamado(chamadoId);
+    await carregarComentariosChamado(chamadoId, 1, false);
     await marcarComentariosVisualizados(chamadoId);
 }
 
-async function carregarComentariosChamado(chamadoId) {
+async function carregarComentariosChamado(chamadoId, pagina = 1, anexar = false) {
     const lista = document.getElementById("listaComentariosChamado");
     if (!lista) return;
 
-    lista.innerHTML = '<div class="text-muted small">Carregando comentários...</div>';
+    if (!anexar) {
+        lista.innerHTML = '<div class="text-muted small">Carregando comentários...</div>';
+    }
 
     try {
         const grupoId = document.getElementById("grupoIdAtual")?.value || "";
-        const response = await fetch(`?handler=ComentariosChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+        const response = await fetch(`?handler=ComentariosChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}&page=${encodeURIComponent(pagina)}`);
         const data = await response.json();
 
         if (!response.ok || !data.success) {
             throw new Error(data.message || "Não foi possível carregar os comentários.");
         }
 
-        renderizarComentariosChamado(data.dados?.comentarios || []);
+        renderizarComentariosChamadoPaginado(data.dados || {}, anexar);
     } catch (error) {
         lista.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar os comentários.")}</div>`;
     }
@@ -799,7 +800,7 @@ async function enviarComentarioChamado() {
         if (textoInput) textoInput.value = "";
         if (anexoInput) anexoInput.value = "";
         mostrarToast(data.dados?.message || "Comentário adicionado com sucesso.", "success");
-        await carregarComentariosChamado(chamadoId);
+        await carregarComentariosChamado(chamadoId, 1, false);
     } catch (error) {
         mostrarToast(error.message || "Não foi possível adicionar o comentário.");
     }
@@ -860,6 +861,58 @@ function renderizarComentariosChamado(comentarios) {
             </div>
         `;
     }).join("");
+}
+
+function renderizarComentariosChamadoPaginado(dados, anexar = false) {
+    const lista = document.getElementById("listaComentariosChamado");
+    if (!lista) return;
+
+    const comentarios = dados.comentarios || [];
+    if (!comentarios.length) {
+        if (!anexar) {
+            lista.innerHTML = '<div class="text-muted small">Nenhum comentario registrado para este chamado.</div>';
+        }
+        return;
+    }
+
+    lista.querySelector("[data-load-older-comments]")?.remove();
+
+    const htmlComentarios = comentarios.map(renderizarComentarioChamadoPaginado).join("");
+    const botaoMais = dados.temMais
+        ? `<button type="button" class="btn btn-sm btn-outline-secondary mb-2" data-load-older-comments="${Number(dados.pagina || 1) + 1}">Carregar comentarios anteriores</button>`
+        : "";
+
+    if (anexar) {
+        lista.insertAdjacentHTML("afterbegin", htmlComentarios);
+        if (botaoMais) {
+            lista.insertAdjacentHTML("afterbegin", botaoMais);
+        }
+    } else {
+        lista.innerHTML = `${botaoMais}${htmlComentarios}`;
+    }
+
+    lista.querySelector("[data-load-older-comments]")?.addEventListener("click", async event => {
+        const proximaPagina = Number(event.currentTarget.dataset.loadOlderComments || 2);
+        event.currentTarget.disabled = true;
+        await carregarComentariosChamado(Number(document.getElementById("comentariosChamadoId")?.value), proximaPagina, true);
+    });
+}
+
+function renderizarComentarioChamadoPaginado(comentario) {
+    const anexo = comentario.anexoUrl
+        ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentario"></a>`
+        : "";
+
+    return `
+        <div class="comment-card">
+            <div class="comment-meta">
+                <span class="comment-author">${escapeHtml(comentario.autor || "Nao registrado")}</span>
+                <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+            </div>
+            <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+            ${anexo}
+        </div>
+    `;
 }
 
 function cancelarEdicaoChamado() {
@@ -1195,8 +1248,11 @@ async function carregarCategorias(tipoId, categoriaSelecionada) {
     if (!selectCategoria) return;
 
     selectCategoria.innerHTML = '<option value="">Selecione</option>';
+    selectCategoria.disabled = true;
+    await carregarSubcategorias(null, null);
 
     if (!tipoId) {
+        selectCategoria.innerHTML = '<option value="">Selecione o tipo primeiro</option>';
         return;
     }
 
@@ -1211,7 +1267,8 @@ async function carregarCategorias(tipoId, categoriaSelecionada) {
             throw new Error(data.message || "Erro ao carregar categorias.");
         }
 
-        data.categorias.forEach(categoria => {
+        const categorias = Array.isArray(data.categorias) ? data.categorias : [];
+        categorias.forEach(categoria => {
             const option = document.createElement("option");
             option.value = categoria.id;
             option.textContent = categoria.nome;
@@ -1221,8 +1278,10 @@ async function carregarCategorias(tipoId, categoriaSelecionada) {
 
             selectCategoria.appendChild(option);
         });
+        selectCategoria.disabled = false;
     } catch (error) {
         console.error("Erro ao carregar categorias:", error);
+        selectCategoria.innerHTML = '<option value="">Erro ao carregar</option>';
         mostrarToast(error.message || "Erro ao carregar categorias.");
     }
 }
@@ -1232,8 +1291,10 @@ async function carregarSubcategorias(categoriaId, subcategoriaSelecionada) {
     if (!selectSubcategoria) return;
 
     selectSubcategoria.innerHTML = '<option value="">Selecione</option>';
+    selectSubcategoria.disabled = true;
 
     if (!categoriaId) {
+        selectSubcategoria.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
         return;
     }
 
@@ -1248,7 +1309,8 @@ async function carregarSubcategorias(categoriaId, subcategoriaSelecionada) {
             throw new Error(data.message || "Erro ao carregar subcategorias.");
         }
 
-        data.subcategorias.forEach(subcategoria => {
+        const subcategorias = Array.isArray(data.subcategorias) ? data.subcategorias : [];
+        subcategorias.forEach(subcategoria => {
             const option = document.createElement("option");
             option.value = subcategoria.id;
             option.textContent = subcategoria.nome;
@@ -1258,8 +1320,10 @@ async function carregarSubcategorias(categoriaId, subcategoriaSelecionada) {
 
             selectSubcategoria.appendChild(option);
         });
+        selectSubcategoria.disabled = false;
     } catch (error) {
         console.error("Erro ao carregar subcategorias:", error);
+        selectSubcategoria.innerHTML = '<option value="">Erro ao carregar</option>';
         mostrarToast(error.message || "Erro ao carregar subcategorias.");
     }
 }

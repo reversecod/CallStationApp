@@ -16,6 +16,7 @@ public class HomeModel : PageModel
 {
     private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
+    private const int TamanhoPaginaComentarios = 30;
 
     private static readonly StatusChamado[] StatusFinais =
     {
@@ -898,6 +899,17 @@ public class HomeModel : PageModel
         if (!TryNormalizarDataHoraNullable(request.PrazoConclusao, out var prazoConclusao))
             return new JsonResult(new { success = false, message = "Prazo de conclusão inválido." });
 
+        if (!request.OcorrenciaTipoId.HasValue)
+        {
+            request.OcorrenciaCategoriaId = null;
+            request.OcorrenciaSubcategoriaId = null;
+        }
+
+        if (!request.OcorrenciaCategoriaId.HasValue)
+        {
+            request.OcorrenciaSubcategoriaId = null;
+        }
+
         if (request.SetorId.HasValue)
         {
             var setorValido = await _context.Setores
@@ -1314,7 +1326,7 @@ public class HomeModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnGetComentariosChamadoAsync(int chamadoId)
+    public async Task<IActionResult> OnGetComentariosChamadoAsync(int chamadoId, int page = 1)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
@@ -1325,6 +1337,7 @@ public class HomeModel : PageModel
             return new JsonResult(new { success = false, message = acesso.Message });
 
         var chamado = acesso.Chamado!;
+        var pagina = Math.Max(page, 1);
         var comentariosBase = await (
             from comentario in _context.ComentariosChamados.AsNoTracking()
             join usuario in _context.Usuarios.AsNoTracking() on comentario.UsuarioId equals usuario.Id
@@ -1333,7 +1346,7 @@ public class HomeModel : PageModel
                 equals new { info.UsuarioId, info.GrupoId } into infoJoin
             from infoUsuario in infoJoin.DefaultIfEmpty()
             where comentario.ChamadoId == chamado.Id
-            orderby comentario.DataComentario ascending, comentario.Id ascending
+            orderby comentario.DataComentario descending, comentario.Id descending
             select new
             {
                 comentario.Id,
@@ -1345,7 +1358,13 @@ public class HomeModel : PageModel
                 comentario.DataComentario,
                 comentario.AnexoComentario
             })
+            .Skip((pagina - 1) * TamanhoPaginaComentarios)
+            .Take(TamanhoPaginaComentarios + 1)
             .ToListAsync();
+
+        var temMais = comentariosBase.Count > TamanhoPaginaComentarios;
+        if (temMais)
+            comentariosBase.RemoveAt(comentariosBase.Count - 1);
 
         var comentarios = comentariosBase.Select(comentario => new
         {
@@ -1362,9 +1381,11 @@ public class HomeModel : PageModel
                     chamadoId = chamado.Id,
                     comentarioId = comentario.Id
                 })
-        }).ToList();
+        })
+        .Reverse()
+        .ToList();
 
-        return new JsonResult(new { success = true, dados = new { chamadoId = chamado.Id, comentarios } });
+        return new JsonResult(new { success = true, dados = new { chamadoId = chamado.Id, comentarios, pagina, temMais } });
     }
 
     public async Task<IActionResult> OnPostAdicionarComentarioChamadoAsync([FromForm] AdicionarComentarioChamadoRequest request)
@@ -1724,22 +1745,22 @@ public class HomeModel : PageModel
         };
     }
 
-    public async Task<IActionResult> OnGetCategoriasPorTipoAsync(int tipoId)
+    public async Task<IActionResult> OnGetCategoriasPorTipoAsync(int grupoId, int tipoId)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
             return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
-        if (GrupoId <= 0 || tipoId <= 0)
+        if (grupoId <= 0 || tipoId <= 0)
             return new JsonResult(new { success = false, message = "Parâmetros inválidos." });
 
-        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, grupoId);
         if (contextoMembro == null)
             return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
 
         var tipoValido = await _context.OcorrenciasTipo
             .AsNoTracking()
-            .AnyAsync(t => t.Id == tipoId && t.GrupoId == GrupoId);
+            .AnyAsync(t => t.Id == tipoId && t.GrupoId == grupoId);
 
         if (!tipoValido)
             return new JsonResult(new { success = false, message = "Tipo de ocorrência inválido." });
@@ -1749,16 +1770,16 @@ public class HomeModel : PageModel
         return new JsonResult(new { success = true, categorias });
     }
 
-    public async Task<IActionResult> OnGetSubcategoriasPorCategoriaAsync(int categoriaId)
+    public async Task<IActionResult> OnGetSubcategoriasPorCategoriaAsync(int grupoId, int categoriaId)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
             return new JsonResult(new { success = false, message = "Usuário não autenticado." });
 
-        if (GrupoId <= 0 || categoriaId <= 0)
+        if (grupoId <= 0 || categoriaId <= 0)
             return new JsonResult(new { success = false, message = "Parâmetros inválidos." });
 
-        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, grupoId);
         if (contextoMembro == null)
             return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
 
@@ -1766,7 +1787,7 @@ public class HomeModel : PageModel
             from categoria in _context.OcorrenciasCategoria.AsNoTracking()
             join tipo in _context.OcorrenciasTipo.AsNoTracking()
                 on categoria.TipoId equals tipo.Id
-            where categoria.Id == categoriaId && tipo.GrupoId == GrupoId
+            where categoria.Id == categoriaId && tipo.GrupoId == grupoId
             select categoria.Id
         ).AnyAsync();
 

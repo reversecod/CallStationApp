@@ -1093,6 +1093,9 @@ namespace CallStationApp.Data
                 entity.HasIndex(e => new { e.ChamadoId, e.DataAlteracao })
                     .HasDatabaseName("IX_historico_alteracoes_chamado_chamado_data");
 
+                entity.HasIndex(e => new { e.ChamadoId, e.CampoAlterado, e.DataAlteracao })
+                    .HasDatabaseName("IX_historico_alteracoes_chamado_campo_data");
+
                 entity.HasIndex(e => e.UsuarioId)
                     .HasDatabaseName("IX_historico_alteracoes_chamado_usuario");
 

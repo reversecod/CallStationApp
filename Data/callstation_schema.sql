@@ -821,6 +821,9 @@ CREATE TABLE Historico_alteracoes_chamado (
 CREATE INDEX IX_historico_alteracoes_chamado_chamado_data
     ON historico_alteracoes_chamado (chamado_id, data_alteracao);
 
+CREATE INDEX IX_historico_alteracoes_chamado_campo_data
+    ON historico_alteracoes_chamado (chamado_id, campo_alterado, data_alteracao);
+
 CREATE INDEX IX_historico_alteracoes_chamado_usuario
     ON historico_alteracoes_chamado (usuario_id);
     

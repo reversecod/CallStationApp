@@ -846,22 +846,24 @@
             if (!chamadoId || !comentariosModal) return;
             comentariosChamadoIdInput.value = chamadoId;
             comentariosModal.show();
-            await carregarComentarios(chamadoId, true);
+            await carregarComentarios(chamadoId, true, 1, false);
         }
 
-        async function carregarComentarios(chamadoId, marcarVisualizacao) {
+        async function carregarComentarios(chamadoId, marcarVisualizacao, pagina = 1, anexar = false) {
             if (!listaComentarios) return;
-            listaComentarios.innerHTML = '<div class="text-muted small">Carregando comentários...</div>';
+            if (!anexar) {
+                listaComentarios.innerHTML = '<div class="text-muted small">Carregando comentários...</div>';
+            }
 
             try {
-                const response = await fetch(`?handler=Comentarios&grupoId=@Model.GrupoId&chamadoId=${encodeURIComponent(chamadoId)}`);
+                const response = await fetch(`?handler=Comentarios&grupoId=@Model.GrupoId&chamadoId=${encodeURIComponent(chamadoId)}&page=${encodeURIComponent(pagina)}`);
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || "Não foi possível carregar os comentários.");
                 }
 
-                renderizarComentarios(data.dados?.comentarios || []);
+                renderizarComentariosPaginados(data.dados || {}, anexar);
 
                 if (marcarVisualizacao) {
                     await fetchJson(`?handler=MarcarComentariosVisualizados&grupoId=${encodeURIComponent(historyGrupoId)}`, { chamadoId });
@@ -898,6 +900,58 @@
                     </div>
                 `;
             }).join("");
+        }
+
+        function renderizarComentariosPaginados(dados, anexar = false) {
+            if (!listaComentarios) return;
+
+            const comentarios = dados.comentarios || [];
+            if (!comentarios.length) {
+                if (!anexar) {
+                    listaComentarios.innerHTML = '<div class="text-muted small">Nenhum comentario registrado para este chamado.</div>';
+                }
+                return;
+            }
+
+            listaComentarios.querySelector("[data-load-older-history-comments]")?.remove();
+            const htmlComentarios = comentarios.map(renderizarComentarioHistorico).join("");
+            const botaoMais = dados.temMais
+                ? `<button type="button" class="btn btn-sm btn-outline-secondary mb-2" data-load-older-history-comments="${Number(dados.pagina || 1) + 1}">Carregar comentarios anteriores</button>`
+                : "";
+
+            if (anexar) {
+                listaComentarios.insertAdjacentHTML("afterbegin", htmlComentarios);
+                if (botaoMais) {
+                    listaComentarios.insertAdjacentHTML("afterbegin", botaoMais);
+                }
+            } else {
+                listaComentarios.innerHTML = `${botaoMais}${htmlComentarios}`;
+            }
+
+            listaComentarios.querySelector("[data-load-older-history-comments]")?.addEventListener("click", async event => {
+                const proximaPagina = Number(event.currentTarget.dataset.loadOlderHistoryComments || 2);
+                event.currentTarget.disabled = true;
+                await carregarComentarios(Number(comentariosChamadoIdInput?.value), false, proximaPagina, true);
+            });
+        }
+
+        function renderizarComentarioHistorico(comentario) {
+            const anexo = comentario.anexoUrl
+                ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentario"></a>`
+                : "";
+
+            return `
+                <div class="comment-item">
+                    <div class="comment-card">
+                        <div class="comment-meta">
+                            <span class="comment-author">${escapeHtml(comentario.autor || "Nao registrado")}</span>
+                            <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                        </div>
+                        <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                        ${anexo}
+                    </div>
+                </div>
+            `;
         }
 
         function removerIndicadorComentario(chamadoId) {
