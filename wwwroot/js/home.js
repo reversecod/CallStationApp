@@ -112,6 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     inicializarDropTarefas();
     inicializarBotoesEdicao();
+    inicializarSelectsLongos();
     inicializarCamposDataHoraChamado();
     inicializarLimpezaSelecaoChamado();
     inicializarComentariosChamado();
@@ -415,6 +416,12 @@ async function carregarChamado(id) {
 function formatDateTimeLocal(value) {
     if (!value) return "";
 
+    const texto = String(value);
+    const localMatch = texto.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+    if (localMatch && !/[zZ]|[+-]\d{2}:\d{2}$/.test(texto)) {
+        return `${localMatch[1]}T${localMatch[2]}`;
+    }
+
     const dt = new Date(value);
     if (isNaN(dt.getTime())) return "";
 
@@ -606,7 +613,7 @@ async function preencherFormularioEdicao(data) {
 
     if (textoDataCriacao) {
         textoDataCriacao.textContent = data.dataCriacao
-            ? new Date(data.dataCriacao).toLocaleString("pt-BR")
+            ? formatDateTimeDisplay(data.dataCriacao)
             : "-";
     }
 
@@ -679,6 +686,24 @@ function inicializarBotoesEdicao() {
             await carregarSubcategorias(this.value, null);
         });
     }
+}
+
+function inicializarSelectsLongos() {
+    document.querySelectorAll(".catalog-select").forEach(select => {
+        select.addEventListener("focus", () => expandirSelectLongo(select));
+        select.addEventListener("mousedown", () => expandirSelectLongo(select));
+        select.addEventListener("change", () => recolherSelectLongo(select));
+        select.addEventListener("blur", () => recolherSelectLongo(select));
+    });
+}
+
+function expandirSelectLongo(select) {
+    if (select.disabled || select.options.length <= 8) return;
+    select.size = Math.min(select.options.length, 8);
+}
+
+function recolherSelectLongo(select) {
+    select.size = 1;
 }
 
 function inicializarCamposDataHoraChamado() {

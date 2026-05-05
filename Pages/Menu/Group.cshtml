@@ -28,6 +28,8 @@
         .page-card, .section-card { border:1px solid #e9ecef; border-radius:1rem; box-shadow:0 .25rem 1rem rgba(0,0,0,.04); }
         .stat-card { border:1px solid #eef2f7; background:#fff; border-radius:.9rem; padding:1rem; }
         .soft-table th { color:#6c757d; font-size:.82rem; font-weight:600; }
+        .catalog-scroll { max-height: 28rem; overflow-y: auto; }
+        .catalog-scroll table { margin-bottom: 0; }
         .color-dot { width:1rem; height:1rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.12); }
         .nav-tabs .nav-link { color:#495057; }
         .nav-tabs .nav-link.active { font-weight:600; }
@@ -325,6 +327,22 @@ document.querySelectorAll("[data-archive-type]").forEach(btn => btn.addEventList
 document.querySelectorAll("[data-delete-setor]").forEach(btn => btn.addEventListener("click", () => {
     if (confirm("Excluir este setor? A acao sera bloqueada se houver chamados vinculados.")) post("ExcluirSetor", { id: parseInt(btn.dataset.deleteSetor) }).catch(e => showFeedback("danger", e.message));
 }));
+
+document.querySelectorAll(".catalog-select").forEach(select => {
+    select.addEventListener("focus", () => expandirSelectLongo(select));
+    select.addEventListener("mousedown", () => expandirSelectLongo(select));
+    select.addEventListener("change", () => recolherSelectLongo(select));
+    select.addEventListener("blur", () => recolherSelectLongo(select));
+});
+
+function expandirSelectLongo(select) {
+    if (select.options.length <= 8) return;
+    select.size = Math.min(select.options.length, 8);
+}
+
+function recolherSelectLongo(select) {
+    select.size = 1;
+}
 </script>
 </body>
 </html>
@@ -355,26 +373,26 @@ document.querySelectorAll("[data-delete-setor]").forEach(btn => btn.addEventList
                 : "";
             return $"<tr><td>{System.Net.WebUtility.HtmlEncode(i.Nome)}</td><td>{i.Vinculos}</td><td class=\"text-end\">{acao}</td></tr>";
         }));
-        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">{titulo}</h2><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"{tipo}\" maxlength=\"50\" placeholder=\"Novo item\"><button class=\"btn btn-primary\" data-create=\"{tipo}\">Adicionar</button></div><div class=\"table-responsive\"><table class=\"table soft-table align-middle\"><thead><tr><th>Nome</th><th>Vinculos</th><th></th></tr></thead><tbody>{rows}</tbody></table></div></div></div>");
+        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">{titulo}</h2><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"{tipo}\" maxlength=\"50\" placeholder=\"Novo item\"><button class=\"btn btn-primary\" data-create=\"{tipo}\">Adicionar</button></div><div class=\"table-responsive catalog-scroll\"><table class=\"table soft-table align-middle\"><thead><tr><th>Nome</th><th>Vinculos</th><th></th></tr></thead><tbody>{rows}</tbody></table></div></div></div>");
     }
 
     private IHtmlContent ListaTiposChamado()
     {
         var rows = string.Join("", Model.TiposChamado.Select(i => $"<tr><td>{System.Net.WebUtility.HtmlEncode(i.Nome)}<div class=\"small text-muted\">{System.Net.WebUtility.HtmlEncode(i.Descricao)}</div></td><td>{(i.Ativo ? "Ativo" : "Arquivado")}</td><td class=\"text-end\"><button class=\"btn btn-sm btn-outline-secondary\" data-archive-type=\"{i.Id}\">Arquivar</button></td></tr>"));
-        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">Tipos de chamados</h2><input class=\"form-control mb-2\" data-input=\"tipoChamado\" maxlength=\"50\" placeholder=\"Nome\"><input class=\"form-control mb-2\" id=\"tipoChamadoDescricao\" maxlength=\"160\" placeholder=\"Descricao\"><button class=\"btn btn-primary mb-3\" data-create=\"tipoChamado\">Adicionar</button><div class=\"table-responsive\"><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div></div>");
+        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">Tipos de chamados</h2><input class=\"form-control mb-2\" data-input=\"tipoChamado\" maxlength=\"50\" placeholder=\"Nome\"><input class=\"form-control mb-2\" id=\"tipoChamadoDescricao\" maxlength=\"160\" placeholder=\"Descricao\"><button class=\"btn btn-primary mb-3\" data-create=\"tipoChamado\">Adicionar</button><div class=\"table-responsive catalog-scroll\"><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div></div>");
     }
 
     private IHtmlContent ListaCategorias()
     {
         var opcoes = string.Join("", Model.TiposOcorrencia.Select(t => $"<option value=\"{t.Id}\">{System.Net.WebUtility.HtmlEncode(t.Nome)}</option>"));
         var rows = string.Join("", Model.Categorias.Select(c => $"<tr><td>{System.Net.WebUtility.HtmlEncode(c.Nome)}</td><td>{System.Net.WebUtility.HtmlEncode(c.TipoNome)}</td><td>{c.Subcategorias}</td><td>{c.Vinculos}</td></tr>"));
-        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">Categorias</h2><select class=\"form-select mb-2\" id=\"selectTipoCategoria\">{opcoes}</select><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"categoria\" maxlength=\"50\" placeholder=\"Nova categoria\"><button class=\"btn btn-primary\" data-create=\"categoria\">Adicionar</button></div><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div>");
+        return new HtmlString($"<div class=\"card section-card h-100\"><div class=\"card-body\"><h2 class=\"h5\">Categorias</h2><select class=\"form-select mb-2 catalog-select\" id=\"selectTipoCategoria\">{opcoes}</select><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"categoria\" maxlength=\"50\" placeholder=\"Nova categoria\"><button class=\"btn btn-primary\" data-create=\"categoria\">Adicionar</button></div><div class=\"table-responsive catalog-scroll\"><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div></div>");
     }
 
     private IHtmlContent ListaSubcategorias()
     {
         var opcoes = string.Join("", Model.Categorias.Select(c => $"<option value=\"{c.Id}\">{System.Net.WebUtility.HtmlEncode(c.TipoNome)} / {System.Net.WebUtility.HtmlEncode(c.Nome)}</option>"));
         var rows = string.Join("", Model.Subcategorias.Select(s => $"<tr><td>{System.Net.WebUtility.HtmlEncode(s.Nome)}</td><td>{System.Net.WebUtility.HtmlEncode(s.TipoNome)}</td><td>{System.Net.WebUtility.HtmlEncode(s.CategoriaNome)}</td><td>{s.Vinculos}</td></tr>"));
-        return new HtmlString($"<div class=\"card section-card\"><div class=\"card-body\"><h2 class=\"h5\">Subcategorias</h2><select class=\"form-select mb-2\" id=\"selectCategoriaSubcategoria\">{opcoes}</select><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"subcategoria\" maxlength=\"100\" placeholder=\"Nova subcategoria\"><button class=\"btn btn-primary\" data-create=\"subcategoria\">Adicionar</button></div><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div>");
+        return new HtmlString($"<div class=\"card section-card\"><div class=\"card-body\"><h2 class=\"h5\">Subcategorias</h2><select class=\"form-select mb-2 catalog-select\" id=\"selectCategoriaSubcategoria\">{opcoes}</select><div class=\"input-group mb-3\"><input class=\"form-control\" data-input=\"subcategoria\" maxlength=\"100\" placeholder=\"Nova subcategoria\"><button class=\"btn btn-primary\" data-create=\"subcategoria\">Adicionar</button></div><div class=\"table-responsive catalog-scroll\"><table class=\"table soft-table align-middle\"><tbody>{rows}</tbody></table></div></div>");
     }
 }

@@ -17,6 +17,7 @@ public class HomeModel : PageModel
     private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
     private const int TamanhoPaginaComentarios = 30;
+    private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
 
     private static readonly StatusChamado[] StatusFinais =
     {
@@ -309,10 +310,10 @@ public class HomeModel : PageModel
             criticidade = chamado.Criticidade?.ToString(),
             urgencia = chamado.Urgencia?.ToString(),
             status = chamado.Status.ToString(),
-            dataCriacao = chamado.DataCriacao,
-            dataFinalizacao = chamado.DataFinalizacao,
-            prazoResposta = chamado.PrazoResposta,
-            prazoConclusao = chamado.PrazoConclusao,
+            dataCriacao = ParaDataHoraRegionalIso(chamado.DataCriacao),
+            dataFinalizacao = ParaDataHoraRegionalIso(chamado.DataFinalizacao),
+            prazoResposta = ParaDataHoraRegionalIso(chamado.PrazoResposta),
+            prazoConclusao = ParaDataHoraRegionalIso(chamado.PrazoConclusao),
             publico = chamado.Publico,
             criadorNomeUsuario,
             criadorPermissao,
@@ -1861,7 +1862,7 @@ public class HomeModel : PageModel
         if (texto.Length == 10 &&
             DateTime.TryParseExact(texto, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var somenteData))
         {
-            resultado = somenteData.Date;
+            resultado = DeDataHoraRegionalParaUtc(somenteData.Date);
             return true;
         }
 
@@ -1870,7 +1871,7 @@ public class HomeModel : PageModel
         else if (texto.Length == 13 &&
                  DateTime.TryParseExact(texto, "yyyy-MM-dd'T'HH", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dataHoraSemMinuto))
         {
-            resultado = dataHoraSemMinuto;
+            resultado = DeDataHoraRegionalParaUtc(dataHoraSemMinuto);
             return true;
         }
 
@@ -1887,17 +1888,52 @@ public class HomeModel : PageModel
 
         if (DateTime.TryParseExact(texto, formatos, CultureInfo.GetCultureInfo("pt-BR"), DateTimeStyles.None, out var dataHora))
         {
-            resultado = dataHora;
+            resultado = DeDataHoraRegionalParaUtc(dataHora);
             return true;
         }
 
         if (DateTime.TryParse(texto, CultureInfo.GetCultureInfo("pt-BR"), DateTimeStyles.None, out dataHora))
         {
-            resultado = dataHora;
+            resultado = DeDataHoraRegionalParaUtc(dataHora);
             return true;
         }
 
         return false;
+    }
+
+    private static string? ParaDataHoraRegionalIso(DateTime? dataUtc) =>
+        dataUtc.HasValue ? ParaDataHoraRegionalIso(dataUtc.Value) : null;
+
+    private static string ParaDataHoraRegionalIso(DateTime dataUtc)
+    {
+        var utc = DateTime.SpecifyKind(dataUtc, DateTimeKind.Utc);
+        var regional = TimeZoneInfo.ConvertTimeFromUtc(utc, FusoHorarioRegional);
+        return regional.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+    }
+
+    private static DateTime DeDataHoraRegionalParaUtc(DateTime dataRegional)
+    {
+        var localRegional = DateTime.SpecifyKind(dataRegional, DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(localRegional, FusoHorarioRegional);
+    }
+
+    private static TimeZoneInfo ObterFusoHorarioRegional()
+    {
+        foreach (var id in new[] { "E. South America Standard Time", "America/Sao_Paulo" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Local;
     }
 
     private static bool EhErroDuplicidade(DbUpdateException ex)

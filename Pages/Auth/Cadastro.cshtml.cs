@@ -113,15 +113,8 @@ public class CadastroModel : PageModel
             return Page();
         }
         
-        //Sucesso
-        SuccessMessage = "Cadastro realizado com sucesso!";
-        
-        
-        // Limpa os campos preenchidos
-        ModelState.Clear();
-        NomeCompleto = NomeUsuario = Email = Senha = ConfirmarSenha = null;
-
-        return Page();
+        TempData["CadastroSuccess"] = "Cadastro concluído com sucesso. Faça login para continuar.";
+        return RedirectToPage("/Auth/Login");
     }
 
     private static bool EhErroDuplicidade(DbUpdateException ex)

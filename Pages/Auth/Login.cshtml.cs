@@ -34,8 +34,12 @@ namespace CallStationApp.Pages.Auth
         public bool RememberMe { get; set; }
         
         public string? ErrorMessage { get; set; }
+        public string? SuccessMessage { get; set; }
         
-        public void OnGet(){}
+        public void OnGet()
+        {
+            SuccessMessage = TempData["CadastroSuccess"] as string;
+        }
 
         public async Task<IActionResult> OnPostAsync()
         {
