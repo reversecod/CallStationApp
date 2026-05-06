@@ -664,8 +664,8 @@ namespace CallStationApp.Data
 
                 entity.Property(cc => cc.Mensagem)
                     .IsRequired()
-                    .HasColumnType("varchar(500)")
-                    .HasMaxLength(500);
+                    .HasColumnType("varchar(250)")
+                    .HasMaxLength(250);
 
                 entity.Property(cc => cc.AnexoComentario)
                     .HasColumnName("anexo_comentario")
@@ -816,7 +816,7 @@ namespace CallStationApp.Data
             modelBuilder.Entity<ComentarioTarefa>(entity =>
             {
                 entity.ToTable("Comentarios_tarefas");
-                entity.Property(c => c.Mensagem).IsRequired().HasColumnType("text");
+                entity.Property(c => c.Mensagem).IsRequired().HasColumnType("varchar(250)").HasMaxLength(250);
                 entity.Property(c => c.Editado).HasColumnType("boolean").HasDefaultValue(false);
                 entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(c => c.DataEdicao).HasColumnName("data_edicao").HasColumnType("datetime");
@@ -931,8 +931,8 @@ namespace CallStationApp.Data
                     .HasColumnType("int");
 
                 entity.Property(f => f.Comentario)
-                    .HasColumnType("varchar(500)")
-                    .HasMaxLength(500);
+                    .HasColumnType("varchar(250)")
+                    .HasMaxLength(250);
 
                 entity.Property(f => f.TempoResposta)
                     .HasColumnName("tempo_resposta")

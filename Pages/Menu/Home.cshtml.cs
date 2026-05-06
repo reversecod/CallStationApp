@@ -17,6 +17,7 @@ public class HomeModel : PageModel
     private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
     private const int TamanhoPaginaComentarios = 30;
+    private const int LimiteCaracteresComentario = 250;
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
 
     private static readonly StatusChamado[] StatusFinais =
@@ -1402,8 +1403,8 @@ public class HomeModel : PageModel
         if (string.IsNullOrWhiteSpace(mensagem) && request.AnexoImagem == null)
             return new JsonResult(new { success = false, message = "Informe um comentário ou selecione uma imagem." });
 
-        if (mensagem.Length > 500)
-            return new JsonResult(new { success = false, message = "O comentário não pode exceder 500 caracteres." });
+        if (mensagem.Length > LimiteCaracteresComentario)
+            return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
 
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
         if (!acesso.Success)

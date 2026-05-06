@@ -627,7 +627,7 @@
                 <div class="comment-modal-grid">
                     <div class="comment-compose-panel @(Model.UsuarioLogadoPodeComentarHistorico ? string.Empty : "d-none")" id="secaoNovoComentarioHistorico">
                         <label for="textoNovoComentarioHistorico" class="form-label">Novo comentário</label>
-                        <textarea id="textoNovoComentarioHistorico" class="form-control" rows="8" maxlength="500" placeholder="Escreva um comentário..."></textarea>
+                        <textarea id="textoNovoComentarioHistorico" class="form-control" rows="8" maxlength="250" placeholder="Escreva um comentário..."></textarea>
                         <div class="d-flex justify-content-end mt-3">
                             <button type="button" class="btn btn-primary" id="btnEnviarComentarioHistorico">Enviar comentário</button>
                         </div>
@@ -736,6 +736,11 @@
             const mensagem = (textoNovoComentario?.value || "").trim();
             if (!chamadoId || !mensagem) {
                 mostrarToast("Informe um comentário antes de enviar.");
+                return;
+            }
+
+            if (mensagem.length > 250) {
+                mostrarToast("O comentário não pode exceder 250 caracteres.");
                 return;
             }
 

@@ -13,6 +13,7 @@ public class HistoryModel : PageModel
 {
     private const int TamanhoPagina = 20;
     private const int TamanhoPaginaComentarios = 30;
+    private const int LimiteCaracteresComentario = 250;
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
     private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
     private static readonly StatusChamado[] StatusFinais =
@@ -426,8 +427,8 @@ public class HistoryModel : PageModel
         }
 
         var mensagem = request.Mensagem.Trim();
-        if (mensagem.Length > 500)
-            return new JsonResult(new { success = false, message = "O comentário não pode exceder 500 caracteres." });
+        if (mensagem.Length > LimiteCaracteresComentario)
+            return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 

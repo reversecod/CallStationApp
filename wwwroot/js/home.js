@@ -792,8 +792,8 @@ async function enviarComentarioChamado() {
         return;
     }
 
-    if (mensagem.length > 500) {
-        mostrarToast("O comentário não pode exceder 500 caracteres.");
+    if (mensagem.length > 250) {
+        mostrarToast("O comentário não pode exceder 250 caracteres.");
         return;
     }
 

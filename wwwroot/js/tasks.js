@@ -1490,6 +1490,10 @@ async function adicionarComentario() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
     const mensagem = getValue("comentarioTexto").trim();
     if (!cartaoId || !mensagem) return;
+    if (mensagem.length > 250) {
+        mostrarToast("O comentário não pode exceder 250 caracteres.");
+        return;
+    }
 
     let data;
     try {

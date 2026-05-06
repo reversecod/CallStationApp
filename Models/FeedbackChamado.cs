@@ -28,8 +28,8 @@ namespace CallStationApp.Models
         [Column("nota", TypeName = "int")]
         public required int Avaliacao { get; set; }
 
-        [Column("comentario", TypeName = "varchar(500)")]
-        [StringLength(500, ErrorMessage = "O comentario nao pode exceder 500 caracteres.")]
+        [Column("comentario", TypeName = "varchar(250)")]
+        [StringLength(250, ErrorMessage = "O comentario nao pode exceder 250 caracteres.")]
         public string? Comentario { get; set; }
 
         [Column("tempo_resposta")]

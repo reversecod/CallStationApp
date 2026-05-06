@@ -317,7 +317,8 @@ namespace CallStationApp.Models
         public int UsuarioId { get; set; }
 
         [Required]
-        [Column("mensagem", TypeName = "text")]
+        [Column("mensagem", TypeName = "varchar(250)")]
+        [StringLength(250)]
         public string Mensagem { get; set; } = string.Empty;
 
         [Column("editado")]

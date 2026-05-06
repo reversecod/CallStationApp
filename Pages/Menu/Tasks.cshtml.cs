@@ -13,6 +13,7 @@ public class TasksModel : PageModel
 {
     private const decimal OrdemBase = 1024m;
     private const string PrefixoColunaArquivoSistema = "__callstation_archive__";
+    private const int LimiteCaracteresComentario = 250;
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly ILogger<TasksModel> _logger;
@@ -990,8 +991,8 @@ public class TasksModel : PageModel
             return Forbid();
 
         var texto = request.Mensagem?.Trim();
-        if (string.IsNullOrWhiteSpace(texto) || texto.Length > 500)
-            return BadRequest(new { success = false, message = "Comentário inválido." });
+        if (string.IsNullOrWhiteSpace(texto) || texto.Length > LimiteCaracteresComentario)
+            return BadRequest(new { success = false, message = $"Comentário inválido. Use até {LimiteCaracteresComentario} caracteres." });
 
         _context.ComentariosTarefas.Add(new ComentarioTarefa
         {
