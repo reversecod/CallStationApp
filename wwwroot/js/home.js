@@ -295,6 +295,7 @@ async function criarNovoChamado() {
     const spanNumero = document.createElement("span");
     spanNumero.className = "ticket-number";
     spanNumero.textContent = "...";
+    spanNumero.title = "Criando chamado";
 
     spanOuter.appendChild(spanCronometro);
     chamadoDiv.appendChild(img);
@@ -582,7 +583,10 @@ function atualizarResumoChamado(data) {
     const label = document.getElementById("chamadoSelecionadoLabel");
 
     if (label) {
-        label.textContent = data.numeroChamadoGrupo ? `Chamado ${data.numeroChamadoGrupo}` : "Chamado";
+        const textoChamado = data.numeroChamadoGrupo ? `Chamado ${data.numeroChamadoGrupo}` : "Chamado";
+        label.textContent = textoChamado;
+        label.title = textoChamado;
+        label.setAttribute("aria-label", textoChamado);
         label.className = "badge badge-chamado-selecionado";
         label.classList.remove("d-none");
     }
