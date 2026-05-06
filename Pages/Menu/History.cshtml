@@ -1,4 +1,4 @@
-@page
+﻿@page
 @model CallStationApp.Pages.Menu.HistoryModel
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @using CallStationApp.Models
@@ -17,14 +17,14 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         :root {
-            --history-col-criado: minmax(8.5rem, 1fr);
-            --history-col-finalizado: minmax(8.5rem, 1fr);
-            --history-col-setor: minmax(7.5rem, .9fr);
-            --history-col-tipo: minmax(8rem, .95fr);
-            --history-col-abertura: minmax(10rem, 1.15fr);
-            --history-col-encerramento: minmax(10rem, 1.15fr);
-            --history-col-tempo: minmax(8rem, .9fr);
-            --history-col-status: minmax(8rem, .9fr);
+            --history-col-criado: minmax(0, 1fr);
+            --history-col-finalizado: minmax(0, 1fr);
+            --history-col-setor: minmax(0, .9fr);
+            --history-col-tipo: minmax(0, .95fr);
+            --history-col-abertura: minmax(0, 1.15fr);
+            --history-col-encerramento: minmax(0, 1.15fr);
+            --history-col-tempo: minmax(0, .9fr);
+            --history-col-status: minmax(0, .9fr);
             --history-columns:
                 var(--history-col-criado)
                 var(--history-col-finalizado)
@@ -69,6 +69,11 @@
             flex:1;
         }
 
+        .filter-bar .history-columns-grid {
+            margin-left:4.15rem;
+            margin-right:4.15rem;
+        }
+
         .filter-cell { min-width:0; }
 
         .filter-button {
@@ -79,8 +84,9 @@
             border-radius:.9rem;
             display:flex;
             align-items:center;
-            justify-content:flex-start;
+            justify-content:center;
             gap:.35rem;
+            text-align:center;
             color:#111827;
             font-size:.72rem;
             font-weight:700;
@@ -117,6 +123,7 @@
             border-radius:1.85rem;
             color:#fff;
             box-shadow:0 .5rem 1rem rgba(0,0,0,.14);
+            overflow:hidden;
         }
 
         .ticket-status-concluido { background:linear-gradient(135deg, #1fba88, #70dd72); }
@@ -171,7 +178,11 @@
             font-size:clamp(1rem, .45vw + .95rem, 1.3rem);
             font-weight:700;
             line-height:1.05;
-            word-break:break-word;
+            min-width:0;
+            max-width:100%;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
         }
 
         .ticket-subinfo {
@@ -216,7 +227,7 @@
             flex-direction:column;
             align-items:center;
             justify-content:center;
-            width:max-content;
+            width:100%;
             max-width:100%;
             min-width:0;
             line-height:1;
@@ -225,6 +236,7 @@
         .history-block-action {
             border:0;
             cursor:pointer;
+            width:100%;
             transition:transform .12s ease, background-color .12s ease;
         }
 
@@ -251,6 +263,10 @@
             font-size:.77rem;
             line-height:1.05;
             white-space:nowrap;
+            display:block;
+            max-width:100%;
+            overflow:hidden;
+            text-overflow:ellipsis;
         }
 
         .ticket-side-actions {
@@ -468,14 +484,14 @@
 
         @@media (max-width: 1200px) {
             :root {
-                --history-col-criado: minmax(7.5rem, 1fr);
-                --history-col-finalizado: minmax(7.5rem, 1fr);
-                --history-col-setor: minmax(7rem, .9fr);
-                --history-col-tipo: minmax(7.5rem, .95fr);
-                --history-col-abertura: minmax(9rem, 1fr);
-                --history-col-encerramento: minmax(9rem, 1fr);
-                --history-col-tempo: minmax(7rem, .85fr);
-                --history-col-status: minmax(7rem, .85fr);
+                --history-col-criado: minmax(0, 1fr);
+                --history-col-finalizado: minmax(0, 1fr);
+                --history-col-setor: minmax(0, .9fr);
+                --history-col-tipo: minmax(0, .95fr);
+                --history-col-abertura: minmax(0, 1fr);
+                --history-col-encerramento: minmax(0, 1fr);
+                --history-col-tempo: minmax(0, .85fr);
+                --history-col-status: minmax(0, .85fr);
             }
         }
 
@@ -483,6 +499,7 @@
             .sidebar { position: static; width: 100%; height: auto; }
             .content-wrapper { margin-left: 0; padding: 1rem; }
             .filter-bar { padding:.7rem; overflow-x:auto; border-radius:1.35rem; }
+            .filter-bar .history-columns-grid { margin-left:0; margin-right:0; }
             .history-columns-grid { min-width:74rem; }
             .ticket-card { padding:.68rem 3.75rem .82rem .82rem; border-radius:1.5rem; align-items:flex-start; overflow-x:auto; }
             .ticket-icon { width:3rem; height:3rem; }
@@ -591,7 +608,7 @@
                         <div class="ticket-content">
                             <div class="ticket-header">
                                 <div class="ticket-title-wrap">
-                                    <h2 class="ticket-title">@titulo</h2>
+                                    <h2 class="ticket-title" title="@titulo">@titulo</h2>
                                 </div>
                             </div>
 
@@ -599,43 +616,43 @@
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Criado por</div>
-                                        <div class="history-value">@chamado.CriadoPor</div>
+                                        <div class="history-value" title="@chamado.CriadoPor">@chamado.CriadoPor</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Finalizado por</div>
-                                        <div class="history-value">@chamado.FinalizadoPor</div>
+                                        <div class="history-value" title="@chamado.FinalizadoPor">@chamado.FinalizadoPor</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Setor</div>
-                                        <div class="history-value">@chamado.Setor</div>
+                                        <div class="history-value" title="@chamado.Setor">@chamado.Setor</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Tipo de problema</div>
-                                        <div class="history-value">@chamado.TipoProblema</div>
+                                        <div class="history-value" title="@chamado.TipoProblema">@chamado.TipoProblema</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Data de abertura</div>
-                                        <div class="history-value">@chamado.DataCriacaoTexto</div>
+                                        <div class="history-value" title="@chamado.DataCriacaoTexto">@chamado.DataCriacaoTexto</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Data de encerramento</div>
-                                        <div class="history-value">@chamado.DataFinalTexto</div>
+                                        <div class="history-value" title="@chamado.DataFinalTexto">@chamado.DataFinalTexto</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Tempo total</div>
-                                        <div class="history-value">@FormatarTempo(chamado.TempoResolucao)</div>
+                                        <div class="history-value" title="@FormatarTempo(chamado.TempoResolucao)">@FormatarTempo(chamado.TempoResolucao)</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
@@ -646,14 +663,14 @@
                                                 data-chamado-id="@chamado.Id"
                                                 data-status-atual="@chamado.Status">
                                             <span class="history-label">Status atual</span>
-                                            <span class="history-value" data-status-texto>@statusTexto</span>
+                                            <span class="history-value" data-status-texto title="@statusTexto">@statusTexto</span>
                                         </button>
                                     }
                                     else
                                     {
                                         <div class="history-block">
                                             <div class="history-label">Status atual</div>
-                                            <div class="history-value" data-status-texto>@statusTexto</div>
+                                            <div class="history-value" data-status-texto title="@statusTexto">@statusTexto</div>
                                         </div>
                                     }
                                 </div>
@@ -691,11 +708,11 @@
                             <span></span>
                         }
 
-                        <span class="text-muted small">Pagina @Model.PaginaAtual</span>
+                        <span class="text-muted small">Página @Model.PaginaAtual</span>
 
                         @if (Model.TemProximaPagina)
                         {
-                            <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" asp-route-page="@(Model.PaginaAtual + 1)" class="btn btn-outline-secondary btn-sm">Proxima</a>
+                            <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" asp-route-page="@(Model.PaginaAtual + 1)" class="btn btn-outline-secondary btn-sm">Próxima</a>
                         }
                         else
                         {
@@ -757,7 +774,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="detalhesHistoricoConteudo">
-                <div class="text-muted small">Carregando informaÃ§Ãµes...</div>
+                <div class="text-muted small">Carregando informações...</div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -988,7 +1005,7 @@
             if (!chamadoId || !detalhesModal || !detalhesConteudo) return;
 
             if (detalhesTitulo) detalhesTitulo.textContent = "Detalhes do chamado";
-            detalhesConteudo.innerHTML = '<div class="text-muted small">Carregando informaÃ§Ãµes...</div>';
+            detalhesConteudo.innerHTML = '<div class="text-muted small">Carregando informações...</div>';
             detalhesModal.show();
 
             try {
@@ -996,12 +1013,12 @@
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || "NÃ£o foi possÃ­vel carregar os detalhes.");
+                    throw new Error(data.message || "Não foi possível carregar os detalhes.");
                 }
 
                 renderizarDetalhesChamado(data.dados || {});
             } catch (error) {
-                detalhesConteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "NÃ£o foi possÃ­vel carregar os detalhes.")}</div>`;
+                detalhesConteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar os detalhes.")}</div>`;
             }
         }
 
@@ -1018,35 +1035,35 @@
                 ? comentarios.map(comentario => `
                     <div class="detail-comment">
                         <div class="comment-meta">
-                            <span class="comment-author">${escapeHtml(comentario.autor || "NÃ£o registrado")}</span>
+                            <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
                             <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
                         </div>
                         <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
-                        ${comentario.possuiAnexo ? '<div class="small text-muted mt-1">ContÃ©m anexo.</div>' : ''}
+                        ${comentario.possuiAnexo ? '<div class="small text-muted mt-1">Contém anexo.</div>' : ''}
                     </div>
                 `).join("")
-                : '<div class="text-muted small">Nenhum comentÃ¡rio registrado.</div>';
+                : '<div class="text-muted small">Nenhum comentário registrado.</div>';
 
             detalhesConteudo.innerHTML = `
                 <div class="detail-grid mb-3">
-                    ${renderizarDetalhe("TÃ­tulo", dados.titulo || numero || "Chamado")}
+                    ${renderizarDetalhe("Título", dados.titulo || numero || "Chamado")}
                     ${renderizarDetalhe("Status", formatarStatusDetalhe(dados.status))}
-                    ${renderizarDetalhe("Setor", dados.setor || "NÃ£o registrado")}
-                    ${renderizarDetalhe("Tipo de problema", dados.tipoProblema || "NÃ£o registrado")}
-                    ${renderizarDetalhe("Categoria", dados.categoria || "NÃ£o registrado")}
-                    ${renderizarDetalhe("Subcategoria", dados.subcategoria || "NÃ£o registrado")}
+                    ${renderizarDetalhe("Setor", dados.setor || "Não registrado")}
+                    ${renderizarDetalhe("Tipo de problema", dados.tipoProblema || "Não registrado")}
+                    ${renderizarDetalhe("Categoria", dados.categoria || "Não registrado")}
+                    ${renderizarDetalhe("Subcategoria", dados.subcategoria || "Não registrado")}
                     ${renderizarDetalhe("Prioridade", formatarValorDetalhe(dados.prioridade))}
                     ${renderizarDetalhe("Criticidade", formatarValorDetalhe(dados.criticidade))}
-                    ${renderizarDetalhe("UrgÃªncia", formatarValorDetalhe(dados.urgencia))}
+                    ${renderizarDetalhe("Urgência", formatarValorDetalhe(dados.urgencia))}
                     ${renderizarDetalhe("Data de abertura", formatDateTimeLocal(dados.dataCriacao))}
-                    ${renderizarDetalhe("Data de finalizaÃ§Ã£o", formatDateTimeLocal(dados.dataFinalizacao))}
+                    ${renderizarDetalhe("Data de finalização", formatDateTimeLocal(dados.dataFinalizacao))}
                     ${renderizarDetalhe("Prazo de resposta", formatDateTimeLocal(dados.prazoResposta))}
-                    ${renderizarDetalhe("Prazo de conclusÃ£o", formatDateTimeLocal(dados.prazoConclusao))}
+                    ${renderizarDetalhe("Prazo de conclusão", formatDateTimeLocal(dados.prazoConclusao))}
                 </div>
-                ${renderizarDetalhe("DescriÃ§Ã£o", dados.descricao || "NÃ£o registrada", true)}
-                ${renderizarDetalhe("SoluÃ§Ã£o", dados.solucao || "NÃ£o registrada", true)}
+                ${renderizarDetalhe("Descrição", dados.descricao || "Não registrada", true)}
+                ${renderizarDetalhe("Solução", dados.solucao || "Não registrada", true)}
                 <div class="detail-block mt-3">
-                    <span class="detail-label">ComentÃ¡rios recentes</span>
+                    <span class="detail-label">Comentários recentes</span>
                     <div class="detail-comments">${comentariosHtml}</div>
                 </div>
             `;
@@ -1062,9 +1079,9 @@
         }
 
         function formatarValorDetalhe(valor) {
-            if (!valor) return "NÃ£o registrado";
-            if (valor === "NaoUrgente") return "NÃ£o urgente";
-            if (valor === "PoucaUrgencia") return "Pouca urgÃªncia";
+            if (!valor) return "Não registrado";
+            if (valor === "NaoUrgente") return "Não urgente";
+            if (valor === "PoucaUrgencia") return "Pouca urgência";
             return valor;
         }
 
@@ -1132,7 +1149,7 @@
             const comentarios = dados.comentarios || [];
             if (!comentarios.length) {
                 if (!anexar) {
-                    listaComentarios.innerHTML = '<div class="text-muted small">Nenhum comentario registrado para este chamado.</div>';
+                    listaComentarios.innerHTML = '<div class="text-muted small">Nenhum comentário registrado para este chamado.</div>';
                 }
                 return;
             }
@@ -1140,7 +1157,7 @@
             listaComentarios.querySelector("[data-load-older-history-comments]")?.remove();
             const htmlComentarios = comentarios.map(renderizarComentarioHistorico).join("");
             const botaoMais = dados.temMais
-                ? `<button type="button" class="btn btn-sm btn-outline-secondary mb-2" data-load-older-history-comments="${Number(dados.pagina || 1) + 1}">Carregar comentarios anteriores</button>`
+                ? `<button type="button" class="btn btn-sm btn-outline-secondary mb-2" data-load-older-history-comments="${Number(dados.pagina || 1) + 1}">Carregar comentários anteriores</button>`
                 : "";
 
             if (anexar) {
@@ -1161,14 +1178,14 @@
 
         function renderizarComentarioHistorico(comentario) {
             const anexo = comentario.anexoUrl
-                ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentario"></a>`
+                ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentário"></a>`
                 : "";
 
             return `
                 <div class="comment-item">
                     <div class="comment-card">
                         <div class="comment-meta">
-                            <span class="comment-author">${escapeHtml(comentario.autor || "Nao registrado")}</span>
+                            <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
                             <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
                         </div>
                         <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
@@ -1379,3 +1396,4 @@
         return $"{Math.Max(0, (int)valor.TotalMinutes)}min";
     }
 }
+
