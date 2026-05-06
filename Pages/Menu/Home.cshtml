@@ -249,6 +249,7 @@
       .ticket-text {
         flex: 1;
         min-width: 0;
+        padding-right: 5.25rem;
         line-height: 1.25;
         white-space: normal;
         overflow-wrap: anywhere;
@@ -269,20 +270,28 @@
       }
 
       .ticket-number {
+        position: absolute;
+        top: .78rem;
+        right: 2.35rem;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 2.15rem;
-        height: 2.15rem;
-        margin-left: auto;
-        padding: 0 .7rem;
-        border-radius: 999px;
+        min-width: 3.35rem;
+        max-width: 7.25rem;
+        height: 1.48rem;
+        padding: 0 .72rem;
+        border-radius: .55rem;
         background: rgba(255, 255, 255, .94);
         color: #0f172a;
-        font-size: .9rem;
+        font-size: .78rem;
         font-weight: 900;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-variant-numeric: tabular-nums;
         box-shadow: 0 .25rem .65rem rgba(15, 23, 42, .15);
-        flex-shrink: 0;
+        z-index: 2;
       }
 
       #chamados-container {
@@ -649,6 +658,12 @@
       }
 
       .badge-chamado-selecionado {
+        display: inline-block;
+        max-width: 11rem;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        vertical-align: middle;
         background: #dbeafe;
         color: #1e3a8a !important;
         border: 1px solid #bfdbfe;
@@ -749,6 +764,17 @@
           gap: 0.75rem;
         }
 
+        .ticket-text {
+          padding-right: 4.45rem;
+        }
+
+        .ticket-number {
+          top: .62rem;
+          right: 1.65rem;
+          min-width: 3rem;
+          max-width: 6rem;
+        }
+
         .ticket-icon {
           width: 4rem;
           height: 4rem;
@@ -776,6 +802,17 @@
         .ticket-card {
           min-height: 5rem;
           border-radius: 1.5rem;
+        }
+
+        .ticket-text {
+          padding-right: 3.85rem;
+        }
+
+        .ticket-number {
+          max-width: 5rem;
+          height: 1.42rem;
+          font-size: .72rem;
+          right: 1.25rem;
         }
 
         .ticket-icon {
@@ -867,7 +904,7 @@
                                     @textoTicket -
                                     <span class="cronometro" data-criado-em="@DateTime.SpecifyKind(chamado.DataCriacao, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")"></span>
                                 </span>
-                                <span class="ticket-number">#@chamado.NumeroChamadoGrupo</span>
+                                <span class="ticket-number" title="Chamado #@chamado.NumeroChamadoGrupo">#@chamado.NumeroChamadoGrupo</span>
                             </div>
                         }
 

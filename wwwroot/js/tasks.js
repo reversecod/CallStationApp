@@ -23,6 +23,7 @@ let cartaoAtualEstado = {
     titulo: "",
     colunaId: null
 };
+let cartaoSnapshotSalvar = null;
 
 function mostrarToast(mensagem, tipo = "danger") {
     let container = document.getElementById("toastContainer");
@@ -455,6 +456,7 @@ function abrirModalCartaoNovo(colunaId) {
         titulo: "",
         colunaId
     };
+    cartaoSnapshotSalvar = null;
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados();
@@ -514,6 +516,7 @@ async function abrirModalCartaoExistente(id) {
         titulo: data.titulo || "",
         colunaId: data.colunaId
     };
+    cartaoSnapshotSalvar = normalizarPayloadCartao(montarPayloadSalvarCartao(data.id));
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados(data.chamadosVinculados || []);
@@ -558,22 +561,12 @@ async function salvarCartao(event) {
     event.preventDefault();
 
     const id = toNullableInt(getValue("cartaoId"));
-    const payload = {
-        id,
-        grupoId: getGrupoId(),
-        colunaId: Number(getValue("cartaoColunaSelect") || getValue("cartaoColunaId")),
-        titulo: getValue("cartaoTitulo"),
-        descricao: getNullableString("cartaoDescricao"),
-        prioridade: getNullableString("cartaoPrioridade"),
-        criticidade: getNullableString("cartaoCriticidade"),
-        urgencia: getNullableString("cartaoUrgencia"),
-        dataInicio: getNullableString("cartaoDataInicio"),
-        dataVencimento: getNullableString("cartaoDataVencimento"),
-        corCapa: getNullableString("cartaoCorCapa"),
-        compartilharGrupo: !!document.getElementById("cartaoCompartilharGrupo")?.checked,
-        membrosIds: getSelectedNumbers("cartaoMembros"),
-        chamadosIds: getSelectedNumbers("cartaoChamados")
-    };
+    const payload = montarPayloadSalvarCartao(id);
+
+    if (id && cartaoSnapshotSalvar && !cartaoPossuiAlteracoes(payload)) {
+        mostrarToast("Não há alterações feitas.", "warning");
+        return;
+    }
 
     let data;
     try {
@@ -591,6 +584,58 @@ async function salvarCartao(event) {
     modalCartao.hide();
     document.getElementById("formCartao").reset();
     window.location.reload();
+}
+
+function montarPayloadSalvarCartao(id) {
+    return {
+        id,
+        grupoId: getGrupoId(),
+        colunaId: Number(getValue("cartaoColunaSelect") || getValue("cartaoColunaId")),
+        titulo: getValue("cartaoTitulo"),
+        descricao: getNullableString("cartaoDescricao"),
+        prioridade: getNullableString("cartaoPrioridade"),
+        criticidade: getNullableString("cartaoCriticidade"),
+        urgencia: getNullableString("cartaoUrgencia"),
+        dataInicio: getNullableString("cartaoDataInicio"),
+        dataVencimento: getNullableString("cartaoDataVencimento"),
+        corCapa: getNullableString("cartaoCorCapa"),
+        compartilharGrupo: !!document.getElementById("cartaoCompartilharGrupo")?.checked,
+        membrosIds: getSelectedNumbers("cartaoMembros"),
+        chamadosIds: getSelectedNumbers("cartaoChamados")
+    };
+}
+
+function cartaoPossuiAlteracoes(payload) {
+    return JSON.stringify(normalizarPayloadCartao(payload)) !== JSON.stringify(cartaoSnapshotSalvar);
+}
+
+function normalizarPayloadCartao(payload) {
+    return {
+        id: toNullableInt(payload.id),
+        grupoId: Number(payload.grupoId) || 0,
+        colunaId: Number(payload.colunaId) || 0,
+        titulo: normalizarTextoComparacao(payload.titulo),
+        descricao: normalizarTextoComparacao(payload.descricao),
+        prioridade: normalizarTextoComparacao(payload.prioridade),
+        criticidade: normalizarTextoComparacao(payload.criticidade),
+        urgencia: normalizarTextoComparacao(payload.urgencia),
+        dataInicio: normalizarTextoComparacao(payload.dataInicio),
+        dataVencimento: normalizarTextoComparacao(payload.dataVencimento),
+        corCapa: normalizarTextoComparacao(payload.corCapa || "#0d6efd").toLowerCase(),
+        compartilharGrupo: !!payload.compartilharGrupo,
+        membrosIds: normalizarListaNumeros(payload.membrosIds),
+        chamadosIds: normalizarListaNumeros(payload.chamadosIds)
+    };
+}
+
+function normalizarTextoComparacao(value) {
+    const texto = String(value ?? "").trim();
+    return texto === "" ? null : texto;
+}
+
+function normalizarListaNumeros(values) {
+    return [...new Set((values || []).map(Number).filter(Number.isFinite))]
+        .sort((a, b) => a - b);
 }
 
 async function salvarOrdemBoard() {
