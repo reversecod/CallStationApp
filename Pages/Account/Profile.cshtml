@@ -117,16 +117,16 @@
                         <div class="alert alert-success" role="alert">@Model.SuccessMessage</div>
                     }
 
-                    <h2 class="h5 mb-3">Informacoes da conta</h2>
+                    <h2 class="h5 mb-3">Informações da conta</h2>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label asp-for="NomeCompleto" class="form-label">Nome completo</label>
                             <input asp-for="NomeCompleto" class="form-control form-control-lg" maxlength="100" required />
                         </div>
                         <div class="col-md-6">
-                            <label asp-for="NomeUsuario" class="form-label">Nome de usuario</label>
+                            <label asp-for="NomeUsuario" class="form-label">Nome de usuário</label>
                             <input asp-for="NomeUsuario" class="form-control form-control-lg" maxlength="20" required />
-                            <div class="form-text">Deve ser unico no sistema.</div>
+                            <div class="form-text">Deve ser único no sistema.</div>
                         </div>
                         <div class="col-md-7">
                             <label asp-for="Email" class="form-label">E-mail</label>

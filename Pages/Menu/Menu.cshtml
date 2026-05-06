@@ -245,7 +245,7 @@
                             data-bs-toggle="modal"
                             data-bs-target="#modalNotificacoes"
                             id="btnAbrirNotificacoes"
-                            aria-label="Notificacoes">
+                            aria-label="Notificações">
                         <i class="bi bi-bell fs-5"></i>
 
                         @if (Model.TotalNotificacoesNaoLidas > 0)
@@ -272,7 +272,7 @@
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" asp-page="/Account/Profile">Meu perfil</a></li>
-                            <li><a class="dropdown-item" href="#">Configuracoes</a></li>
+                            <li><a class="dropdown-item" href="#">Configurações</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
                         </ul>
@@ -444,7 +444,7 @@
 
                         <div class="mb-3">
                             <label class="form-label">Descrição</label>
-                            <textarea name="descricao" class="form-control" rows="3" maxlength="200"></textarea>
+                            <textarea name="descrição" class="form-control" rows="3" maxlength="200"></textarea>
                         </div>
 
                         <div class="mb-3">
@@ -482,7 +482,7 @@
                 <div class="modal-header">
                     <h5 class="modal-title" id="modalNotificacoesLabel">
                         <i class="bi bi-bell me-2"></i>
-                        Notificacoes
+                        Notificações
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                 </div>
@@ -524,7 +524,7 @@
             listaNotificacoes.innerHTML = "";
             const erro = document.createElement("div");
             erro.className = "text-center text-muted py-4";
-            erro.textContent = mensagem || "Não foi possível carregar as notificacoes.";
+            erro.textContent = mensagem || "Não foi possível carregar as notificações.";
             listaNotificacoes.appendChild(erro);
         }
 
@@ -537,7 +537,7 @@
 
                 const icone = document.createElement("i");
                 icone.className = "bi bi-bell-slash fs-3 d-block mb-2";
-                vazio.append(icone, document.createTextNode("Nenhuma notificacao no momento."));
+                vazio.append(icone, document.createTextNode("Nenhuma notificação no momento."));
                 listaNotificacoes.appendChild(vazio);
                 return;
             }
@@ -585,12 +585,12 @@
         async function carregarNotificacoes() {
             try {
                 const response = await fetch('?handler=ListarNotificacoes');
-                if (!response.ok) throw new Error("Falha ao carregar notificacoes.");
+                if (!response.ok) throw new Error("Falha ao carregar notificações.");
 
                 const data = await response.json();
 
                 if (!data.success) {
-                    exibirErroNotificacoes(data.message || "Não foi possível carregar as notificacoes.");
+                    exibirErroNotificacoes(data.message || "Não foi possível carregar as notificações.");
                     return false;
                 }
 
@@ -604,7 +604,7 @@
                     badgeNotificacoes.textContent = '0';
                 }
             } catch {
-                exibirErroNotificacoes("Não foi possível carregar as notificacoes.");
+                exibirErroNotificacoes("Não foi possível carregar as notificações.");
                 return false;
             }
         }
@@ -620,7 +620,7 @@
                     }
                 });
 
-                if (!response.ok) throw new Error("Falha ao marcar notificacoes.");
+                if (!response.ok) throw new Error("Falha ao marcar notificações.");
 
                 badgeNotificacoes.classList.add('d-none');
                 badgeNotificacoes.textContent = '0';

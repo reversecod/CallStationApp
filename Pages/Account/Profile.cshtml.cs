@@ -102,7 +102,7 @@ public class ProfileModel : PageModel
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
-            ErrorMessage = "Nome de usuario ou e-mail ja esta em uso.";
+            ErrorMessage = "Nome de usuário ou e-mail ja esta em uso.";
             FotoUsuario = usuario.FotoUsuario;
             DataCriacao = usuario.DataCriacao;
             return Page();
@@ -123,7 +123,7 @@ public class ProfileModel : PageModel
 
         if (string.IsNullOrWhiteSpace(NomeUsuario) || NomeUsuario.Length > 20)
         {
-            ErrorMessage = "Informe um nome de usuario com ate 20 caracteres.";
+            ErrorMessage = "Informe um nome de usuário com ate 20 caracteres.";
             return false;
         }
 
@@ -135,7 +135,7 @@ public class ProfileModel : PageModel
 
         if (await _context.Usuarios.AnyAsync(u => u.Id != usuario.Id && u.NomeUsuario == NomeUsuario))
         {
-            ErrorMessage = "Nome de usuario ja esta em uso.";
+            ErrorMessage = "Nome de usuário ja esta em uso.";
             return false;
         }
 
