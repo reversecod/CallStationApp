@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -16,6 +17,7 @@ public class HistoryModel : PageModel
     private const int LimiteCaracteresComentario = 250;
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
     private const string ReferenciaTipoComentarioChamado = "ComentarioChamado";
+    private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
     private static readonly StatusChamado[] StatusFinais =
     {
         StatusChamado.Concluido,
@@ -146,12 +148,16 @@ public class HistoryModel : PageModel
                 x.Chamado.Status,
                 x.Chamado.DataCriacao,
                 x.Chamado.DataFinalizacao,
-                x.Chamado.CriadorChamadoId
+                x.Chamado.CriadorChamadoId,
+                x.Chamado.SetorId,
+                x.Chamado.OcorrenciaTipoId
             })
             .ToListAsync();
 
         var chamadosPaginaIds = chamadosPagina.Select(c => c.Id).ToList();
         var criadorIds = chamadosPagina.Select(c => c.CriadorChamadoId).Distinct().ToList();
+        var setorIds = chamadosPagina.Where(c => c.SetorId.HasValue).Select(c => c.SetorId!.Value).Distinct().ToList();
+        var tipoIds = chamadosPagina.Where(c => c.OcorrenciaTipoId.HasValue).Select(c => c.OcorrenciaTipoId!.Value).Distinct().ToList();
 
         var historicosFinais = chamadosPaginaIds.Count == 0
             ? new List<HistoricoFinalResumo>()
@@ -206,6 +212,20 @@ public class HistoryModel : PageModel
                 .Where(u => finalizadorIds.Contains(u.Id))
                 .ToDictionaryAsync(u => u.Id, u => u.NomeUsuario);
 
+        var setoresPorId = setorIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.Setores
+                .AsNoTracking()
+                .Where(s => s.GrupoId == GrupoId && setorIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.NomeSetor);
+
+        var tiposPorId = tipoIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.OcorrenciasTipo
+                .AsNoTracking()
+                .Where(t => t.GrupoId == GrupoId && tipoIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.TipoOcorrencia);
+
         Chamados = chamadosPagina
             .Select(chamado =>
             {
@@ -229,8 +249,16 @@ public class HistoryModel : PageModel
                     Status = chamado.Status,
                     DataCriacao = chamado.DataCriacao,
                     DataFinal = historicoFinal?.DataTransicao ?? chamado.DataFinalizacao,
+                    DataCriacaoTexto = ParaDataHoraRegionalDisplay(chamado.DataCriacao),
+                    DataFinalTexto = ParaDataHoraRegionalDisplay(historicoFinal?.DataTransicao ?? chamado.DataFinalizacao),
                     CriadoPor = criadoresPorId.GetValueOrDefault(chamado.CriadorChamadoId, "Não registrado"),
-                    FinalizadoPor = finalizadoPor
+                    FinalizadoPor = finalizadoPor,
+                    Setor = chamado.SetorId.HasValue
+                        ? setoresPorId.GetValueOrDefault(chamado.SetorId.Value, "Não registrado")
+                        : "Não registrado",
+                    TipoProblema = chamado.OcorrenciaTipoId.HasValue
+                        ? tiposPorId.GetValueOrDefault(chamado.OcorrenciaTipoId.Value, "Não registrado")
+                        : "Não registrado"
                 };
             })
             .ToList();
@@ -264,6 +292,108 @@ public class HistoryModel : PageModel
         }
 
         return Page();
+    }
+
+    public async Task<IActionResult> OnGetDetalhesChamadoAsync(int chamadoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, chamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        var chamado = resultadoAcesso.Chamado!;
+
+        var detalhes = await (
+            from c in _context.Chamados.AsNoTracking()
+            join setor in _context.Setores.AsNoTracking() on c.SetorId equals setor.Id into setorJoin
+            from setor in setorJoin.DefaultIfEmpty()
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on c.OcorrenciaTipoId equals tipo.Id into tipoJoin
+            from tipo in tipoJoin.DefaultIfEmpty()
+            join categoria in _context.OcorrenciasCategoria.AsNoTracking() on c.OcorrenciaCategoriaId equals categoria.Id into categoriaJoin
+            from categoria in categoriaJoin.DefaultIfEmpty()
+            join subcategoria in _context.OcorrenciasSubcategoria.AsNoTracking() on c.OcorrenciaSubcategoriaId equals subcategoria.Id into subcategoriaJoin
+            from subcategoria in subcategoriaJoin.DefaultIfEmpty()
+            where c.Id == chamado.Id && c.GrupoId == chamado.GrupoId
+            select new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                c.Titulo,
+                c.Descricao,
+                c.Solucao,
+                c.Status,
+                c.Prioridade,
+                c.Criticidade,
+                c.Urgencia,
+                c.DataCriacao,
+                c.DataFinalizacao,
+                c.PrazoResposta,
+                c.PrazoConclusao,
+                Setor = setor != null ? setor.NomeSetor : null,
+                TipoProblema = tipo != null ? tipo.TipoOcorrencia : null,
+                Categoria = categoria != null ? categoria.CategoriaOcorrencia : null,
+                Subcategoria = subcategoria != null ? subcategoria.SubcategoriaOcorrencia : null
+            })
+            .FirstOrDefaultAsync();
+
+        if (detalhes == null)
+            return new JsonResult(new { success = false, message = "Chamado não encontrado." });
+
+        var comentarios = await (
+            from comentario in _context.ComentariosChamados.AsNoTracking()
+            join usuario in _context.Usuarios.AsNoTracking() on comentario.UsuarioId equals usuario.Id
+            join info in _context.InfoUsuariosGrupos.AsNoTracking()
+                on new { UsuarioId = comentario.UsuarioId, GrupoId = chamado.GrupoId }
+                equals new { info.UsuarioId, info.GrupoId } into infoJoin
+            from infoUsuario in infoJoin.DefaultIfEmpty()
+            where comentario.ChamadoId == chamado.Id
+            orderby comentario.DataComentario descending, comentario.Id descending
+            select new
+            {
+                autor = infoUsuario != null && !string.IsNullOrWhiteSpace(infoUsuario.Apelido)
+                    ? infoUsuario.Apelido
+                    : usuario.NomeUsuario,
+                texto = comentario.Mensagem,
+                dataComentario = comentario.DataComentario,
+                possuiAnexo = !string.IsNullOrWhiteSpace(comentario.AnexoComentario)
+            })
+            .Take(8)
+            .ToListAsync();
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = new
+            {
+                detalhes.Id,
+                detalhes.NumeroChamadoGrupo,
+                titulo = detalhes.Titulo,
+                descricao = detalhes.Descricao,
+                solucao = detalhes.Solucao,
+                status = detalhes.Status.ToString(),
+                prioridade = detalhes.Prioridade?.ToString(),
+                criticidade = detalhes.Criticidade?.ToString(),
+                urgencia = detalhes.Urgencia?.ToString(),
+                dataCriacao = ParaDataHoraRegionalIso(detalhes.DataCriacao),
+                dataFinalizacao = ParaDataHoraRegionalIso(detalhes.DataFinalizacao),
+                prazoResposta = ParaDataHoraRegionalIso(detalhes.PrazoResposta),
+                prazoConclusao = ParaDataHoraRegionalIso(detalhes.PrazoConclusao),
+                setor = detalhes.Setor,
+                tipoProblema = detalhes.TipoProblema,
+                categoria = detalhes.Categoria,
+                subcategoria = detalhes.Subcategoria,
+                comentarios = comentarios.Select(comentario => new
+                {
+                    comentario.autor,
+                    comentario.texto,
+                    dataComentario = ParaDataHoraRegionalIso(comentario.dataComentario),
+                    comentario.possuiAnexo
+                })
+            }
+        });
     }
 
     public async Task<IActionResult> OnGetComentariosAsync(int chamadoId, int page = 1)
@@ -315,7 +445,7 @@ public class HistoryModel : PageModel
             comentario.usuarioId,
             comentario.autor,
             comentario.texto,
-            comentario.dataComentario,
+            dataComentario = ParaDataHoraRegionalIso(comentario.dataComentario),
             anexoUrl = string.IsNullOrWhiteSpace(comentario.anexo)
                 ? null
                 : Url.Page("/Menu/Home", "AnexoComentarioChamado", new
@@ -594,7 +724,7 @@ public class HistoryModel : PageModel
                             statusFormatado = FormatarStatusTexto(resultadoAcesso.Chamado.Status),
                             removeFromHistory = !StatusFinais.Contains(resultadoAcesso.Chamado.Status),
                             publico = resultadoAcesso.Chamado.Publico,
-                            dataFinalizacao = resultadoAcesso.Chamado.DataFinalizacao,
+                            dataFinalizacao = ParaDataHoraRegionalIso(resultadoAcesso.Chamado.DataFinalizacao),
                             message = resultadoAcesso.Chamado.Status == StatusChamado.Reaberto
                                 ? "Chamado reaberto e enviado para a tela de chamados ativos."
                                 : "Status atualizado com sucesso."
@@ -686,6 +816,48 @@ public class HistoryModel : PageModel
         _ => status.ToString()
     };
 
+    private static string ParaDataHoraRegionalDisplay(DateTime dataUtc) =>
+        ParaDataHoraRegionalDisplay((DateTime?)dataUtc);
+
+    private static string ParaDataHoraRegionalDisplay(DateTime? dataUtc)
+    {
+        if (!dataUtc.HasValue)
+            return "Não registrado";
+
+        var utc = DateTime.SpecifyKind(dataUtc.Value, DateTimeKind.Utc);
+        var regional = TimeZoneInfo.ConvertTimeFromUtc(utc, FusoHorarioRegional);
+        return regional.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
+    }
+
+    private static string? ParaDataHoraRegionalIso(DateTime? dataUtc) =>
+        dataUtc.HasValue ? ParaDataHoraRegionalIso(dataUtc.Value) : null;
+
+    private static string ParaDataHoraRegionalIso(DateTime dataUtc)
+    {
+        var utc = DateTime.SpecifyKind(dataUtc, DateTimeKind.Utc);
+        var regional = TimeZoneInfo.ConvertTimeFromUtc(utc, FusoHorarioRegional);
+        return regional.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture);
+    }
+
+    private static TimeZoneInfo ObterFusoHorarioRegional()
+    {
+        foreach (var id in new[] { "E. South America Standard Time", "America/Sao_Paulo" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Local;
+    }
+
     private void RegistrarTransicaoStatusChamado(
         Chamado chamado,
         StatusChamado statusAnterior,
@@ -740,8 +912,12 @@ public class HistoryModel : PageModel
         public StatusChamado Status { get; set; }
         public DateTime DataCriacao { get; set; }
         public DateTime? DataFinal { get; set; }
+        public string DataCriacaoTexto { get; set; } = string.Empty;
+        public string DataFinalTexto { get; set; } = string.Empty;
         public string CriadoPor { get; set; } = string.Empty;
         public string FinalizadoPor { get; set; } = string.Empty;
+        public string Setor { get; set; } = string.Empty;
+        public string TipoProblema { get; set; } = string.Empty;
         public bool TemComentariosNaoLidos { get; set; }
         public TimeSpan? TempoResolucao =>
             DataFinal.HasValue && DataFinal.Value >= DataCriacao

@@ -19,6 +19,8 @@
         :root {
             --history-col-criado: minmax(8.5rem, 1fr);
             --history-col-finalizado: minmax(8.5rem, 1fr);
+            --history-col-setor: minmax(7.5rem, .9fr);
+            --history-col-tipo: minmax(8rem, .95fr);
             --history-col-abertura: minmax(10rem, 1.15fr);
             --history-col-encerramento: minmax(10rem, 1.15fr);
             --history-col-tempo: minmax(8rem, .9fr);
@@ -26,6 +28,8 @@
             --history-columns:
                 var(--history-col-criado)
                 var(--history-col-finalizado)
+                var(--history-col-setor)
+                var(--history-col-tipo)
                 var(--history-col-abertura)
                 var(--history-col-encerramento)
                 var(--history-col-tempo)
@@ -119,11 +123,24 @@
         .ticket-status-fechado { background:linear-gradient(135deg, #667285, #aeb9c8); }
         .ticket-status-cancelado { background:linear-gradient(135deg, #ea4335, #ff7c7c); }
 
+        .ticket-icon-button {
+            border:0;
+            padding:0;
+            background:transparent;
+            border-radius:50%;
+            flex-shrink:0;
+            line-height:0;
+        }
+
+        .ticket-icon-button:focus-visible {
+            outline:3px solid rgba(255,255,255,.75);
+            outline-offset:3px;
+        }
+
         .ticket-icon {
             width:3.25rem;
             height:3.25rem;
             border-radius:50%;
-            flex-shrink:0;
         }
 
         .ticket-content {
@@ -165,18 +182,25 @@
         }
 
         .ticket-number {
-            width:2.15rem;
-            height:2.15rem;
-            border-radius:999px;
+            min-width:2.95rem;
+            max-width:5.9rem;
+            height:1.48rem;
+            padding:0 .55rem;
+            border-radius:.55rem;
             background:rgba(255,255,255,.92);
             color:#0f172a;
             border:1px solid rgba(255,255,255,.55);
             display:flex;
             align-items:center;
             justify-content:center;
-            font-size:.8rem;
+            font-size:.72rem;
             font-weight:800;
             flex-shrink:0;
+            line-height:1;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            font-variant-numeric:tabular-nums;
             box-shadow:0 .2rem .55rem rgba(15, 23, 42, .12);
         }
 
@@ -385,6 +409,51 @@
             object-fit:contain;
         }
 
+        .detail-grid {
+            display:grid;
+            grid-template-columns:repeat(2, minmax(0, 1fr));
+            gap:.75rem;
+        }
+
+        .detail-block {
+            border:1px solid #e5e7eb;
+            border-radius:.75rem;
+            padding:.75rem;
+            background:#f8fafc;
+            min-width:0;
+        }
+
+        .detail-label {
+            display:block;
+            font-size:.72rem;
+            font-weight:800;
+            color:#64748b;
+            text-transform:uppercase;
+            letter-spacing:.04em;
+            margin-bottom:.2rem;
+        }
+
+        .detail-value {
+            color:#0f172a;
+            overflow-wrap:anywhere;
+            white-space:pre-wrap;
+        }
+
+        .detail-comments {
+            display:flex;
+            flex-direction:column;
+            gap:.55rem;
+            max-height:16rem;
+            overflow-y:auto;
+        }
+
+        .detail-comment {
+            border:1px solid #e5e7eb;
+            border-radius:.75rem;
+            padding:.65rem .75rem;
+            background:#fff;
+        }
+
         .history-empty {
             display:flex;
             align-items:center;
@@ -401,6 +470,8 @@
             :root {
                 --history-col-criado: minmax(7.5rem, 1fr);
                 --history-col-finalizado: minmax(7.5rem, 1fr);
+                --history-col-setor: minmax(7rem, .9fr);
+                --history-col-tipo: minmax(7.5rem, .95fr);
                 --history-col-abertura: minmax(9rem, 1fr);
                 --history-col-encerramento: minmax(9rem, 1fr);
                 --history-col-tempo: minmax(7rem, .85fr);
@@ -412,16 +483,17 @@
             .sidebar { position: static; width: 100%; height: auto; }
             .content-wrapper { margin-left: 0; padding: 1rem; }
             .filter-bar { padding:.7rem; overflow-x:auto; border-radius:1.35rem; }
-            .history-columns-grid { min-width:58rem; }
+            .history-columns-grid { min-width:74rem; }
             .ticket-card { padding:.68rem 3.75rem .82rem .82rem; border-radius:1.5rem; align-items:flex-start; overflow-x:auto; }
             .ticket-icon { width:3rem; height:3rem; }
-            .ticket-content { min-width:58rem; }
-            .ticket-number { width:1.95rem; height:1.95rem; font-size:.74rem; }
+            .ticket-content { min-width:74rem; }
+            .ticket-number { min-width:2.75rem; max-width:4.9rem; height:1.38rem; font-size:.68rem; }
             .ticket-side-actions { top:.65rem; right:.6rem; gap:.3rem; }
             .ticket-comment-button { width:1.55rem; height:1.55rem; }
             .ticket-comment-button .bi { font-size:.8rem; }
             .comment-modal-grid { grid-template-columns:1fr; }
             .comment-timeline-panel { border-left:0; padding-left:0; }
+            .detail-grid { grid-template-columns:1fr; }
         }
     </style>
 </head>
@@ -442,6 +514,18 @@
                 <div class="filter-cell">
                     <button type="button" class="filter-button" data-sort-field="finalizado-por" data-sort-type="text" data-default-dir="asc">
                         <span>Finalizado por</span>
+                        <span class="sort-indicator">-</span>
+                    </button>
+                </div>
+                <div class="filter-cell">
+                    <button type="button" class="filter-button" data-sort-field="setor" data-sort-type="text" data-default-dir="asc">
+                        <span>Setor</span>
+                        <span class="sort-indicator">-</span>
+                    </button>
+                </div>
+                <div class="filter-cell">
+                    <button type="button" class="filter-button" data-sort-field="tipo-problema" data-sort-type="text" data-default-dir="asc">
+                        <span>Tipo de problema</span>
                         <span class="sort-indicator">-</span>
                     </button>
                 </div>
@@ -491,12 +575,19 @@
                              data-original-index="@indiceOriginal"
                              data-sort-criado-por="@chamado.CriadoPor"
                              data-sort-finalizado-por="@chamado.FinalizadoPor"
+                             data-sort-setor="@chamado.Setor"
+                             data-sort-tipo-problema="@chamado.TipoProblema"
                              data-sort-data-abertura="@ParaUnixMilliseconds(chamado.DataCriacao)"
                              data-sort-data-encerramento="@ParaUnixMilliseconds(chamado.DataFinal)"
                              data-sort-tempo-total="@ParaDuracaoSegundos(chamado.TempoResolucao)"
                              data-sort-status-atual="@statusTexto"
                              data-sort-chamado="@chamado.Id">
-                        <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="lazy" />
+                        <button type="button"
+                                class="ticket-icon-button btn-abrir-detalhes"
+                                data-chamado-id="@chamado.Id"
+                                aria-label="Abrir detalhes do chamado #@chamado.NumeroChamadoGrupo">
+                            <img src="~/images/logoticket.png" class="ticket-icon" alt="" loading="lazy" />
+                        </button>
                         <div class="ticket-content">
                             <div class="ticket-header">
                                 <div class="ticket-title-wrap">
@@ -519,14 +610,26 @@
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
+                                        <div class="history-label">Setor</div>
+                                        <div class="history-value">@chamado.Setor</div>
+                                    </div>
+                                </div>
+                                <div class="history-cell">
+                                    <div class="history-block">
+                                        <div class="history-label">Tipo de problema</div>
+                                        <div class="history-value">@chamado.TipoProblema</div>
+                                    </div>
+                                </div>
+                                <div class="history-cell">
+                                    <div class="history-block">
                                         <div class="history-label">Data de abertura</div>
-                                        <div class="history-value">@chamado.DataCriacao.ToString("dd/MM/yyyy HH:mm")</div>
+                                        <div class="history-value">@chamado.DataCriacaoTexto</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
                                     <div class="history-block">
                                         <div class="history-label">Data de encerramento</div>
-                                        <div class="history-value">@(chamado.DataFinal?.ToString("dd/MM/yyyy HH:mm") ?? "Não registrado")</div>
+                                        <div class="history-value">@chamado.DataFinalTexto</div>
                                     </div>
                                 </div>
                                 <div class="history-cell">
@@ -558,7 +661,7 @@
                         </div>
 
                         <div class="ticket-side-actions">
-                            <span class="ticket-number">#@chamado.NumeroChamadoGrupo</span>
+                            <span class="ticket-number" title="Chamado #@chamado.NumeroChamadoGrupo">#@chamado.NumeroChamadoGrupo</span>
                             <button type="button"
                                 class="ticket-comment-button btn-abrir-comentarios"
                                 data-chamado-id="@chamado.Id"
@@ -646,6 +749,23 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalDetalhesHistorico" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detalhesHistoricoTitulo">Detalhes do chamado</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detalhesHistoricoConteudo">
+                <div class="text-muted small">Carregando informaÃ§Ãµes...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="modalStatusHistorico" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -678,10 +798,14 @@
         const historyCardsContainer = document.getElementById("historyCardsContainer");
         const sortButtons = Array.from(document.querySelectorAll("#historySortBar .filter-button"));
         const comentariosModalElement = document.getElementById("modalComentariosHistorico");
+        const detalhesModalElement = document.getElementById("modalDetalhesHistorico");
         const statusModalElement = document.getElementById("modalStatusHistorico");
         const comentariosModal = comentariosModalElement ? bootstrap.Modal.getOrCreateInstance(comentariosModalElement) : null;
+        const detalhesModal = detalhesModalElement ? bootstrap.Modal.getOrCreateInstance(detalhesModalElement) : null;
         const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
         const listaComentarios = document.getElementById("listaComentariosHistorico");
+        const detalhesTitulo = document.getElementById("detalhesHistoricoTitulo");
+        const detalhesConteudo = document.getElementById("detalhesHistoricoConteudo");
         const comentariosChamadoIdInput = document.getElementById("comentariosChamadoId");
         const textoNovoComentario = document.getElementById("textoNovoComentarioHistorico");
         const btnEnviarComentario = document.getElementById("btnEnviarComentarioHistorico");
@@ -719,6 +843,12 @@
         });
 
         historyList?.addEventListener("click", event => {
+            const btnDetalhes = event.target.closest(".btn-abrir-detalhes");
+            if (btnDetalhes) {
+                abrirDetalhes(Number(btnDetalhes.dataset.chamadoId));
+                return;
+            }
+
             const btnComentarios = event.target.closest(".btn-abrir-comentarios");
             if (btnComentarios) {
                 abrirComentarios(Number(btnComentarios.dataset.chamadoId));
@@ -852,6 +982,95 @@
             comentariosChamadoIdInput.value = chamadoId;
             comentariosModal.show();
             await carregarComentarios(chamadoId, true, 1, false);
+        }
+
+        async function abrirDetalhes(chamadoId) {
+            if (!chamadoId || !detalhesModal || !detalhesConteudo) return;
+
+            if (detalhesTitulo) detalhesTitulo.textContent = "Detalhes do chamado";
+            detalhesConteudo.innerHTML = '<div class="text-muted small">Carregando informaÃ§Ãµes...</div>';
+            detalhesModal.show();
+
+            try {
+                const response = await fetch(`?handler=DetalhesChamado&grupoId=${encodeURIComponent(historyGrupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "NÃ£o foi possÃ­vel carregar os detalhes.");
+                }
+
+                renderizarDetalhesChamado(data.dados || {});
+            } catch (error) {
+                detalhesConteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "NÃ£o foi possÃ­vel carregar os detalhes.")}</div>`;
+            }
+        }
+
+        function renderizarDetalhesChamado(dados) {
+            if (!detalhesConteudo) return;
+
+            const numero = dados.numeroChamadoGrupo ? `#${dados.numeroChamadoGrupo}` : "";
+            if (detalhesTitulo) {
+                detalhesTitulo.textContent = `Detalhes do chamado ${numero}`.trim();
+            }
+
+            const comentarios = dados.comentarios || [];
+            const comentariosHtml = comentarios.length
+                ? comentarios.map(comentario => `
+                    <div class="detail-comment">
+                        <div class="comment-meta">
+                            <span class="comment-author">${escapeHtml(comentario.autor || "NÃ£o registrado")}</span>
+                            <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                        </div>
+                        <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                        ${comentario.possuiAnexo ? '<div class="small text-muted mt-1">ContÃ©m anexo.</div>' : ''}
+                    </div>
+                `).join("")
+                : '<div class="text-muted small">Nenhum comentÃ¡rio registrado.</div>';
+
+            detalhesConteudo.innerHTML = `
+                <div class="detail-grid mb-3">
+                    ${renderizarDetalhe("TÃ­tulo", dados.titulo || numero || "Chamado")}
+                    ${renderizarDetalhe("Status", formatarStatusDetalhe(dados.status))}
+                    ${renderizarDetalhe("Setor", dados.setor || "NÃ£o registrado")}
+                    ${renderizarDetalhe("Tipo de problema", dados.tipoProblema || "NÃ£o registrado")}
+                    ${renderizarDetalhe("Categoria", dados.categoria || "NÃ£o registrado")}
+                    ${renderizarDetalhe("Subcategoria", dados.subcategoria || "NÃ£o registrado")}
+                    ${renderizarDetalhe("Prioridade", formatarValorDetalhe(dados.prioridade))}
+                    ${renderizarDetalhe("Criticidade", formatarValorDetalhe(dados.criticidade))}
+                    ${renderizarDetalhe("UrgÃªncia", formatarValorDetalhe(dados.urgencia))}
+                    ${renderizarDetalhe("Data de abertura", formatDateTimeLocal(dados.dataCriacao))}
+                    ${renderizarDetalhe("Data de finalizaÃ§Ã£o", formatDateTimeLocal(dados.dataFinalizacao))}
+                    ${renderizarDetalhe("Prazo de resposta", formatDateTimeLocal(dados.prazoResposta))}
+                    ${renderizarDetalhe("Prazo de conclusÃ£o", formatDateTimeLocal(dados.prazoConclusao))}
+                </div>
+                ${renderizarDetalhe("DescriÃ§Ã£o", dados.descricao || "NÃ£o registrada", true)}
+                ${renderizarDetalhe("SoluÃ§Ã£o", dados.solucao || "NÃ£o registrada", true)}
+                <div class="detail-block mt-3">
+                    <span class="detail-label">ComentÃ¡rios recentes</span>
+                    <div class="detail-comments">${comentariosHtml}</div>
+                </div>
+            `;
+        }
+
+        function renderizarDetalhe(label, valor, completo = false) {
+            return `
+                <div class="detail-block ${completo ? "mt-3" : ""}">
+                    <span class="detail-label">${escapeHtml(label)}</span>
+                    <div class="detail-value">${escapeHtml(valor || "-")}</div>
+                </div>
+            `;
+        }
+
+        function formatarValorDetalhe(valor) {
+            if (!valor) return "NÃ£o registrado";
+            if (valor === "NaoUrgente") return "NÃ£o urgente";
+            if (valor === "PoucaUrgencia") return "Pouca urgÃªncia";
+            return valor;
+        }
+
+        function formatarStatusDetalhe(valor) {
+            if (valor === "EmAndamento") return "Em andamento";
+            return formatarValorDetalhe(valor);
         }
 
         async function carregarComentarios(chamadoId, marcarVisualizacao, pagina = 1, anexar = false) {
@@ -1084,6 +1303,12 @@
 
         function formatDateTimeLocal(value) {
             if (!value) return "-";
+            const texto = String(value);
+            const localMatch = texto.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+            if (localMatch && !/[zZ]|[+-]\d{2}:\d{2}$/.test(texto)) {
+                return `${localMatch[1].split("-").reverse().join("/")} ${localMatch[2]}`;
+            }
+
             const data = new Date(value);
             if (Number.isNaN(data.getTime())) return "-";
             return data.toLocaleString("pt-BR");
