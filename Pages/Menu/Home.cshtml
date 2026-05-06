@@ -321,11 +321,71 @@
       .btn-novo-chamado {
         width: 5.35rem;
         height: 5.35rem;
+        position: relative;
+        overflow: visible;
+        isolation: isolate;
       }
 
       .btn-novo-chamado img {
         max-width: 100%;
         height: auto;
+        position: relative;
+        z-index: 2;
+      }
+
+      .novo-chamado-ticket-preview {
+        position: absolute;
+        left: 1.45rem;
+        top: 50%;
+        display: inline-flex;
+        align-items: center;
+        min-width: 14.7rem;
+        height: 4.55rem;
+        padding: 0 1.5rem 0 5.95rem;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+        letter-spacing: 0;
+        background: linear-gradient(135deg, #6d63d8 0%, #2c91c9 46%, #12b96d 100%);
+        box-shadow: 0 .85rem 1.75rem rgba(15, 23, 42, .22);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(.15rem, -50%) scale(.34, .82);
+        transform-origin: left center;
+        transition: opacity .18s ease, transform .24s cubic-bezier(.2, .85, .25, 1);
+        z-index: 1;
+      }
+
+      .btn-novo-chamado.ticket-preview-visivel .novo-chamado-ticket-preview {
+        opacity: 1;
+        transform: translate(0, -50%) scale(1);
+      }
+
+      .btn-comentarios-chamado {
+        position: relative;
+      }
+
+      .comment-button-alert {
+        position: absolute;
+        top: -.28rem;
+        right: -.3rem;
+        width: .72rem;
+        height: .72rem;
+        border-radius: 999px;
+        background: #dc3545;
+        border: 2px solid var(--bs-body-bg);
+        box-shadow: 0 .2rem .6rem rgba(15, 23, 42, .25);
+        pointer-events: none;
+      }
+
+      @@media (prefers-reduced-motion: reduce) {
+        .novo-chamado-ticket-preview {
+          transition: opacity .01s linear;
+          transform: translate(0, -50%) scale(1);
+        }
       }
 
       .chamado-editor-card {
@@ -702,6 +762,14 @@
           width: 4rem;
           height: 4rem;
         }
+
+        .novo-chamado-ticket-preview {
+          left: 1.05rem;
+          min-width: 12.2rem;
+          height: 3.65rem;
+          padding: 0 1.1rem 0 4.55rem;
+          font-size: 1.05rem;
+        }
       }
 
       @@media (max-width: 768px) {
@@ -718,6 +786,14 @@
         .btn-novo-chamado {
           width: 3.5rem;
           height: 3.5rem;
+        }
+
+        .novo-chamado-ticket-preview {
+          left: .95rem;
+          min-width: 10.75rem;
+          height: 3.1rem;
+          padding: 0 .95rem 0 4rem;
+          font-size: .95rem;
         }
       }
     </style>
@@ -799,9 +875,11 @@
                             @if (Model.PodeCriarChamado)
                             {
                                 <button type="button" id="btnNovoChamado"
-                                        class="btn p-0 border-0 rounded-circle shadow-sm btn-novo-chamado">
+                                        class="btn p-0 border-0 rounded-circle shadow-sm btn-novo-chamado"
+                                        aria-label="Criar novo chamado">
                                     <img src="~/images/logoticket.png" alt="Novo Ticket"
                                          class="img-fluid rounded-circle" loading="lazy">
+                                    <span class="novo-chamado-ticket-preview" aria-hidden="true">Novo chamado</span>
                                 </button>
                             }
 
@@ -895,8 +973,12 @@
                                 </div>
 
                                 <div class="mb-2">
-                                    <button type="button" class="btn btn-outline-primary" id="btnAbrirComentariosChamado">
+                                    <button type="button" class="btn btn-outline-primary btn-comentarios-chamado" id="btnAbrirComentariosChamado">
                                         Comentarios
+                                        <span id="comentariosChamadoIndicador"
+                                              class="comment-button-alert d-none"
+                                              aria-hidden="true"
+                                              title="Novo comentário"></span>
                                     </button>
                                 </div>
 

@@ -77,6 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const botaoNovo = document.getElementById("btnNovoChamado");
     if (botaoNovo) {
         botaoNovo.addEventListener("click", criarNovoChamado);
+        inicializarAnimacaoNovoChamado(botaoNovo);
     }
 
     document.querySelectorAll(".cronometro").forEach(span => {
@@ -413,6 +414,28 @@ async function carregarChamado(id) {
     }
 }
 
+function inicializarAnimacaoNovoChamado(botao) {
+    let hoverTimer = null;
+    const delayMs = 180;
+
+    const exibir = () => {
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => {
+            botao.classList.add("ticket-preview-visivel");
+        }, delayMs);
+    };
+
+    const ocultar = () => {
+        clearTimeout(hoverTimer);
+        botao.classList.remove("ticket-preview-visivel");
+    };
+
+    botao.addEventListener("mouseenter", exibir);
+    botao.addEventListener("mouseleave", ocultar);
+    botao.addEventListener("focusin", exibir);
+    botao.addEventListener("focusout", ocultar);
+}
+
 function formatDateTimeLocal(value) {
     if (!value) return "";
 
@@ -599,6 +622,7 @@ async function preencherFormularioEdicao(data) {
     form.classList.remove("d-none");
 
     atualizarResumoChamado(data);
+    atualizarIndicadorComentarioBotao(data.id);
 
     setValueIfExists("editId", data.id);
     setValueIfExists("editTitulo", data.titulo);
@@ -859,6 +883,29 @@ async function marcarComentariosVisualizados(chamadoId) {
 function removerIndicadorComentario(chamadoId) {
     const card = document.querySelector(`.ticket-card[data-id="${chamadoId}"]`);
     card?.querySelector("[data-comment-badge]")?.remove();
+
+    if (Number(chamadoSelecionadoId) === Number(chamadoId)) {
+        atualizarIndicadorComentarioBotao(chamadoId);
+    }
+}
+
+function atualizarIndicadorComentarioBotao(chamadoId) {
+    const botao = document.getElementById("btnAbrirComentariosChamado");
+    const indicador = document.getElementById("comentariosChamadoIndicador");
+
+    if (!botao || !indicador) return;
+
+    const card = chamadoId
+        ? document.querySelector(`.ticket-card[data-id="${chamadoId}"]`)
+        : null;
+    const temNovoComentario = !!card?.querySelector("[data-comment-badge]");
+
+    indicador.classList.toggle("d-none", !temNovoComentario);
+    botao.setAttribute(
+        "aria-label",
+        temNovoComentario ? "Abrir comentários. Há novos comentários." : "Abrir comentários"
+    );
+    botao.title = temNovoComentario ? "Há novos comentários" : "";
 }
 
 function renderizarComentariosChamado(comentarios) {
@@ -962,6 +1009,7 @@ function cancelarEdicaoChamado() {
         label.className = "badge badge-chamado-selecionado d-none";
     }
 
+    atualizarIndicadorComentarioBotao(null);
     chamadoSelecionadoId = null;
 }
 
