@@ -1,4 +1,4 @@
-@using CallStationApp.Models
+﻿@using CallStationApp.Models
 @model dynamic
 @{
     var activeMenu = ViewData["ActiveMenu"] as string ?? string.Empty;
@@ -17,11 +17,28 @@
             ? PermissaoUsuario.Administracao
             : PermissaoUsuario.Colaborador;
     var usuarioLogadoTemPermissaoOperacional = permissaoUsuarioLogado != PermissaoUsuario.Nenhuma;
+    var grupoAtualObj = modelObject.GetType().GetProperty("GrupoAtual")?.GetValue(modelObject) as Grupo;
+    var nomeGrupoAtual = grupoAtualObj?.Nome ?? "Grupo";
+    var corGrupoAtual = grupoAtualObj is not null ? CorCss(grupoAtualObj.EtiquetaCor) : "#6c757d";
+    var corTextoGrupoAtual = grupoAtualObj?.EtiquetaCor == EtiquetaCor.branco || grupoAtualObj is null ? "#212529" : "#fff";
 
     string ActiveClass(string menu) =>
         string.Equals(activeMenu, menu, StringComparison.OrdinalIgnoreCase)
             ? "nav-link active"
             : "nav-link link-body-emphasis";
+
+    string CorCss(EtiquetaCor cor) => cor switch
+    {
+        EtiquetaCor.vermelho => "#ef4444",
+        EtiquetaCor.laranja => "#f97316",
+        EtiquetaCor.amarelo => "#eab308",
+        EtiquetaCor.verde => "#22c55e",
+        EtiquetaCor.azul => "#3b82f6",
+        EtiquetaCor.roxo => "#a855f7",
+        EtiquetaCor.rosa => "#ec4899",
+        EtiquetaCor.preto => "#1f2937",
+        _ => "#f8f9fa"
+    };
 }
 
 <style>
@@ -81,6 +98,69 @@
     .recent-group-button:hover {
         background: #f8f9fa;
     }
+
+    .sidebar-group-label {
+        --sidebar-group-color: #6c757d;
+        --sidebar-group-text: #fff;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        min-height: 2rem;
+        padding: .38rem .85rem;
+        margin: 0 .15rem .85rem;
+
+        border: 1px solid color-mix(in srgb, var(--sidebar-group-color) 72%, #000 28%);
+        border-radius: .75rem;
+
+        background: linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--sidebar-group-color) 88%, #fff 12%),
+            var(--sidebar-group-color)
+        );
+
+        box-shadow: 0 .18rem .45rem color-mix(in srgb, var(--sidebar-group-color) 22%, transparent);
+    }
+
+    .sidebar-group-label-dot {
+        display: none;
+    }
+
+    .sidebar-group-label-content {
+        min-width: 0;
+        line-height: 1.15;
+    }
+
+    .sidebar-group-label-caption {
+        display: none;
+    }
+
+    .sidebar-group-label-name {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+
+        color: var(--sidebar-group-text);
+        font-size: .82rem;
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: .045em;
+        text-align: center;
+        text-overflow: ellipsis;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .sidebar-group-label {
+            transition: none;
+        }
+
+        .sidebar-group-label:hover {
+            transform: none;
+        }
+    }
 </style>
 
 <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar"
@@ -95,6 +175,15 @@
     <hr />
 
     <ul class="nav nav-pills flex-column mb-auto">
+        <li class="nav-item">
+            <div class="sidebar-group-label" style="--sidebar-group-color: @corGrupoAtual; --sidebar-group-text: @corTextoGrupoAtual" title="@nomeGrupoAtual" aria-label="Grupo atual: @nomeGrupoAtual">
+                <span class="sidebar-group-label-dot" aria-hidden="true"></span>
+                <span class="sidebar-group-label-content">
+                    <span class="sidebar-group-label-caption">Grupo atual</span>
+                    <span class="sidebar-group-label-name">@nomeGrupoAtual</span>
+                </span>
+            </div>
+        </li>
         <li class="nav-item">
             <a asp-page="/Menu/Home" asp-route-grupoId="@grupoId" class="@ActiveClass("Home")" aria-current="@(activeMenu == "Home" ? "page" : null)">
                 <i class="bi bi-house-door me-2 icon-svg" aria-hidden="true"></i>

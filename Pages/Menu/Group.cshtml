@@ -25,6 +25,85 @@
         .icon-svg { width:1rem; height:1rem; font-size:1rem; display:inline-flex; align-items:center; justify-content:center; line-height:1; flex-shrink:0; color:currentColor; fill:currentColor; }
         .sidebar .nav-link { display:flex; align-items:center; }
         .sidebar .nav-link.active .icon-svg { color:#111; fill:#111; }
+        .sidebar-group-label {
+            --sidebar-group-color: #6c757d;
+            --sidebar-group-text: #fff;
+            position: relative;
+            isolation: isolate;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+            min-height: 2.15rem;
+            padding: .42rem .85rem;
+            margin: 0 .15rem .85rem;
+            overflow: hidden;
+            border: 1px solid rgba(0,0,0,.08);
+            border-color: rgba(255,255,255,.48);
+            border-radius: 999px;
+            background:
+                linear-gradient(
+                    135deg,
+                    color-mix(in srgb, var(--sidebar-group-color) 42%, rgba(255,255,255,.86) 58%),
+                    color-mix(in srgb, var(--sidebar-group-color) 28%, rgba(255,255,255,.42) 72%)
+                );
+            -webkit-backdrop-filter: blur(18px) saturate(165%);
+            backdrop-filter: blur(18px) saturate(165%);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.78),
+                inset 0 -1px 0 rgba(255,255,255,.22),
+                0 .45rem 1.25rem color-mix(in srgb, var(--sidebar-group-color) 18%, transparent),
+                0 .08rem .18rem rgba(15,23,42,.08);
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+        .sidebar-group-label::before {
+            content: "";
+            position: absolute;
+            inset: 1px;
+            z-index: -1;
+            border-radius: inherit;
+            background: linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.18) 38%, rgba(255,255,255,.04) 100%);
+            pointer-events: none;
+        }
+        .sidebar-group-label::after {
+            content: "";
+            position: absolute;
+            top: .18rem;
+            left: 12%;
+            right: 12%;
+            height: .55rem;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,0));
+            opacity: .75;
+            pointer-events: none;
+        }
+        .sidebar-group-label:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255,255,255,.7);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.86),
+                inset 0 -1px 0 rgba(255,255,255,.24),
+                0 .65rem 1.55rem color-mix(in srgb, var(--sidebar-group-color) 24%, transparent),
+                0 .1rem .28rem rgba(15,23,42,.10);
+        }
+        .sidebar-group-label-dot { display: none; }
+        .sidebar-group-label-content { min-width: 0; line-height: 1.15; }
+        .sidebar-group-label-caption { display: none; }
+        .sidebar-group-label-name {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            color: var(--sidebar-group-text);
+            font-size: .82rem;
+            font-weight: 700;
+            letter-spacing: .045em;
+            line-height: 1.1;
+            text-align: center;
+            text-overflow: ellipsis;
+            text-transform: uppercase;
+            white-space: nowrap;
+            text-shadow: 0 1px 1px rgba(0,0,0,.20);
+        }
         .page-card, .section-card { border:1px solid #e9ecef; border-radius:1rem; box-shadow:0 .25rem 1rem rgba(0,0,0,.04); }
         .stat-card { border:1px solid #eef2f7; background:#fff; border-radius:.9rem; padding:1rem; }
         .soft-table th { color:#6c757d; font-size:.82rem; font-weight:600; }
@@ -37,6 +116,10 @@
             .sidebar { position:static; width:100%; height:auto; }
             .content-wrapper { margin-left:0; padding:1rem; }
         }
+        @@media (prefers-reduced-motion: reduce) {
+            .sidebar-group-label { transition: none; }
+            .sidebar-group-label:hover { transform: none; }
+        }
     </style>
 </head>
 <body>
@@ -47,6 +130,15 @@
         </a>
         <hr />
         <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item">
+                <div class="sidebar-group-label" style="--sidebar-group-color: @CorCss(Model.GrupoAtual.EtiquetaCor); --sidebar-group-text: @CorTextoCss(Model.GrupoAtual.EtiquetaCor)" title="@Model.GrupoAtual.Nome" aria-label="Grupo atual: @Model.GrupoAtual.Nome">
+                    <span class="sidebar-group-label-dot" aria-hidden="true"></span>
+                    <span class="sidebar-group-label-content">
+                        <span class="sidebar-group-label-caption">Grupo atual</span>
+                        <span class="sidebar-group-label-name">@Model.GrupoAtual.Nome</span>
+                    </span>
+                </div>
+            </li>
             <li class="nav-item">
                 <a asp-page="/Menu/Home" asp-route-grupoId="@Model.GrupoId" class="nav-link link-body-emphasis">
                     <i class="bi bi-house-door me-2 icon-svg"></i> Chamados
@@ -360,6 +452,8 @@ function recolherSelectLongo(select) {
         EtiquetaCor.preto => "#1f2937",
         _ => "#e5e7eb"
     };
+
+    private string CorTextoCss(EtiquetaCor cor) => cor == EtiquetaCor.branco ? "#212529" : "#fff";
 
     private IHtmlContent Switch(string id, string label, bool value) =>
         new HtmlString($"<div class=\"col-md-4\"><div class=\"form-check form-switch\"><input class=\"form-check-input\" type=\"checkbox\" id=\"{id}\" {(value ? "checked" : "")}><label class=\"form-check-label\" for=\"{id}\">{label}</label></div></div>");
