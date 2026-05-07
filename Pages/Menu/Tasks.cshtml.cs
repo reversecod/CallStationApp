@@ -14,6 +14,7 @@ public class TasksModel : PageModel
     private const decimal OrdemBase = 1024m;
     private const string PrefixoColunaArquivoSistema = "__callstation_archive__";
     private const int LimiteCaracteresComentario = 250;
+    private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly ILogger<TasksModel> _logger;
@@ -434,6 +435,13 @@ public class TasksModel : PageModel
             .Concat(historico)
             .OrderByDescending(x => x.data)
             .Take(30)
+            .Select(x => new
+            {
+                x.tipo,
+                x.usuario,
+                x.texto,
+                data = ParaDataHoraRegionalIso(x.data)
+            })
             .ToList();
 
         return new JsonResult(new
@@ -2413,6 +2421,34 @@ public class TasksModel : PageModel
     {
         var claim = User.FindFirst("Id")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private static string ParaDataHoraRegionalIso(DateTime dataUtc)
+    {
+        var dataOrigem = dataUtc.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(dataUtc, DateTimeKind.Utc)
+            : dataUtc.ToUniversalTime();
+
+        return TimeZoneInfo.ConvertTimeFromUtc(dataOrigem, FusoHorarioRegional).ToString("yyyy-MM-ddTHH:mm:ss");
+    }
+
+    private static TimeZoneInfo ObterFusoHorarioRegional()
+    {
+        foreach (var id in new[] { "E. South America Standard Time", "America/Sao_Paulo" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Local;
     }
 
     private static bool TryParseNullableEnum<TEnum>(string? valor, out TEnum? resultado) where TEnum : struct

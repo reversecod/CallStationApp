@@ -84,19 +84,47 @@
     }
 
     .recent-group-button {
-        border: 1px solid #e9ecef;
-        background: #fff;
-        border-radius: .5rem;
-        padding: .75rem;
+        --recent-group-color: #6c757d;
+        --recent-group-text: #fff;
+
+        border: none;
+        background: linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--recent-group-color) 78%, #fff 22%) 0%,
+            var(--recent-group-color) 50%,
+            color-mix(in srgb, var(--recent-group-color) 82%, #000 18%) 100%
+        );
+        border-radius: 999px;
+        padding: .5rem .95rem;
         width: 100%;
-        text-align: left;
         display: flex;
         align-items: center;
-        gap: .75rem;
+        justify-content: space-between;
+        gap: .85rem;
+        color: var(--recent-group-text);
+        text-align: left;
     }
 
     .recent-group-button:hover {
-        background: #f8f9fa;
+        filter: brightness(.96);
+    }
+
+    .recent-group-button-name {
+        min-width: 0;
+        overflow: hidden;
+        font-size: .86rem;
+        font-weight: 700;
+        line-height: 1.1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .recent-group-button-access {
+        flex-shrink: 0;
+        font-size: .72rem;
+        line-height: 1.1;
+        opacity: .82;
+        white-space: nowrap;
     }
 
     .sidebar-group-label {
@@ -106,6 +134,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        width: 100%;
         min-width: 0;
         min-height: 2.45rem;
         padding: .48rem 1rem;
@@ -113,6 +142,7 @@
 
         border: none;
         border-radius: 999px;
+        cursor: pointer;
 
         background: linear-gradient(
             135deg,
@@ -122,6 +152,10 @@
         );
 
         box-shadow: none;
+    }
+
+    .sidebar-group-label:hover {
+        filter: brightness(.96);
     }
 
     .sidebar-group-label-dot {
@@ -177,13 +211,19 @@
 
     <ul class="nav nav-pills flex-column mb-auto">
         <li class="nav-item">
-            <div class="sidebar-group-label" style="--sidebar-group-color: @corGrupoAtual; --sidebar-group-text: @corTextoGrupoAtual" title="@nomeGrupoAtual" aria-label="Grupo atual: @nomeGrupoAtual">
+            <button type="button"
+                    class="sidebar-group-label"
+                    style="--sidebar-group-color: @corGrupoAtual; --sidebar-group-text: @corTextoGrupoAtual"
+                    title="@nomeGrupoAtual"
+                    aria-label="Selecionar organização. Grupo atual: @nomeGrupoAtual"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalOrganizacoesRecentes">
                 <span class="sidebar-group-label-dot" aria-hidden="true"></span>
                 <span class="sidebar-group-label-content">
                     <span class="sidebar-group-label-caption">Grupo atual</span>
                     <span class="sidebar-group-label-name">@nomeGrupoAtual</span>
                 </span>
-            </div>
+            </button>
         </li>
         <li class="nav-item">
             <a asp-page="/Menu/Home" asp-route-grupoId="@grupoId" class="@ActiveClass("Home")" aria-current="@(activeMenu == "Home" ? "page" : null)">
@@ -216,13 +256,13 @@
                     Histórico
                 </a>
             </li>
-            <li>
-                <a asp-page="/Menu/Members" asp-route-grupoId="@grupoId" class="@ActiveClass("Members")" aria-current="@(activeMenu == "Members" ? "page" : null)">
-                    <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
-                    Membros
-                </a>
-            </li>
         }
+        <li>
+            <a asp-page="/Menu/Members" asp-route-grupoId="@grupoId" class="@ActiveClass("Members")" aria-current="@(activeMenu == "Members" ? "page" : null)">
+                <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
+                Membros
+            </a>
+        </li>
         @if (usuarioLogadoEhAdministrador)
         {
             <li>
@@ -244,15 +284,6 @@
             <i class="bi bi-bell-fill text-danger ms-2 d-none" id="sidebarPerfilNotificacaoIcone" aria-label="Nova notificação"></i>
         </a>
         <ul class="dropdown-menu text-small shadow">
-            <li>
-                <button type="button"
-                        class="dropdown-item"
-                        data-bs-toggle="modal"
-                        data-bs-target="#modalOrganizacoesRecentes">
-                    <i class="bi bi-building me-2" aria-hidden="true"></i>
-                    Organização
-                </button>
-            </li>
             <li>
                 <a asp-page="/Menu/Notifications"
                    asp-route-grupoId="@grupoId"
@@ -328,6 +359,37 @@
             });
         }
 
+        function getSidebarGroupColor(value) {
+            const normalized = String(value ?? "").trim().toLowerCase();
+            const colors = {
+                "0": "#e5e7eb",
+                "1": "#ef4444",
+                "2": "#f97316",
+                "3": "#eab308",
+                "4": "#22c55e",
+                "5": "#3b82f6",
+                "6": "#a855f7",
+                "7": "#ec4899",
+                "8": "#1f2937",
+                branco: "#e5e7eb",
+                vermelho: "#ef4444",
+                laranja: "#f97316",
+                amarelo: "#eab308",
+                verde: "#22c55e",
+                azul: "#3b82f6",
+                roxo: "#a855f7",
+                rosa: "#ec4899",
+                preto: "#1f2937"
+            };
+
+            return colors[normalized] || "#6c757d";
+        }
+
+        function getSidebarGroupTextColor(value) {
+            const normalized = String(value ?? "").trim().toLowerCase();
+            return normalized === "0" || normalized === "branco" ? "#212529" : "#fff";
+        }
+
         async function carregarContadorNotificacoes() {
             const url = sidebar.dataset.sidebarContadorUrl;
             if (!url || !badge) {
@@ -387,13 +449,12 @@
                 }
 
                 listaOrganizacoes.innerHTML = grupos.map(grupo => `
-                    <button type="button" class="recent-group-button" data-grupo-id="${escapeSidebarHtml(grupo.id)}">
-                        <i class="bi bi-building text-primary" aria-hidden="true"></i>
-                        <span class="flex-grow-1">
-                            <span class="d-block fw-semibold">${escapeSidebarHtml(grupo.nome)}</span>
-                            <span class="d-block small text-muted">Último acesso: ${escapeSidebarHtml(formatSidebarDateTime(grupo.dataUltimoAcesso))}</span>
-                        </span>
-                        <i class="bi bi-arrow-right-short text-muted" aria-hidden="true"></i>
+                    <button type="button"
+                            class="recent-group-button"
+                            data-grupo-id="${escapeSidebarHtml(grupo.id)}"
+                            style="--recent-group-color: ${escapeSidebarHtml(getSidebarGroupColor(grupo.etiquetaCor))}; --recent-group-text: ${escapeSidebarHtml(getSidebarGroupTextColor(grupo.etiquetaCor))}">
+                        <span class="recent-group-button-name">${escapeSidebarHtml(grupo.nome)}</span>
+                        <span class="recent-group-button-access">Último acesso: ${escapeSidebarHtml(formatSidebarDateTime(grupo.dataUltimoAcesso))}</span>
                     </button>
                 `).join("");
 

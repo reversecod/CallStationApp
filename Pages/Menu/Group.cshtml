@@ -86,6 +86,7 @@
         .color-dot { width:1rem; height:1rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.12); }
         .nav-tabs .nav-link { color:#495057; }
         .nav-tabs .nav-link.active { font-weight:600; }
+        .danger-zone { border:1px solid #f1aeb5; background:#fff5f5; border-radius:.9rem; padding:1rem; }
         @@media (max-width: 767.98px) {
             .sidebar { position:static; width:100%; height:auto; }
             .content-wrapper { margin-left:0; padding:1rem; }
@@ -220,14 +221,21 @@
                                     <option value="@cor" selected="@(Model.GrupoAtual.EtiquetaCor.ToString() == cor)">@cor</option>
                                 }
                             </select>
-                            <div class="form-check form-switch mt-4">
-                                <input class="form-check-input" type="checkbox" id="geralAtivo" checked="@Model.Configuracao.Ativo">
-                                <label class="form-check-label" for="geralAtivo">Grupo ativo</label>
-                            </div>
                         </div>
                     </div>
                     <div class="d-flex justify-content-end mt-3">
                         <button class="btn btn-primary" id="btnSalvarGeral"><i class="bi bi-check2 me-1"></i>Salvar</button>
+                    </div>
+                    <div class="danger-zone mt-4">
+                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                            <div>
+                                <h2 class="h6 mb-1 text-danger">Excluir grupo</h2>
+                                <p class="text-muted small mb-0">Remove o acesso de todos os membros ao grupo, mantendo os dados existentes para auditoria.</p>
+                            </div>
+                            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalExcluirGrupo">
+                                <i class="bi bi-trash me-1"></i>Excluir grupo
+                            </button>
+                        </div>
                     </div>
                 </div></div>
             </section>
@@ -307,12 +315,36 @@
     </div>
 </main>
 
+<div class="modal fade" id="modalExcluirGrupo" tabindex="-1" aria-labelledby="modalExcluirGrupoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger" id="modalExcluirGrupoLabel">Excluir grupo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Para confirmar, digite o nome do grupo:</p>
+                <div class="fw-semibold mb-3">@Model.GrupoAtual.Nome</div>
+                <input class="form-control" id="confirmarNomeGrupo" autocomplete="off" maxlength="35">
+                <div class="form-text">Esta ação remove o acesso ao grupo para todos os usuários.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmarExcluirGrupo" disabled>
+                    <i class="bi bi-trash me-1"></i>Excluir grupo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const grupoId = document.getElementById("grupoIdAtual").value;
 const token = document.getElementById("requestVerificationToken").value;
 const feedback = document.getElementById("feedbackGrupo");
 const grupoTabStorageKey = `grupo:${grupoId}:abaAtiva`;
+const nomeGrupoAtual = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.GrupoAtual.Nome));
 
 restaurarAbaGrupo();
 document.querySelectorAll("#grupoTabs [data-bs-toggle='tab']").forEach(tab => {
@@ -351,7 +383,7 @@ async function post(handler, body) {
     setTimeout(() => window.location.reload(), 650);
 }
 document.getElementById("btnSalvarGeral")?.addEventListener("click", () => post("SalvarGeral", {
-    nome: geralNome.value, descricao: geralDescricao.value, slug: geralSlug.value, etiquetaCor: geralCor.value, ativo: geralAtivo.checked
+    nome: geralNome.value, descricao: geralDescricao.value, slug: geralSlug.value, etiquetaCor: geralCor.value
 }).catch(e => showFeedback("danger", e.message)));
 document.getElementById("btnSalvarRegras")?.addEventListener("click", () => post("SalvarRegras", {
     obrigarSetor: regraObrigarSetor.checked, obrigarTipoOcorrencia: regraObrigarTipo.checked, obrigarCategoria: regraObrigarCategoria.checked,
@@ -365,6 +397,40 @@ document.getElementById("btnSalvarSla")?.addEventListener("click", () => post("S
     horasAposVencimentoParaPendente: slaHorasApos.value ? parseInt(slaHorasApos.value) : null,
     horasAntesPrazoParaAlerta: slaHorasAntes.value ? parseInt(slaHorasAntes.value) : null
 }).catch(e => showFeedback("danger", e.message)));
+
+const inputConfirmarNomeGrupo = document.getElementById("confirmarNomeGrupo");
+const btnConfirmarExcluirGrupo = document.getElementById("btnConfirmarExcluirGrupo");
+
+inputConfirmarNomeGrupo?.addEventListener("input", () => {
+    btnConfirmarExcluirGrupo.disabled = inputConfirmarNomeGrupo.value.trim() !== nomeGrupoAtual;
+});
+
+btnConfirmarExcluirGrupo?.addEventListener("click", async () => {
+    if (inputConfirmarNomeGrupo.value.trim() !== nomeGrupoAtual) {
+        showFeedback("danger", "Digite o nome do grupo para confirmar a exclusão.");
+        return;
+    }
+
+    btnConfirmarExcluirGrupo.disabled = true;
+    btnConfirmarExcluirGrupo.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Excluindo...';
+
+    try {
+        const response = await fetch(`/Menu/Group?handler=ExcluirGrupo&grupoId=${grupoId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "RequestVerificationToken": token },
+            body: JSON.stringify({ nomeConfirmacao: inputConfirmarNomeGrupo.value.trim() })
+        });
+        const data = await response.json().catch(() => ({ success:false, message:"Erro inesperado." }));
+        if (!response.ok || !data.success) throw new Error(data.message || "Não foi possível excluir o grupo.");
+
+        sessionStorage.removeItem(grupoTabStorageKey);
+        window.location.href = data.redirectUrl || "/Menu/Menu";
+    } catch (e) {
+        btnConfirmarExcluirGrupo.disabled = false;
+        btnConfirmarExcluirGrupo.innerHTML = '<i class="bi bi-trash me-1"></i>Excluir grupo';
+        showFeedback("danger", e.message);
+    }
+});
 document.querySelectorAll("[data-create]").forEach(btn => btn.addEventListener("click", () => {
     const tipo = btn.dataset.create;
     const input = document.querySelector(`[data-input='${tipo}']`);

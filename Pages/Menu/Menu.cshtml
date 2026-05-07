@@ -497,7 +497,9 @@
                 </div>
 
                 <div class="modal-footer d-flex justify-content-between">
-                <a asp-page="/Menu/Menu" asp-page-handler="AbrirNotificacoes" class="btn btn-primary">
+                <a asp-page="/Menu/Menu"
+                   asp-page-handler="AbrirNotificacoes"
+                   class="btn btn-primary">
                     <i class="bi bi-clock-history me-2"></i>
                     Histórico
                 </a>
@@ -566,7 +568,7 @@
                 grupo.textContent = n.nomeGrupo ? `Grupo: ${n.nomeGrupo}` : "";
 
                 const link = document.createElement("a");
-                const urlBase = n.linkDestino || (n.grupoId ? `/Menu/Notifications?grupoId=${encodeURIComponent(n.grupoId)}` : "?handler=AbrirNotificacoes");
+                const urlBase = n.grupoId ? `/Menu/Notifications?grupoId=${encodeURIComponent(n.grupoId)}` : "?handler=AbrirNotificacoes";
                 const separador = urlBase.includes("?") ? "&" : "?";
                 link.href = n.id ? `${urlBase}${separador}notificacaoId=${encodeURIComponent(n.id)}#notificacao-${encodeURIComponent(n.id)}` : urlBase;
                 link.className = "small text-decoration-none";
@@ -609,30 +611,8 @@
             }
         }
 
-        async function marcarNotificacoesComoLidas() {
-            try {
-                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
-
-                const response = await fetch('?handler=MarcarNotificacoesComoLidas', {
-                    method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token
-                    }
-                });
-
-                if (!response.ok) throw new Error("Falha ao marcar notificações.");
-
-                badgeNotificacoes.classList.add('d-none');
-                badgeNotificacoes.textContent = '0';
-            } catch {
-                badgeNotificacoes.classList.remove('d-none');
-            }
-        }
-
         modalNotificacoes.addEventListener('show.bs.modal', async function () {
-            if (await carregarNotificacoes()) {
-                await marcarNotificacoesComoLidas();
-            }
+            await carregarNotificacoes();
         });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>

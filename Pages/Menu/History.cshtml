@@ -47,6 +47,7 @@
         .sidebar .nav-link.active .icon-svg { color: #111; fill: #111; }
         .history-list { display:flex; flex-direction:column; gap:1.15rem; }
         #historyCardsContainer { display:flex; flex-direction:column; gap:1rem; }
+        .min-width-0 { min-width:0; }
 
         .filter-bar {
             display:flex;
@@ -58,23 +59,84 @@
             border:1px solid #d8dde3;
             border-radius:1.6rem;
             box-shadow:0 10px 30px rgba(0,0,0,.04);
+            overflow-x:auto;
+            overflow-y:hidden;
+        }
+
+        .history-search-area {
+            flex:0 0 auto;
+            display:flex;
+            align-items:center;
+            gap:.45rem;
+            min-width:3.25rem;
+        }
+
+        .history-search-toggle,
+        .history-search-clear {
+            width:2.35rem;
+            height:2.35rem;
+            border:0;
+            border-radius:999px;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            color:#111827;
+            background:rgba(255,255,255,.72);
+            box-shadow:0 .2rem .55rem rgba(15, 23, 42, .08);
+        }
+
+        .history-search-toggle:hover,
+        .history-search-toggle:focus-visible,
+        .history-search-clear:hover,
+        .history-search-clear:focus-visible {
+            background:#fff;
+            outline:none;
+        }
+
+        .history-search-panel {
+            display:flex;
+            align-items:center;
+            gap:.35rem;
+            max-width:0;
+            opacity:0;
+            overflow:hidden;
+            pointer-events:none;
+            transform:translateX(-.35rem);
+            transition:max-width .22s ease, opacity .18s ease, transform .22s ease;
+            white-space:nowrap;
+        }
+
+        .history-search-panel.is-open {
+            max-width:min(24rem, 48vw);
+            opacity:1;
+            pointer-events:auto;
+            transform:translateX(0);
+        }
+
+        .history-search-input {
+            width:18rem;
+            min-width:8rem;
+            border-radius:999px;
+            border:1px solid #cbd5e1;
+            padding:.48rem .85rem;
+            font-size:.9rem;
         }
 
         .history-columns-grid {
             display:grid;
             grid-template-columns:var(--history-columns);
-            gap:.45rem;
+            gap:.85rem;
             align-items:center;
-            min-width:0;
+            min-width:58rem;
             flex:1;
         }
 
         .filter-bar .history-columns-grid {
-            margin-left:4.15rem;
-            margin-right:4.15rem;
+            margin-left:.35rem;
+            margin-right:.35rem;
         }
 
-        .filter-cell { min-width:0; }
+        .filter-cell { min-width:0; padding-inline:.15rem; }
 
         .filter-button {
             width:100%;
@@ -93,6 +155,11 @@
             text-transform:uppercase;
             letter-spacing:.03em;
             transition:background-color .15s ease;
+            min-height:2.2rem;
+        }
+
+        .filter-button span:first-child {
+            overflow-wrap:anywhere;
         }
 
         .filter-button:hover,
@@ -470,6 +537,46 @@
             background:#fff;
         }
 
+        .detail-actions-row {
+            display:flex;
+            flex-wrap:wrap;
+            gap:.5rem;
+            align-items:center;
+        }
+
+        .linked-call-panel {
+            border:1px solid #e5e7eb;
+            border-radius:.75rem;
+            padding:.75rem;
+            background:#f8fafc;
+        }
+
+        .linked-call-list,
+        .linked-call-candidates {
+            display:flex;
+            flex-direction:column;
+            gap:.45rem;
+        }
+
+        .linked-call-item {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:.75rem;
+            border:1px solid #e5e7eb;
+            border-radius:.65rem;
+            background:#fff;
+            padding:.55rem .65rem;
+        }
+
+        .linked-call-title {
+            min-width:0;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+            font-weight:700;
+        }
+
         .history-empty {
             display:flex;
             align-items:center;
@@ -499,6 +606,8 @@
             .sidebar { position: static; width: 100%; height: auto; }
             .content-wrapper { margin-left: 0; padding: 1rem; }
             .filter-bar { padding:.7rem; overflow-x:auto; border-radius:1.35rem; }
+            .history-search-panel.is-open { max-width:18rem; }
+            .history-search-input { width:13.5rem; }
             .filter-bar .history-columns-grid { margin-left:0; margin-right:0; }
             .history-columns-grid { min-width:74rem; }
             .ticket-card { padding:.68rem 3.75rem .82rem .82rem; border-radius:1.5rem; align-items:flex-start; overflow-x:auto; }
@@ -521,6 +630,17 @@
         <div class="content-wrapper">
         <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
         <div class="filter-bar" id="historySortBar">
+            <div class="history-search-area">
+                <button type="button" class="history-search-toggle" id="btnAbrirPesquisaHistorico" aria-label="Pesquisar chamados" aria-expanded="false" aria-controls="painelPesquisaHistorico">
+                    <i class="bi bi-search"></i>
+                </button>
+                <div class="history-search-panel" id="painelPesquisaHistorico">
+                    <input type="search" class="history-search-input" id="inputPesquisaHistorico" maxlength="80" placeholder="Pesquisar chamados">
+                    <button type="button" class="history-search-clear" id="btnLimparPesquisaHistorico" aria-label="Limpar pesquisa">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
             <div class="history-columns-grid">
                 <div class="filter-cell">
                     <button type="button" class="filter-button" data-sort-field="criado-por" data-sort-type="text" data-default-dir="asc">
@@ -829,11 +949,21 @@
         const statusChamadoIdInput = document.getElementById("statusHistoricoChamadoId");
         const selectNovoStatus = document.getElementById("selectNovoStatusHistorico");
         const btnSalvarStatus = document.getElementById("btnSalvarStatusHistorico");
+        const btnAbrirPesquisa = document.getElementById("btnAbrirPesquisaHistorico");
+        const painelPesquisa = document.getElementById("painelPesquisaHistorico");
+        const inputPesquisa = document.getElementById("inputPesquisaHistorico");
+        const btnLimparPesquisa = document.getElementById("btnLimparPesquisaHistorico");
         const collator = new Intl.Collator("pt-BR", { sensitivity: "base", numeric: true });
         const historyGrupoId = @Model.GrupoId;
+        const podeAlterarStatusHistorico = @(Model.UsuarioLogadoPodeAlterarStatusHistorico ? "true" : "false");
 
         let activeField = null;
         let activeDirection = null;
+        let pesquisaTimer = null;
+        let termoPesquisaAtual = "";
+        let paginaPesquisaAtual = 1;
+        let detalhesChamadoAtualId = null;
+        let candidatosVinculoTimer = null;
 
         sortButtons.forEach(button => {
             button.addEventListener("click", () => {
@@ -859,6 +989,32 @@
             });
         });
 
+        btnAbrirPesquisa?.addEventListener("click", () => {
+            painelPesquisa?.classList.toggle("is-open");
+            const pesquisaAberta = painelPesquisa?.classList.contains("is-open") || false;
+            btnAbrirPesquisa.setAttribute("aria-expanded", pesquisaAberta ? "true" : "false");
+            if (pesquisaAberta) {
+                inputPesquisa?.focus();
+            }
+        });
+
+        inputPesquisa?.addEventListener("input", () => {
+            window.clearTimeout(pesquisaTimer);
+            pesquisaTimer = window.setTimeout(async () => {
+                termoPesquisaAtual = (inputPesquisa.value || "").trim();
+                paginaPesquisaAtual = 1;
+                await pesquisarHistorico();
+            }, 300);
+        });
+
+        btnLimparPesquisa?.addEventListener("click", async () => {
+            if (inputPesquisa) inputPesquisa.value = "";
+            termoPesquisaAtual = "";
+            paginaPesquisaAtual = 1;
+            await pesquisarHistorico();
+            inputPesquisa?.focus();
+        });
+
         historyList?.addEventListener("click", event => {
             const btnDetalhes = event.target.closest(".btn-abrir-detalhes");
             if (btnDetalhes) {
@@ -875,6 +1031,13 @@
             const btnStatus = event.target.closest(".btn-abrir-status");
             if (btnStatus) {
                 abrirStatus(Number(btnStatus.dataset.chamadoId), btnStatus.dataset.statusAtual || "");
+                return;
+            }
+
+            const btnPaginaPesquisa = event.target.closest("[data-history-search-page]");
+            if (btnPaginaPesquisa) {
+                paginaPesquisaAtual = Number(btnPaginaPesquisa.dataset.historySearchPage || 1);
+                pesquisarHistorico();
             }
         });
 
@@ -937,6 +1100,163 @@
             }
         });
 
+        async function pesquisarHistorico() {
+            if (!historyList) return;
+            historyList.innerHTML = '<div class="history-empty"><i class="bi bi-search fs-1 text-secondary"></i><div><h2 class="h4 mt-3">Pesquisando chamados</h2><p class="text-muted mb-0">Aguarde enquanto o histórico é filtrado.</p></div></div>';
+
+            try {
+                const response = await fetch(`?handler=PesquisarChamados&grupoId=${encodeURIComponent(historyGrupoId)}&termo=${encodeURIComponent(termoPesquisaAtual)}&page=${encodeURIComponent(paginaPesquisaAtual)}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Não foi possível pesquisar chamados.");
+                }
+
+                renderizarHistoricoPesquisa(data.dados || {});
+            } catch (error) {
+                historyList.innerHTML = `<div class="history-empty"><i class="bi bi-exclamation-triangle fs-1 text-danger"></i><div><h2 class="h4 mt-3">Pesquisa indisponível</h2><p class="text-muted mb-0">${escapeHtml(error.message || "Não foi possível pesquisar chamados.")}</p></div></div>`;
+            }
+        }
+
+        function renderizarHistoricoPesquisa(dados) {
+            if (!historyList) return;
+            const chamados = dados.chamados || [];
+
+            if (!chamados.length) {
+                historyList.innerHTML = `
+                    <div class="history-empty">
+                        <i class="bi bi-search fs-1 text-secondary"></i>
+                        <div>
+                            <h2 class="h4 mt-3">Nenhum chamado encontrado</h2>
+                            <p class="text-muted mb-0">Ajuste o termo pesquisado ou limpe a pesquisa para voltar ao histórico.</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            historyList.innerHTML = `
+                <div id="historyCardsContainer">
+                    ${chamados.map((chamado, index) => renderizarCardHistorico(chamado, index)).join("")}
+                </div>
+                ${renderizarPaginacaoPesquisa(dados)}
+            `;
+            aplicarOrdenacaoAtual();
+        }
+
+        function renderizarCardHistorico(chamado, index) {
+            const titulo = chamado.titulo && chamado.titulo.toLowerCase() !== "novo chamado"
+                ? chamado.titulo
+                : "Chamado";
+            const statusTexto = chamado.statusTexto || chamado.status || "";
+
+            return `
+                <article class="ticket-card ${escapeHtml(chamado.classeStatus || "ticket-status-fechado")}"
+                         data-chamado-id="${Number(chamado.id || 0)}"
+                         data-original-index="${Number(index || 0)}"
+                         data-sort-criado-por="${escapeHtml(chamado.criadoPor || "")}"
+                         data-sort-finalizado-por="${escapeHtml(chamado.finalizadoPor || "")}"
+                         data-sort-setor="${escapeHtml(chamado.setor || "")}"
+                         data-sort-tipo-problema="${escapeHtml(chamado.tipoProblema || "")}"
+                         data-sort-data-abertura="${Number(chamado.dataCriacaoOrdenacao || 0)}"
+                         data-sort-data-encerramento="${Number(chamado.dataFinalOrdenacao || 0)}"
+                         data-sort-tempo-total="${Number(chamado.tempoResolucaoOrdenacao || 0)}"
+                         data-sort-status-atual="${escapeHtml(statusTexto)}"
+                         data-sort-chamado="${Number(chamado.id || 0)}">
+                    <button type="button"
+                            class="ticket-icon-button btn-abrir-detalhes"
+                            data-chamado-id="${Number(chamado.id || 0)}"
+                            aria-label="Abrir detalhes do chamado #${escapeHtml(chamado.numeroChamadoGrupo || "")}">
+                        <img src="/images/logoticket.png" class="ticket-icon" alt="" loading="lazy" />
+                    </button>
+                    <div class="ticket-content">
+                        <div class="ticket-header">
+                            <div class="ticket-title-wrap">
+                                <h2 class="ticket-title" title="${escapeHtml(titulo)}">${escapeHtml(titulo)}</h2>
+                            </div>
+                        </div>
+
+                        <div class="history-columns-grid ticket-meta-grid">
+                            ${renderizarCelulaHistorico("Criado por", chamado.criadoPor)}
+                            ${renderizarCelulaHistorico("Finalizado por", chamado.finalizadoPor)}
+                            ${renderizarCelulaHistorico("Setor", chamado.setor)}
+                            ${renderizarCelulaHistorico("Tipo de problema", chamado.tipoProblema)}
+                            ${renderizarCelulaHistorico("Data de abertura", chamado.dataCriacaoTexto)}
+                            ${renderizarCelulaHistorico("Data de encerramento", chamado.dataFinalTexto)}
+                            ${renderizarCelulaHistorico("Tempo total", chamado.tempoResolucaoTexto)}
+                            ${renderizarStatusHistorico(chamado, statusTexto)}
+                        </div>
+                    </div>
+
+                    <div class="ticket-side-actions">
+                        <span class="ticket-number" title="Chamado #${escapeHtml(chamado.numeroChamadoGrupo || "")}">#${escapeHtml(chamado.numeroChamadoGrupo || "-")}</span>
+                        <button type="button"
+                            class="ticket-comment-button btn-abrir-comentarios"
+                            data-chamado-id="${Number(chamado.id || 0)}"
+                            aria-label="Abrir comentários">
+                            <i class="bi bi-chat-dots"></i>
+                            ${chamado.temComentariosNaoLidos ? '<span class="ticket-comment-badge" data-comment-badge></span>' : ''}
+                        </button>
+                    </div>
+                </article>
+            `;
+        }
+
+        function renderizarCelulaHistorico(label, valor) {
+            return `
+                <div class="history-cell">
+                    <div class="history-block">
+                        <div class="history-label">${escapeHtml(label)}</div>
+                        <div class="history-value" title="${escapeHtml(valor || "Não registrado")}">${escapeHtml(valor || "Não registrado")}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderizarStatusHistorico(chamado, statusTexto) {
+            if (podeAlterarStatusHistorico) {
+                return `
+                    <div class="history-cell">
+                        <button type="button"
+                                class="history-block history-block-action btn-abrir-status"
+                                data-chamado-id="${Number(chamado.id || 0)}"
+                                data-status-atual="${escapeHtml(chamado.status || "")}">
+                            <span class="history-label">Status atual</span>
+                            <span class="history-value" data-status-texto title="${escapeHtml(statusTexto)}">${escapeHtml(statusTexto)}</span>
+                        </button>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="history-cell">
+                    <div class="history-block">
+                        <div class="history-label">Status atual</div>
+                        <div class="history-value" data-status-texto title="${escapeHtml(statusTexto)}">${escapeHtml(statusTexto)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderizarPaginacaoPesquisa(dados) {
+            if (!dados.temPaginaAnterior && !dados.temProximaPagina) return "";
+
+            const anterior = dados.temPaginaAnterior
+                ? `<button type="button" class="btn btn-outline-secondary btn-sm" data-history-search-page="${Number(dados.pagina || 1) - 1}">Anterior</button>`
+                : "<span></span>";
+            const proxima = dados.temProximaPagina
+                ? `<button type="button" class="btn btn-outline-secondary btn-sm" data-history-search-page="${Number(dados.pagina || 1) + 1}">Próxima</button>`
+                : "<span></span>";
+
+            return `
+                <div class="d-flex justify-content-between align-items-center pt-2">
+                    ${anterior}
+                    <span class="text-muted small">Página ${escapeHtml(dados.pagina || 1)}</span>
+                    ${proxima}
+                </div>
+            `;
+        }
+
         function atualizarIndicadores() {
             sortButtons.forEach(button => {
                 const indicator = button.querySelector(".sort-indicator");
@@ -949,7 +1269,8 @@
         }
 
         function aplicarOrdenacaoAtual() {
-            const cards = Array.from(historyCardsContainer?.querySelectorAll(".ticket-card") || []);
+            const containerAtual = document.getElementById("historyCardsContainer");
+            const cards = Array.from(containerAtual?.querySelectorAll(".ticket-card") || []);
             if (cards.length <= 1) return;
 
             const visiveis = cards.filter(card => !card.hidden && window.getComputedStyle(card).display !== "none");
@@ -961,8 +1282,8 @@
                 visiveis.sort((a, b) => compararCards(a, b, activeField, activeDirection));
             }
 
-            visiveis.forEach(card => historyCardsContainer?.appendChild(card));
-            ocultos.forEach(card => historyCardsContainer?.appendChild(card));
+            visiveis.forEach(card => containerAtual?.appendChild(card));
+            ocultos.forEach(card => containerAtual?.appendChild(card));
         }
 
         function compararCards(a, b, field, direction) {
@@ -1004,6 +1325,7 @@
         async function abrirDetalhes(chamadoId) {
             if (!chamadoId || !detalhesModal || !detalhesConteudo) return;
 
+            detalhesChamadoAtualId = chamadoId;
             if (detalhesTitulo) detalhesTitulo.textContent = "Detalhes do chamado";
             detalhesConteudo.innerHTML = '<div class="text-muted small">Carregando informações...</div>';
             detalhesModal.show();
@@ -1036,13 +1358,14 @@
                     <div class="detail-comment">
                         <div class="comment-meta">
                             <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
-                            <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                            <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                         </div>
                         <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
                         ${comentario.possuiAnexo ? '<div class="small text-muted mt-1">Contém anexo.</div>' : ''}
                     </div>
                 `).join("")
                 : '<div class="text-muted small">Nenhum comentário registrado.</div>';
+            const vinculosHtml = renderizarVinculosChamado(dados.vinculos || []);
 
             detalhesConteudo.innerHTML = `
                 <div class="detail-grid mb-3">
@@ -1063,6 +1386,10 @@
                 ${renderizarDetalhe("Descrição", dados.descricao || "Não registrada", true)}
                 ${renderizarDetalhe("Solução", dados.solucao || "Não registrada", true)}
                 <div class="detail-block mt-3">
+                    <span class="detail-label">Vínculos</span>
+                    <div class="linked-call-list mt-2">${vinculosHtml}</div>
+                </div>
+                <div class="detail-block mt-3">
                     <span class="detail-label">Comentários recentes</span>
                     <div class="detail-comments">${comentariosHtml}</div>
                 </div>
@@ -1076,6 +1403,143 @@
                     <div class="detail-value">${escapeHtml(valor || "-")}</div>
                 </div>
             `;
+        }
+
+        function renderizarVinculosChamado(vinculos) {
+            if (!vinculos || !vinculos.length) {
+                return '<div class="text-muted small">Nenhum chamado vinculado.</div>';
+            }
+
+            return vinculos.map(vinculo => `
+                <div class="linked-call-item" data-vinculo-chamado-id="${Number(vinculo.id || 0)}">
+                    <div class="min-width-0">
+                        <div class="linked-call-title">#${escapeHtml(vinculo.numeroChamadoGrupo || "-")} - ${escapeHtml(vinculo.titulo || "Chamado")}</div>
+                        <div class="text-muted small">${escapeHtml(vinculo.status || "-")} · ${escapeHtml(formatDateTimeLocal(vinculo.dataCriacao))}</div>
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        function inicializarVinculosChamado() {
+            const btnMostrar = document.getElementById("btnMostrarVinculoChamado");
+            const formVinculo = document.getElementById("formVinculoChamado");
+            const inputCandidato = document.getElementById("inputCandidatoVinculoChamado");
+            const listaCandidatos = document.getElementById("listaCandidatosVinculoChamado");
+            const listaVinculos = document.getElementById("listaVinculosChamado");
+
+            btnMostrar?.addEventListener("click", () => {
+                formVinculo?.classList.toggle("d-none");
+                if (!formVinculo?.classList.contains("d-none")) {
+                    inputCandidato?.focus();
+                }
+            });
+
+            inputCandidato?.addEventListener("input", () => {
+                window.clearTimeout(candidatosVinculoTimer);
+                candidatosVinculoTimer = window.setTimeout(async () => {
+                    const termo = (inputCandidato.value || "").trim();
+                    if (termo.length < 2) {
+                        if (listaCandidatos) listaCandidatos.innerHTML = '<div class="text-muted small">Digite ao menos 2 caracteres.</div>';
+                        return;
+                    }
+
+                    await carregarCandidatosVinculo(termo, listaCandidatos);
+                }, 300);
+            });
+
+            listaCandidatos?.addEventListener("click", async event => {
+                const btn = event.target.closest("[data-adicionar-vinculo-chamado]");
+                if (!btn) return;
+
+                const chamadoVinculadoId = Number(btn.dataset.adicionarVinculoChamado || 0);
+                await vincularChamado(chamadoVinculadoId);
+            });
+
+            listaVinculos?.addEventListener("click", async event => {
+                const btn = event.target.closest("[data-remover-vinculo-chamado]");
+                if (!btn) return;
+
+                const chamadoVinculadoId = Number(btn.dataset.removerVinculoChamado || 0);
+                await removerVinculoChamado(chamadoVinculadoId);
+            });
+        }
+
+        async function carregarCandidatosVinculo(termo, listaCandidatos) {
+            if (!detalhesChamadoAtualId || !listaCandidatos) return;
+            listaCandidatos.innerHTML = '<div class="text-muted small">Pesquisando...</div>';
+
+            try {
+                const response = await fetch(`?handler=CandidatosVinculo&grupoId=${encodeURIComponent(historyGrupoId)}&chamadoId=${encodeURIComponent(detalhesChamadoAtualId)}&termo=${encodeURIComponent(termo)}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Não foi possível pesquisar chamados.");
+                }
+
+                const candidatos = data.dados || [];
+                listaCandidatos.innerHTML = candidatos.length
+                    ? candidatos.map(candidato => `
+                        <button type="button" class="linked-call-item text-start" data-adicionar-vinculo-chamado="${Number(candidato.id || 0)}">
+                            <div class="min-width-0">
+                                <div class="linked-call-title">#${escapeHtml(candidato.numeroChamadoGrupo || "-")} - ${escapeHtml(candidato.titulo || "Chamado")}</div>
+                                <div class="text-muted small">${escapeHtml(candidato.status || "-")}</div>
+                            </div>
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    `).join("")
+                    : '<div class="text-muted small">Nenhum chamado encontrado.</div>';
+            } catch (error) {
+                listaCandidatos.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível pesquisar chamados.")}</div>`;
+            }
+        }
+
+        async function vincularChamado(chamadoVinculadoId) {
+            if (!detalhesChamadoAtualId || !chamadoVinculadoId) return;
+
+            try {
+                const data = await fetchJson(`?handler=VincularChamado&grupoId=${encodeURIComponent(historyGrupoId)}`, {
+                    chamadoId: detalhesChamadoAtualId,
+                    chamadoVinculadoId
+                });
+
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível vincular o chamado.");
+                    return;
+                }
+
+                atualizarListaVinculos(data.dados?.vinculos || []);
+                mostrarToast(data.dados?.message || "Chamado vinculado com sucesso.", "success");
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível vincular o chamado.");
+            }
+        }
+
+        async function removerVinculoChamado(chamadoVinculadoId) {
+            if (!detalhesChamadoAtualId || !chamadoVinculadoId) return;
+
+            try {
+                const data = await fetchJson(`?handler=RemoverVinculoChamado&grupoId=${encodeURIComponent(historyGrupoId)}`, {
+                    chamadoId: detalhesChamadoAtualId,
+                    chamadoVinculadoId
+                });
+
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível remover o vínculo.");
+                    return;
+                }
+
+                atualizarListaVinculos(data.dados?.vinculos || []);
+                mostrarToast(data.dados?.message || "Vínculo removido com sucesso.", "success");
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível remover o vínculo.");
+            }
+        }
+
+        function atualizarListaVinculos(vinculos) {
+            const listaVinculos = document.getElementById("listaVinculosChamado");
+            if (listaVinculos) {
+                listaVinculos.innerHTML = renderizarVinculosChamado(vinculos);
+            }
         }
 
         function formatarValorDetalhe(valor) {
@@ -1133,7 +1597,7 @@
                         <div class="comment-card">
                             <div class="comment-meta">
                                 <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
-                                <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                                <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                             </div>
                             <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
                             ${anexo}
@@ -1186,7 +1650,7 @@
                     <div class="comment-card">
                         <div class="comment-meta">
                             <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
-                            <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                            <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                         </div>
                         <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
                         ${anexo}
@@ -1329,6 +1793,27 @@
             const data = new Date(value);
             if (Number.isNaN(data.getTime())) return "-";
             return data.toLocaleString("pt-BR");
+        }
+
+        function formatCommentDateTime(value) {
+            if (!value) return "-";
+
+            const texto = String(value).trim();
+            const localMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+            if (localMatch && !/[zZ]|[+-]\d{2}:\d{2}$/.test(texto)) {
+                return `${localMatch[3]}/${localMatch[2]}/${localMatch[1]} ${localMatch[4]}:${localMatch[5]}`;
+            }
+
+            const data = new Date(texto);
+            if (Number.isNaN(data.getTime())) return "-";
+
+            return data.toLocaleString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
         }
     });
 </script>

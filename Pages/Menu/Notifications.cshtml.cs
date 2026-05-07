@@ -1,4 +1,4 @@
-using CallStationApp.Authorization;
+﻿using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Models;
 using CallStationApp.Services;
@@ -6,12 +6,15 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace CallStationApp.Pages.Menu;
 
 [Authorize]
 public class NotificationsModel : PageModel
 {
+    private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
+
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly NotificacaoService _notificacaoService;
@@ -50,6 +53,8 @@ public class NotificationsModel : PageModel
         public bool Lida { get; set; }
         public DateTime DataCriacao { get; set; }
         public DateTime? DataLeitura { get; set; }
+        public string DataCriacaoTexto { get; set; } = string.Empty;
+        public string DataLeituraTexto { get; set; } = string.Empty;
         public string? LinkDestino { get; set; }
         public int? ReferenciaId { get; set; }
         public string? ReferenciaTipo { get; set; }
@@ -63,6 +68,11 @@ public class NotificationsModel : PageModel
     }
 
     public class AlterarLeituraNotificacaoRequest
+    {
+        public int NotificacaoId { get; set; }
+    }
+
+    public class AbrirNotificacaoRequest
     {
         public int NotificacaoId { get; set; }
     }
@@ -106,6 +116,9 @@ public class NotificationsModel : PageModel
         var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
         if (contextoMembro == null)
         {
+            if (!await GrupoEstaAtivoAsync(GrupoId))
+                return RedirectToPage("/Menu/Menu");
+
             var possuiNotificacaoNoGrupo = await _context.Notificacoes
                 .AsNoTracking()
                 .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId);
@@ -139,6 +152,8 @@ public class NotificationsModel : PageModel
                 Lida = n.Lida,
                 DataCriacao = n.DataCriacao,
                 DataLeitura = n.DataLeitura,
+                DataCriacaoTexto = ParaDataHoraRegionalDisplay(n.DataCriacao),
+                DataLeituraTexto = ParaDataHoraRegionalDisplay(n.DataLeitura),
                 LinkDestino = n.LinkDestino,
                 ReferenciaId = n.ReferenciaId,
                 ReferenciaTipo = n.ReferenciaTipo
@@ -223,6 +238,14 @@ public class NotificationsModel : PageModel
         var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
         if (contextoMembro == null)
         {
+            if (!await GrupoEstaAtivoAsync(GrupoId))
+            {
+                return new JsonResult(new { success = false, message = "Este grupo não está mais disponível." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+
             var possuiNotificacaoNoGrupo = await _context.Notificacoes
                 .AsNoTracking()
                 .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId);
@@ -263,7 +286,8 @@ public class NotificationsModel : PageModel
         {
             success = true,
             message = "Notificacoes marcadas como lidas com sucesso.",
-            totalNaoLidas = 0
+            totalNaoLidas = 0,
+            dataLeituraTexto = ParaDataHoraRegionalDisplay(agora)
         });
     }
 
@@ -303,6 +327,14 @@ public class NotificationsModel : PageModel
         var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, notificacao.GrupoId);
         if (contextoMembro == null)
         {
+            if (!await GrupoEstaAtivoAsync(notificacao.GrupoId))
+            {
+                return new JsonResult(new { success = false, message = "Este grupo não está mais disponível." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+
             var possuiNotificacaoNoGrupo = await _context.Notificacoes
                 .AsNoTracking()
                 .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId);
@@ -345,10 +377,104 @@ public class NotificationsModel : PageModel
             success = true,
             lida = notificacao.Lida,
             dataLeitura = notificacao.DataLeitura,
+            dataLeituraTexto = ParaDataHoraRegionalDisplay(notificacao.DataLeitura),
             totalNaoLidas,
             message = notificacao.Lida
                 ? "Notificacao marcada como lida."
                 : "Notificacao marcada como não lida."
+        });
+    }
+
+    public async Task<IActionResult> OnPostAbrirNotificacaoAsync([FromBody] AbrirNotificacaoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+        {
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." })
+            {
+                StatusCode = StatusCodes.Status401Unauthorized
+            };
+        }
+
+        if (request == null || request.NotificacaoId <= 0)
+        {
+            return new JsonResult(new { success = false, message = "Notificação inválida." })
+            {
+                StatusCode = StatusCodes.Status400BadRequest
+            };
+        }
+
+        var notificacao = await _context.Notificacoes
+            .FirstOrDefaultAsync(n =>
+                n.Id == request.NotificacaoId &&
+                n.UsuarioId == idUsuario.Value);
+
+        if (notificacao == null)
+        {
+            return new JsonResult(new { success = false, message = "Notificação não encontrada." })
+            {
+                StatusCode = StatusCodes.Status404NotFound
+            };
+        }
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, notificacao.GrupoId);
+        if (contextoMembro == null)
+        {
+            if (!await GrupoEstaAtivoAsync(notificacao.GrupoId))
+            {
+                return new JsonResult(new { success = false, message = "Este grupo não está mais disponível." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+
+            var possuiNotificacaoNoGrupo = await _context.Notificacoes
+                .AsNoTracking()
+                .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId);
+
+            if (!possuiNotificacaoNoGrupo)
+            {
+                return new JsonResult(new { success = false, message = "Você não pertence a este grupo." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+            }
+        }
+
+        var destino = ResolverDestinoNotificacao(notificacao);
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                if (!notificacao.Lida)
+                {
+                    notificacao.Lida = true;
+                    notificacao.DataLeitura = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+
+        var totalNaoLidas = await _context.Notificacoes
+            .AsNoTracking()
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId && !n.Lida);
+
+        return new JsonResult(new
+        {
+            success = true,
+            destino,
+            totalNaoLidas
         });
     }
 
@@ -613,10 +739,73 @@ public class NotificationsModel : PageModel
         public int ConviteId { get; set; }
     }
 
+    private static string ResolverDestinoNotificacao(Notificacao notificacao)
+    {
+        if (notificacao.Tipo == TipoNotificacao.Chamado && notificacao.ReferenciaId.HasValue)
+            return $"/Menu/Home?grupoId={notificacao.GrupoId}&chamadoId={notificacao.ReferenciaId.Value}";
+
+        if (string.Equals(notificacao.ReferenciaTipo, "EntradaGrupoConvite", StringComparison.Ordinal) &&
+            notificacao.ReferenciaId.HasValue)
+        {
+            return $"/Menu/Members?grupoId={notificacao.GrupoId}&membroId={notificacao.ReferenciaId.Value}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(notificacao.LinkDestino) &&
+            Uri.TryCreate(notificacao.LinkDestino, UriKind.Relative, out _))
+        {
+            return notificacao.LinkDestino;
+        }
+
+        return $"/Menu/Notifications?grupoId={notificacao.GrupoId}&notificacaoId={notificacao.Id}#notificacao-{notificacao.Id}";
+    }
+
     private int? GetUsuarioLogadoId()
     {
         var claim = User.FindFirst("Id")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private async Task<bool> GrupoEstaAtivoAsync(int grupoId)
+    {
+        var ativo = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .Where(c => c.GrupoId == grupoId)
+            .Select(c => (bool?)c.Ativo)
+            .FirstOrDefaultAsync();
+
+        return ativo ?? true;
+    }
+
+    private static string ParaDataHoraRegionalDisplay(DateTime dataUtc) =>
+        ParaDataHoraRegionalDisplay((DateTime?)dataUtc);
+
+    private static string ParaDataHoraRegionalDisplay(DateTime? dataUtc)
+    {
+        if (!dataUtc.HasValue)
+            return string.Empty;
+
+        var utc = DateTime.SpecifyKind(dataUtc.Value, DateTimeKind.Utc);
+        var regional = TimeZoneInfo.ConvertTimeFromUtc(utc, FusoHorarioRegional);
+        return regional.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
+    }
+
+    private static TimeZoneInfo ObterFusoHorarioRegional()
+    {
+        foreach (var id in new[] { "E. South America Standard Time", "America/Sao_Paulo" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Local;
     }
 }
 

@@ -23,6 +23,7 @@ namespace CallStationApp.Data
         public DbSet<OcorrenciaCategoria> OcorrenciasCategoria { get; set; }
         public DbSet<OcorrenciaSubcategoria> OcorrenciasSubcategoria { get; set; }
         public DbSet<Chamado> Chamados { get; set; }
+        public DbSet<ChamadoVinculo> ChamadosVinculos { get; set; }
         public DbSet<HistoricoStatusChamado> HistoricoStatusChamados { get; set; }
         public DbSet<ComentarioChamado> ComentariosChamados { get; set; }
         public DbSet<QuadroTarefa> QuadrosTarefas { get; set; }
@@ -614,6 +615,52 @@ namespace CallStationApp.Data
                 entity.HasIndex(c => new { c.CriadorChamadoId, c.GrupoId, c.NumeroChamadoUsuarioGrupo })
                     .IsUnique()
                     .HasDatabaseName("ux_chamado_usuario_grupo_numero");
+            });
+
+            modelBuilder.Entity<ChamadoVinculo>(entity =>
+            {
+                entity.ToTable("Chamados_vinculos");
+                entity.HasKey(v => new { v.ChamadoIdMenor, v.ChamadoIdMaior });
+                entity.ToTable(t => t.HasCheckConstraint("CK_chamados_vinculos_ordem", "chamado_id_menor < chamado_id_maior"));
+
+                entity.Property(v => v.GrupoId)
+                    .HasColumnName("grupo_id")
+                    .IsRequired();
+
+                entity.Property(v => v.DataVinculo)
+                    .HasColumnName("data_vinculo")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(v => v.VinculadoPorUsuarioId)
+                    .HasColumnName("vinculado_por_usuario_id")
+                    .IsRequired();
+
+                entity.HasIndex(v => new { v.GrupoId, v.ChamadoIdMenor })
+                    .HasDatabaseName("idx_chamados_vinculos_grupo_menor");
+
+                entity.HasIndex(v => new { v.GrupoId, v.ChamadoIdMaior })
+                    .HasDatabaseName("idx_chamados_vinculos_grupo_maior");
+
+                entity.HasOne(v => v.ChamadoMenor)
+                    .WithMany()
+                    .HasForeignKey(v => v.ChamadoIdMenor)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(v => v.ChamadoMaior)
+                    .WithMany()
+                    .HasForeignKey(v => v.ChamadoIdMaior)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(v => v.Grupo)
+                    .WithMany()
+                    .HasForeignKey(v => v.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(v => v.VinculadoPorUsuario)
+                    .WithMany()
+                    .HasForeignKey(v => v.VinculadoPorUsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // ===== HistoricoStatusChamado =====

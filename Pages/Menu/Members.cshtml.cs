@@ -26,8 +26,10 @@ public class MembersModel : PageModel
     public Grupo? GrupoAtual { get; set; }
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
+    public int UsuarioLogadoId { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
     public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
+    public int TotalAdministradores { get; set; }
     public List<MembroGrupoViewModel> Membros { get; set; } = new();
 
     public async Task<IActionResult> OnGetAsync()
@@ -46,11 +48,9 @@ public class MembersModel : PageModel
         if (usuarioNoGrupo == null)
             return RedirectToPage("/Menu/Menu");
 
+        UsuarioLogadoId = idUsuario.Value;
         UsuarioLogadoEhAdministrador = usuarioNoGrupo.Permissao == PermissaoUsuario.Administracao;
         UsuarioLogadoPermissao = usuarioNoGrupo.Permissao;
-
-        if (usuarioNoGrupo.Permissao == PermissaoUsuario.Nenhuma)
-            return Forbid();
 
         GrupoAtual = await _context.Grupos
             .AsNoTracking()
@@ -68,7 +68,7 @@ public class MembersModel : PageModel
         NomeUsuarioLogado = usuarioLogado?.NomeUsuario;
         FotoUsuarioLogado = usuarioLogado?.FotoUsuario;
 
-        Membros = await (
+        IQueryable<MembroGrupoViewModel> membrosQuery =
             from ug in _context.UsuariosGrupos.AsNoTracking()
             join u in _context.Usuarios.AsNoTracking()
                 on ug.UsuarioId equals u.Id
@@ -93,8 +93,14 @@ public class MembersModel : PageModel
                 Observacao = info != null ? info.Observacao : null,
                 DataAtualizacaoAtivo = info != null ? info.DataAtualizacaoAtivo : null,
                 DataAtualizacaoRegistro = info != null ? info.DataAtualizacaoRegistro : null
-            }
-        ).ToListAsync();
+            };
+
+        if (usuarioNoGrupo.Permissao == PermissaoUsuario.Nenhuma)
+            membrosQuery = membrosQuery.Where(m => m.UsuarioId == idUsuario.Value);
+
+        Membros = await membrosQuery.ToListAsync();
+
+        TotalAdministradores = Membros.Count(m => m.Permissao == PermissaoUsuario.Administracao);
 
         return Page();
     }
@@ -475,23 +481,27 @@ public class MembersModel : PageModel
                     if (solicitanteNoGrupo == null)
                         return (IActionResult)new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
 
-                    if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
-                        return (IActionResult)new JsonResult(new { success = false, message = "Somente administradores podem remover membros." });
-
                     var membroAlvo = await _context.UsuariosGrupos
                         .FirstOrDefaultAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
 
                     if (membroAlvo == null)
                         return (IActionResult)new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
 
-                    if (membroAlvo.UsuarioId == idUsuario.Value)
-                        return (IActionResult)new JsonResult(new { success = false, message = "Você não pode remover a si mesmo do grupo por esta ação." });
+                    var saidaPropria = membroAlvo.UsuarioId == idUsuario.Value;
+                    if (!saidaPropria && solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Somente administradores podem remover outros membros." });
 
                     var totalAdministradores = await _context.UsuariosGrupos
                         .CountAsync(ug => ug.GrupoId == GrupoId && ug.Ativo && ug.Permissao == PermissaoUsuario.Administracao);
 
                     if (membroAlvo.Permissao == PermissaoUsuario.Administracao && totalAdministradores <= 1)
-                        return (IActionResult)new JsonResult(new { success = false, message = "Não é possível remover o último administrador do grupo." });
+                    {
+                        var mensagem = saidaPropria
+                            ? "Você é o último administrador. Para sair, primeiro promova outro administrador ou exclua o grupo."
+                            : "Não é possível remover o último administrador do grupo.";
+
+                        return (IActionResult)new JsonResult(new { success = false, message = mensagem });
+                    }
 
                     membroAlvo.Ativo = false;
                     membroAlvo.Permissao = PermissaoUsuario.Nenhuma;
@@ -501,7 +511,12 @@ public class MembersModel : PageModel
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    return (IActionResult)new JsonResult(new { success = true, message = "Membro removido do grupo com sucesso." });
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = saidaPropria ? "Você saiu do grupo." : "Membro removido do grupo com sucesso.",
+                        redirectUrl = saidaPropria ? Url.Page("/Menu/Menu") : null
+                    });
                 }
                 catch
                 {

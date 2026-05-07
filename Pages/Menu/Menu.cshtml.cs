@@ -260,7 +260,7 @@ public class MenuModel : PageModel
 
         var notificacoes = await _context.Notificacoes
             .AsNoTracking()
-            .Where(n => n.UsuarioId == idUsuario.Value)
+            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
             .OrderByDescending(n => n.DataCriacao)
             .Take(12)
             .Select(n => new
@@ -320,7 +320,11 @@ public class MenuModel : PageModel
             .AsNoTracking()
             .AnyAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == grupoId.Value && ug.Ativo);
 
-        if (!possuiAcesso)
+        var possuiNotificacaoNoGrupo = await _context.Notificacoes
+            .AsNoTracking()
+            .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == grupoId.Value);
+
+        if (!possuiAcesso && !possuiNotificacaoNoGrupo)
             return RedirectToPage("/Menu/Menu");
 
         return RedirectToPage("/Menu/Notifications", new { grupoId = grupoId.Value });
@@ -342,6 +346,7 @@ public class MenuModel : PageModel
             {
                 id = ug.GrupoId,
                 nome = ug.Grupo.Nome,
+                etiquetaCor = ug.Grupo.EtiquetaCor,
                 dataUltimoAcesso = ug.DataUltimoAcesso ?? ug.DataAdicao,
                 permissao = ug.Permissao.ToString()
             })

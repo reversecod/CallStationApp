@@ -243,6 +243,9 @@
                             PermissaoUsuario.Colaborador => "text-bg-success",
                             _ => "text-bg-secondary"
                         };
+                        var membroEhUsuarioLogado = membro.UsuarioId == Model.UsuarioLogadoId;
+                        var podeExibirAcoes = Model.UsuarioLogadoEhAdministrador || membroEhUsuarioLogado;
+                        var administradorPodeSair = membro.Permissao != PermissaoUsuario.Administracao || Model.TotalAdministradores > 1;
 
                         <div class="col">
                             <div class="card member-card w-100">
@@ -297,7 +300,7 @@
                                             Desde @membro.DataAdicao.ToString("dd/MM/yyyy")
                                         </small>
 
-                                        @if (Model.UsuarioLogadoEhAdministrador)
+                                        @if (podeExibirAcoes)
                                         {
                                             <div class="dropdown">
                                                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
@@ -305,33 +308,54 @@
                                                     Ações
                                                 </button>
                                                 <ul class="dropdown-menu dropdown-menu-end">
-                                                    <li>
-                                                        <button type="button"
-                                                                class="dropdown-item btn-editar-apelido"
-                                                                data-usuario-id="@membro.UsuarioId"
-                                                                data-nome="@membro.NomeCompleto"
-                                                                data-apelido="@membro.Apelido">
-                                                            Editar apelido
-                                                        </button>
-                                                    </li>
-                                                    <li>
-                                                        <button type="button"
-                                                                class="dropdown-item btn-alterar-permissao"
-                                                                data-usuario-id="@membro.UsuarioId"
-                                                                data-nome="@membro.NomeCompleto"
-                                                                data-permissao="@membro.Permissao">
-                                                            Alterar permissão
-                                                        </button>
-                                                    </li>
-                                                    <li><hr class="dropdown-divider"></li>
-                                                    <li>
-                                                        <button type="button"
-                                                                class="dropdown-item text-danger btn-remover-membro"
-                                                                data-usuario-id="@membro.UsuarioId"
-                                                                data-nome="@membro.NomeCompleto">
-                                                            Remover do grupo
-                                                        </button>
-                                                    </li>
+                                                    @if (Model.UsuarioLogadoEhAdministrador)
+                                                    {
+                                                        <li>
+                                                            <button type="button"
+                                                                    class="dropdown-item btn-editar-apelido"
+                                                                    data-usuario-id="@membro.UsuarioId"
+                                                                    data-nome="@membro.NomeCompleto"
+                                                                    data-apelido="@membro.Apelido">
+                                                                Editar apelido
+                                                            </button>
+                                                        </li>
+                                                        <li>
+                                                            <button type="button"
+                                                                    class="dropdown-item btn-alterar-permissao"
+                                                                    data-usuario-id="@membro.UsuarioId"
+                                                                    data-nome="@membro.NomeCompleto"
+                                                                    data-permissao="@membro.Permissao">
+                                                                Alterar permissão
+                                                            </button>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                    }
+                                                    @if (membroEhUsuarioLogado)
+                                                    {
+                                                        <li>
+                                                            <button type="button"
+                                                                    class="dropdown-item text-danger btn-remover-membro"
+                                                                    data-usuario-id="@membro.UsuarioId"
+                                                                    data-nome="@membro.NomeCompleto"
+                                                                    data-saida-propria="true"
+                                                                    disabled="@(!administradorPodeSair)"
+                                                                    title="@(!administradorPodeSair ? "Promova outro administrador ou exclua o grupo." : null)">
+                                                                Sair do grupo
+                                                            </button>
+                                                        </li>
+                                                    }
+                                                    else if (Model.UsuarioLogadoEhAdministrador)
+                                                    {
+                                                        <li>
+                                                            <button type="button"
+                                                                    class="dropdown-item text-danger btn-remover-membro"
+                                                                    data-usuario-id="@membro.UsuarioId"
+                                                                    data-nome="@membro.NomeCompleto"
+                                                                    data-saida-propria="false">
+                                                                Remover do grupo
+                                                            </button>
+                                                        </li>
+                                                    }
                                                 </ul>
                                             </div>
                                         }
@@ -488,7 +512,7 @@
                     <div class="modal-body">
                         <input type="hidden" id="removerMembroUsuarioId" />
 
-                        <p class="mb-2">Tem certeza que deseja remover este membro do grupo?</p>
+                        <p class="mb-2" id="removerMembroTextoConfirmacao">Tem certeza que deseja remover este membro do grupo?</p>
                         <div class="fw-semibold" id="removerMembroNome"></div>
 
                         <div id="feedbackRemoverMembro" class="d-none mt-3"></div>
@@ -544,8 +568,11 @@
 
         const removerMembroUsuarioId = document.getElementById("removerMembroUsuarioId");
         const removerMembroNome = document.getElementById("removerMembroNome");
+        const removerMembroTextoConfirmacao = document.getElementById("removerMembroTextoConfirmacao");
+        const modalRemoverMembroLabel = document.getElementById("modalRemoverMembroLabel");
         const btnConfirmarRemoverMembro = document.getElementById("btnConfirmarRemoverMembro");
         const feedbackRemoverMembro = document.getElementById("feedbackRemoverMembro");
+        let removendoProprioUsuario = false;
 
         function limparFeedbackConvite() {
             mensagemConviteFeedback.className = "mt-3 d-none";
@@ -716,8 +743,20 @@
 
         document.querySelectorAll(".btn-remover-membro").forEach(btn => {
             btn.addEventListener("click", () => {
+                removendoProprioUsuario = btn.dataset.saidaPropria === "true";
                 removerMembroUsuarioId.value = btn.dataset.usuarioId || "";
                 removerMembroNome.textContent = btn.dataset.nome || "";
+                if (modalRemoverMembroLabel) {
+                    modalRemoverMembroLabel.textContent = removendoProprioUsuario ? "Sair do grupo" : "Remover membro";
+                }
+                if (removerMembroTextoConfirmacao) {
+                    removerMembroTextoConfirmacao.textContent = removendoProprioUsuario
+                        ? "Tem certeza que deseja sair deste grupo?"
+                        : "Tem certeza que deseja remover este membro do grupo?";
+                }
+                if (btnConfirmarRemoverMembro) {
+                    btnConfirmarRemoverMembro.textContent = removendoProprioUsuario ? "Sair do grupo" : "Remover";
+                }
                 limparFeedbackElemento(feedbackRemoverMembro);
                 modalRemoverMembro?.show();
             });
@@ -814,7 +853,13 @@
                 }
 
                 exibirFeedbackElemento(feedbackRemoverMembro, "success", data.message || "Membro removido com sucesso.");
-                setTimeout(() => window.location.reload(), 700);
+                setTimeout(() => {
+                    if (data.redirectUrl) {
+                        window.location.href = data.redirectUrl;
+                    } else {
+                        window.location.reload();
+                    }
+                }, 700);
             } catch {
                 exibirFeedbackElemento(feedbackRemoverMembro, "danger", "Erro ao remover membro.");
                 btnConfirmarRemoverMembro.disabled = false;
@@ -840,6 +885,10 @@
         modalRemoverMembroElement?.addEventListener("hidden.bs.modal", () => {
             removerMembroUsuarioId.value = "";
             removerMembroNome.textContent = "";
+            removendoProprioUsuario = false;
+            if (modalRemoverMembroLabel) modalRemoverMembroLabel.textContent = "Remover membro";
+            if (removerMembroTextoConfirmacao) removerMembroTextoConfirmacao.textContent = "Tem certeza que deseja remover este membro do grupo?";
+            if (btnConfirmarRemoverMembro) btnConfirmarRemoverMembro.textContent = "Remover";
             limparFeedbackElemento(feedbackRemoverMembro);
             btnConfirmarRemoverMembro.disabled = false;
         });

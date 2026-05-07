@@ -191,6 +191,44 @@ CREATE INDEX idx_chamados_grupo_criador_data
 CREATE INDEX idx_chamados_grupo_status_prazo_conclusao
     ON Chamados (grupo_id, status, prazo_conclusao);
 
+CREATE FULLTEXT INDEX ft_chamados_titulo_descricao_solucao
+    ON Chamados (titulo, descricao, solucao);
+
+-- ==========================
+-- VÍNCULOS ENTRE CHAMADOS
+-- ==========================
+CREATE TABLE Chamados_vinculos (
+    chamado_id_menor INT NOT NULL,
+    chamado_id_maior INT NOT NULL,
+    grupo_id INT NOT NULL,
+    data_vinculo DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    vinculado_por_usuario_id INT NOT NULL,
+
+    CONSTRAINT PK_chamados_vinculos
+        PRIMARY KEY (chamado_id_menor, chamado_id_maior),
+
+    CONSTRAINT FK_chamados_vinculos_chamado_menor
+        FOREIGN KEY (chamado_id_menor) REFERENCES Chamados(id),
+
+    CONSTRAINT FK_chamados_vinculos_chamado_maior
+        FOREIGN KEY (chamado_id_maior) REFERENCES Chamados(id),
+
+    CONSTRAINT FK_chamados_vinculos_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+
+    CONSTRAINT FK_chamados_vinculos_usuario
+        FOREIGN KEY (vinculado_por_usuario_id) REFERENCES Usuarios(id),
+
+    CONSTRAINT CK_chamados_vinculos_ordem
+        CHECK (chamado_id_menor < chamado_id_maior)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX idx_chamados_vinculos_grupo_menor
+    ON Chamados_vinculos (grupo_id, chamado_id_menor);
+
+CREATE INDEX idx_chamados_vinculos_grupo_maior
+    ON Chamados_vinculos (grupo_id, chamado_id_maior);
+
 -- ==========================
 -- HISTÓRICO DE STATUS
 -- ==========================

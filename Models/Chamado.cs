@@ -91,6 +91,36 @@ namespace CallStationApp.Models
         public ICollection<HistoricoAlteracaoChamado> HistoricoAlteracoes { get; set; } = new List<HistoricoAlteracaoChamado>();
     }
 
+    public class ChamadoVinculo
+    {
+        [Column("chamado_id_menor")]
+        public int ChamadoIdMenor { get; set; }
+
+        [Column("chamado_id_maior")]
+        public int ChamadoIdMaior { get; set; }
+
+        [Column("grupo_id")]
+        public int GrupoId { get; set; }
+
+        [Column("data_vinculo")]
+        public DateTime DataVinculo { get; set; }
+
+        [Column("vinculado_por_usuario_id")]
+        public int VinculadoPorUsuarioId { get; set; }
+
+        [ForeignKey(nameof(ChamadoIdMenor))]
+        public Chamado ChamadoMenor { get; set; } = null!;
+
+        [ForeignKey(nameof(ChamadoIdMaior))]
+        public Chamado ChamadoMaior { get; set; } = null!;
+
+        [ForeignKey(nameof(GrupoId))]
+        public Grupo Grupo { get; set; } = null!;
+
+        [ForeignKey(nameof(VinculadoPorUsuarioId))]
+        public Usuario VinculadoPorUsuario { get; set; } = null!;
+    }
+
     public enum StatusChamado
     {
         [Display(Name = "Aberto")]

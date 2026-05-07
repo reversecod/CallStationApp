@@ -1627,7 +1627,7 @@ function renderizarAtividade(itens) {
 
     container.innerHTML = itens.map(item => {
         const inicial = (item.usuario || "U").trim().charAt(0).toUpperCase();
-        const data = item.data ? new Date(item.data).toLocaleString("pt-BR") : "";
+        const data = formatActivityDateTime(item.data);
         return `
             <div class="activity-item">
                 <div class="activity-avatar">${escapeHtml(inicial)}</div>
@@ -1638,6 +1638,30 @@ function renderizarAtividade(itens) {
             </div>
         `;
     }).join("");
+}
+
+function formatActivityDateTime(value) {
+    if (!value) return "";
+
+    const texto = String(value).trim();
+    const localMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    const temFusoExplicito = /[zZ]|[+-]\d{2}:\d{2}$/.test(texto);
+
+    if (localMatch && !temFusoExplicito) {
+        const [, ano, mes, dia, hora, minuto] = localMatch;
+        return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+    }
+
+    const data = new Date(texto);
+    if (Number.isNaN(data.getTime())) return "";
+
+    return data.toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 }
 
 function selecionarMultiplos(id, values) {

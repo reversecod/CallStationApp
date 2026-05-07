@@ -587,6 +587,91 @@
         object-fit: contain;
       }
 
+      .linked-call-list {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+      }
+
+      .linked-call-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        border: 1px solid #e5e7eb;
+        border-radius: .75rem;
+        background: #fff;
+        padding: .65rem .75rem;
+      }
+
+      .linked-call-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .chamado-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .75rem;
+      }
+
+      .chamado-vinculos-bar {
+        min-width: min(100%, 18rem);
+        flex: 1 1 18rem;
+        display: flex;
+        align-items: stretch;
+        border: 1px solid #fecaca;
+        border-radius: .75rem;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .chamado-vinculos-label {
+        border: 0;
+        background: #dc2626;
+        color: #fff;
+        font-weight: 800;
+        padding: .45rem .85rem;
+        white-space: nowrap;
+      }
+
+      .chamado-vinculos-label:hover,
+      .chamado-vinculos-label:focus-visible {
+        background: #b91c1c;
+        color: #fff;
+      }
+
+      .chamado-vinculos-numeros {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .35rem .55rem;
+        overflow-x: auto;
+      }
+
+      .chamado-vinculo-chip {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        border: 1px solid #e5e7eb;
+        background: #f8fafc;
+        color: #0f172a;
+        font-size: .8rem;
+        font-weight: 700;
+        line-height: 1;
+        padding: .35rem .5rem;
+      }
+
+      .min-width-0 {
+        min-width: 0;
+      }
+
       @@media (max-width: 991.98px) {
         .comment-modal-grid {
           grid-template-columns: 1fr;
@@ -1009,14 +1094,22 @@
                                     <textarea class="form-control" id="editSolucao" rows="2" maxlength="500"></textarea>
                                 </div>
 
-                                <div class="mb-2">
+                                <div class="mb-2 chamado-actions-row">
                                     <button type="button" class="btn btn-outline-primary btn-comentarios-chamado" id="btnAbrirComentariosChamado">
-                                        Comentarios
+                                        Comentários
                                         <span id="comentariosChamadoIndicador"
                                               class="comment-button-alert d-none"
                                               aria-hidden="true"
                                               title="Novo comentário"></span>
                                     </button>
+                                    <div class="chamado-vinculos-bar">
+                                        <button type="button" class="chamado-vinculos-label" id="btnAbrirVinculosChamado">
+                                            Vínculos
+                                        </button>
+                                        <div class="chamado-vinculos-numeros" id="resumoVinculosChamado">
+                                            <span class="text-muted small">Nenhum</span>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="mb-2" id="wrapEditSetorId">
@@ -1178,6 +1271,28 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalVinculosChamado" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content chamado-editor-card">
+                <div class="modal-header">
+                    <h5 class="modal-title">Chamados vinculados</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="vinculosChamadoId" />
+                    <select id="selectVinculosChamado" class="form-select d-none" multiple size="10"></select>
+                    <div id="listaVinculosChamado" class="linked-call-list">
+                        <div class="text-muted small">Carregando vínculos...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnSalvarVinculosChamado">Aplicar</button>
                 </div>
             </div>
         </div>

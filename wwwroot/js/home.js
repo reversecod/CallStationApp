@@ -4,7 +4,9 @@ const cronometroBasePerformanceMs = performance.now();
 let chamadoSelecionadoId = null;
 let modalSelecionarListaTarefa = null;
 let modalComentariosChamado = null;
+let modalVinculosChamado = null;
 let salvandoEdicaoChamado = false;
+let candidatosVinculoTimer = null;
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
     { id: "editPrazoResposta", nome: "Prazo resposta" },
@@ -59,6 +61,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalComentariosElement = document.getElementById("modalComentariosChamado");
     if (modalComentariosElement && window.bootstrap) {
         modalComentariosChamado = new bootstrap.Modal(modalComentariosElement);
+    }
+
+    const modalVinculosElement = document.getElementById("modalVinculosChamado");
+    if (modalVinculosElement && window.bootstrap) {
+        modalVinculosChamado = new bootstrap.Modal(modalVinculosElement);
     }
 
     document.getElementById("btnConfirmarListaTarefa")?.addEventListener("click", async () => {
@@ -117,8 +124,10 @@ document.addEventListener("DOMContentLoaded", () => {
     inicializarCamposDataHoraChamado();
     inicializarLimpezaSelecaoChamado();
     inicializarComentariosChamado();
+    inicializarVinculosChamado();
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
+    abrirChamadoDaUrl();
 });
 
 function mostrarToastPendente() {
@@ -415,6 +424,16 @@ async function carregarChamado(id) {
     }
 }
 
+async function abrirChamadoDaUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const chamadoId = Number(params.get("chamadoId") || 0);
+    if (!chamadoId) return;
+
+    const card = document.querySelector(`.ticket-card[data-id="${chamadoId}"]`);
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+    await carregarChamado(chamadoId);
+}
+
 function inicializarAnimacaoNovoChamado(botao) {
     let hoverTimer = null;
     const delayMs = 180;
@@ -461,6 +480,27 @@ function formatDateTimeDisplay(value) {
     const [data, hora] = local.split("T");
     const [ano, mes, dia] = data.split("-");
     return `${dia}/${mes}/${ano} ${hora}`;
+}
+
+function formatCommentDateTime(value) {
+    if (!value) return "-";
+
+    const texto = String(value).trim();
+    const localMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (localMatch && !/[zZ]|[+-]\d{2}:\d{2}$/.test(texto)) {
+        return `${localMatch[3]}/${localMatch[2]}/${localMatch[1]} ${localMatch[4]}:${localMatch[5]}`;
+    }
+
+    const data = new Date(texto);
+    if (Number.isNaN(data.getTime())) return "-";
+
+    return data.toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 }
 
 function setValueIfExists(id, value) {
@@ -627,6 +667,7 @@ async function preencherFormularioEdicao(data) {
 
     atualizarResumoChamado(data);
     atualizarIndicadorComentarioBotao(data.id);
+    await carregarResumoVinculosChamado(data.id);
 
     setValueIfExists("editId", data.id);
     setValueIfExists("editTitulo", data.titulo);
@@ -698,6 +739,10 @@ function inicializarBotoesEdicao() {
 
     document.getElementById("btnAbrirComentariosChamado")?.addEventListener("click", () => {
         abrirComentariosChamado(chamadoSelecionadoId);
+    });
+
+    document.getElementById("btnAbrirVinculosChamado")?.addEventListener("click", () => {
+        abrirVinculosChamado(chamadoSelecionadoId);
     });
 
     const selectTipo = document.getElementById("editOcorrenciaTipoId");
@@ -772,6 +817,52 @@ function inicializarComentariosChamado() {
     document.getElementById("btnEnviarComentarioChamado")?.addEventListener("click", enviarComentarioChamado);
 }
 
+function inicializarVinculosChamado() {
+    document.getElementById("btnSalvarVinculosChamado")?.addEventListener("click", salvarVinculosChamado);
+
+    const btnMostrar = document.getElementById("btnMostrarAdicionarVinculoChamado");
+    const formVinculo = document.getElementById("formAdicionarVinculoChamado");
+    const inputCandidato = document.getElementById("inputCandidatoVinculoChamado");
+    const listaCandidatos = document.getElementById("listaCandidatosVinculoChamado");
+    const listaVinculos = document.getElementById("listaVinculosChamado");
+
+    btnMostrar?.addEventListener("click", () => {
+        formVinculo?.classList.toggle("d-none");
+        if (!formVinculo?.classList.contains("d-none")) {
+            inputCandidato?.focus();
+        }
+    });
+
+    inputCandidato?.addEventListener("input", () => {
+        window.clearTimeout(candidatosVinculoTimer);
+        candidatosVinculoTimer = window.setTimeout(async () => {
+            const termo = (inputCandidato.value || "").trim();
+            if (termo.length < 2) {
+                if (listaCandidatos) listaCandidatos.innerHTML = '<div class="text-muted small">Digite ao menos 2 caracteres.</div>';
+                return;
+            }
+
+            await carregarCandidatosVinculoChamado(termo);
+        }, 300);
+    });
+
+    listaCandidatos?.addEventListener("click", async event => {
+        const btn = event.target.closest("[data-adicionar-vinculo-chamado]");
+        if (!btn) return;
+
+        const chamadoVinculadoId = Number(btn.dataset.adicionarVinculoChamado || 0);
+        await vincularChamado(chamadoVinculadoId);
+    });
+
+    listaVinculos?.addEventListener("click", async event => {
+        const btn = event.target.closest("[data-remover-vinculo-chamado]");
+        if (!btn) return;
+
+        const chamadoVinculadoId = Number(btn.dataset.removerVinculoChamado || 0);
+        await removerVinculoChamado(chamadoVinculadoId);
+    });
+}
+
 async function abrirComentariosChamado(chamadoId) {
     if (!chamadoId || !modalComentariosChamado) {
         mostrarToast("Selecione um chamado para abrir os comentários.");
@@ -783,6 +874,258 @@ async function abrirComentariosChamado(chamadoId) {
     modalComentariosChamado.show();
     await carregarComentariosChamado(chamadoId, 1, false);
     await marcarComentariosVisualizados(chamadoId);
+}
+
+async function abrirVinculosChamado(chamadoId) {
+    if (!chamadoId || !modalVinculosChamado) {
+        mostrarToast("Selecione um chamado para abrir os vinculados.");
+        return;
+    }
+
+    const input = document.getElementById("vinculosChamadoId");
+    if (input) input.value = chamadoId;
+
+    const formVinculo = document.getElementById("formAdicionarVinculoChamado");
+    const inputCandidato = document.getElementById("inputCandidatoVinculoChamado");
+    const listaCandidatos = document.getElementById("listaCandidatosVinculoChamado");
+
+    formVinculo?.classList.add("d-none");
+    if (inputCandidato) inputCandidato.value = "";
+    if (listaCandidatos) listaCandidatos.innerHTML = '<div class="text-muted small">Digite ao menos 2 caracteres.</div>';
+
+    modalVinculosChamado.show();
+    await carregarOpcoesVinculoChamado(chamadoId);
+}
+
+async function carregarVinculosChamado(chamadoId) {
+    const lista = document.getElementById("listaVinculosChamado");
+    if (!lista) return;
+
+    lista.innerHTML = '<div class="text-muted small">Carregando vínculos...</div>';
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const response = await fetch(`?handler=VinculosChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível carregar os vínculos.");
+        }
+
+        renderizarVinculosChamado(data.dados?.vinculos || []);
+    } catch (error) {
+        lista.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar os vínculos.")}</div>`;
+    }
+}
+
+async function carregarCandidatosVinculoChamado(termo) {
+    const lista = document.getElementById("listaCandidatosVinculoChamado");
+    const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value);
+    if (!lista || !chamadoId) return;
+
+    lista.innerHTML = '<div class="text-muted small">Pesquisando...</div>';
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const response = await fetch(`?handler=CandidatosVinculoChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}&termo=${encodeURIComponent(termo)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível pesquisar chamados.");
+        }
+
+        const candidatos = data.dados || [];
+        lista.innerHTML = candidatos.length
+            ? candidatos.map(candidato => `
+                <button type="button" class="linked-call-item text-start" data-adicionar-vinculo-chamado="${Number(candidato.id || 0)}">
+                    <div class="min-width-0">
+                        <div class="linked-call-title">#${escapeHtml(candidato.numeroChamadoGrupo || "-")} - ${escapeHtml(candidato.titulo || "Chamado")}</div>
+                        <div class="text-muted small">${escapeHtml(candidato.status || "-")}</div>
+                    </div>
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+            `).join("")
+            : '<div class="text-muted small">Nenhum chamado encontrado.</div>';
+    } catch (error) {
+        lista.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível pesquisar chamados.")}</div>`;
+    }
+}
+
+async function vincularChamado(chamadoVinculadoId) {
+    const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value);
+    if (!chamadoId || !chamadoVinculadoId) return;
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const data = await fetchJson(`?handler=VincularChamado&grupoId=${encodeURIComponent(grupoId)}`, {
+            chamadoId,
+            chamadoVinculadoId
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível vincular o chamado.");
+            return;
+        }
+
+        renderizarVinculosChamado(data.dados?.vinculos || []);
+        mostrarToast(data.dados?.message || "Chamado vinculado com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível vincular o chamado.");
+    }
+}
+
+async function removerVinculoChamado(chamadoVinculadoId) {
+    const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value);
+    if (!chamadoId || !chamadoVinculadoId) return;
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const data = await fetchJson(`?handler=RemoverVinculoChamado&grupoId=${encodeURIComponent(grupoId)}`, {
+            chamadoId,
+            chamadoVinculadoId
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível remover o vínculo.");
+            return;
+        }
+
+        renderizarVinculosChamado(data.dados?.vinculos || []);
+        mostrarToast(data.dados?.message || "Vínculo removido com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível remover o vínculo.");
+    }
+}
+
+function renderizarVinculosChamado(vinculos) {
+    const lista = document.getElementById("listaVinculosChamado");
+    if (!lista) return;
+
+    if (!vinculos.length) {
+        lista.innerHTML = '<div class="text-muted small">Nenhum chamado vinculado.</div>';
+        return;
+    }
+
+    lista.innerHTML = vinculos.map(vinculo => `
+        <div class="linked-call-item" data-vinculo-chamado-id="${Number(vinculo.id || 0)}">
+            <div class="min-width-0">
+                <div class="linked-call-title">#${escapeHtml(vinculo.numeroChamadoGrupo || "-")} - ${escapeHtml(vinculo.titulo || "Chamado")}</div>
+                <div class="text-muted small">${escapeHtml(vinculo.status || "-")} · ${escapeHtml(formatDateTimeDisplay(vinculo.dataCriacao))}</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-remover-vinculo-chamado="${Number(vinculo.id || 0)}" aria-label="Remover vínculo">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    `).join("");
+}
+
+async function carregarResumoVinculosChamado(chamadoId) {
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const response = await fetch(`?handler=VinculosChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível carregar os vínculos.");
+        }
+
+        atualizarResumoVinculosChamado(data.dados?.vinculos || []);
+    } catch {
+        atualizarResumoVinculosChamado([]);
+    }
+}
+
+async function carregarOpcoesVinculoChamado(chamadoId) {
+    const lista = document.getElementById("listaVinculosChamado");
+    const select = document.getElementById("selectVinculosChamado");
+    if (!lista || !select) return;
+
+    lista.innerHTML = '<div class="list-group-item text-muted">Carregando chamados...</div>';
+    select.innerHTML = "";
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const response = await fetch(`?handler=OpcoesVinculoChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Não foi possível carregar os chamados.");
+        }
+
+        renderizarOpcoesVinculoChamado(data.dados || []);
+    } catch (error) {
+        lista.innerHTML = `<div class="list-group-item text-danger">${escapeHtml(error.message || "Não foi possível carregar os chamados.")}</div>`;
+    }
+}
+
+function renderizarOpcoesVinculoChamado(chamados) {
+    const lista = document.getElementById("listaVinculosChamado");
+    const select = document.getElementById("selectVinculosChamado");
+    if (!lista || !select) return;
+
+    select.innerHTML = "";
+    lista.innerHTML = chamados.length
+        ? chamados.map(chamado => {
+            const id = Number(chamado.id || 0);
+            const titulo = `#${chamado.numeroChamadoGrupo || "-"} - ${chamado.titulo || "Chamado"}`;
+            return `
+                <label class="list-group-item d-flex gap-2 align-items-center">
+                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-vinculo-chamado-opcao ${chamado.vinculado ? "checked" : ""}>
+                    <span class="min-width-0 text-truncate">${escapeHtml(titulo)}</span>
+                </label>
+            `;
+        }).join("")
+        : '<div class="list-group-item text-muted">Nenhum chamado disponível para vínculo.</div>';
+
+    chamados.forEach(chamado => {
+        const option = document.createElement("option");
+        option.value = chamado.id;
+        option.textContent = `#${chamado.numeroChamadoGrupo || "-"} - ${chamado.titulo || "Chamado"}`;
+        option.selected = !!chamado.vinculado;
+        select.appendChild(option);
+    });
+}
+
+async function salvarVinculosChamado() {
+    const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value);
+    if (!chamadoId) return;
+
+    const chamadosIds = [...document.querySelectorAll("[data-vinculo-chamado-opcao]:checked")]
+        .map(input => Number(input.value))
+        .filter(Number.isFinite);
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const data = await fetchJson(`?handler=SalvarVinculosChamado&grupoId=${encodeURIComponent(grupoId)}`, {
+            chamadoId,
+            chamadosIds
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível salvar os vínculos.");
+            return;
+        }
+
+        atualizarResumoVinculosChamado(data.dados?.vinculos || []);
+        modalVinculosChamado?.hide();
+        mostrarToast(data.dados?.message || "Vínculos atualizados com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível salvar os vínculos.");
+    }
+}
+
+function atualizarResumoVinculosChamado(vinculos) {
+    const resumo = document.getElementById("resumoVinculosChamado");
+    if (!resumo) return;
+
+    if (!vinculos.length) {
+        resumo.innerHTML = '<span class="text-muted small">Nenhum</span>';
+        return;
+    }
+
+    resumo.innerHTML = vinculos.map(vinculo =>
+        `<span class="chamado-vinculo-chip">#${escapeHtml(vinculo.numeroChamadoGrupo || "-")}</span>`
+    ).join("");
 }
 
 async function carregarComentariosChamado(chamadoId, pagina = 1, anexar = false) {
@@ -930,7 +1273,7 @@ function renderizarComentariosChamado(comentarios) {
             <div class="comment-card">
                 <div class="comment-meta">
                     <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
-                    <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                    <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                 </div>
                 <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
                 ${anexo}
@@ -983,7 +1326,7 @@ function renderizarComentarioChamadoPaginado(comentario) {
         <div class="comment-card">
             <div class="comment-meta">
                 <span class="comment-author">${escapeHtml(comentario.autor || "Nao registrado")}</span>
-                <span>${escapeHtml(formatDateTimeLocal(comentario.dataComentario))}</span>
+                <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
             </div>
             <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
             ${anexo}
@@ -1199,6 +1542,29 @@ function getValue(id) {
 
 function getToken() {
     return document.getElementById("requestVerificationToken")?.value || "";
+}
+
+async function fetchJson(url, payload) {
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "RequestVerificationToken": getToken()
+        },
+        body: JSON.stringify(payload)
+    });
+
+    let data = null;
+    try {
+        data = await response.json();
+    } catch {
+    }
+
+    if (!response.ok || !data) {
+        throw new Error(data?.message || `Erro HTTP: ${response.status}`);
+    }
+
+    return data;
 }
 
 function getNullableString(id) {

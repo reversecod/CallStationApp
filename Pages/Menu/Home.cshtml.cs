@@ -18,6 +18,8 @@ public class HomeModel : PageModel
     private const string ReferenciaTipoComentarioHistorico = "ComentarioHistoricoChamado";
     private const int TamanhoPaginaComentarios = 30;
     private const int LimiteCaracteresComentario = 250;
+    private const int TamanhoMinimoPesquisaVinculo = 2;
+    private const int LimiteCandidatosVinculo = 12;
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
 
     private static readonly StatusChamado[] StatusFinais =
@@ -25,6 +27,12 @@ public class HomeModel : PageModel
         StatusChamado.Concluido,
         StatusChamado.Fechado,
         StatusChamado.Cancelado
+    };
+
+    private static readonly StatusChamado[] StatusBloqueadosVinculo =
+    {
+        StatusChamado.Cancelado,
+        StatusChamado.Excluido
     };
 
     private readonly AppDbContext _context;
@@ -1374,7 +1382,7 @@ public class HomeModel : PageModel
             usuarioId = comentario.UsuarioId,
             autor = comentario.Autor,
             texto = comentario.Texto,
-            dataComentario = comentario.DataComentario,
+            dataComentario = ParaDataHoraRegionalIso(comentario.DataComentario),
             anexoUrl = string.IsNullOrWhiteSpace(comentario.AnexoComentario)
                 ? null
                 : Url.Page("/Menu/Home", "AnexoComentarioChamado", new
@@ -1586,6 +1594,403 @@ public class HomeModel : PageModel
         }
     }
 
+    public async Task<IActionResult> OnGetVinculosChamadoAsync(int chamadoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+
+        var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, chamadoId, acesso.ContextoMembro!.Permissao);
+        return new JsonResult(new { success = true, dados = new { chamadoId, vinculos } });
+    }
+
+    public async Task<IActionResult> OnGetOpcoesVinculoChamadoAsync(int chamadoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+
+        var idsVinculados = await _context.ChamadosVinculos
+            .AsNoTracking()
+            .Where(v => v.GrupoId == GrupoId && (v.ChamadoIdMenor == chamadoId || v.ChamadoIdMaior == chamadoId))
+            .Select(v => v.ChamadoIdMenor == chamadoId ? v.ChamadoIdMaior : v.ChamadoIdMenor)
+            .ToListAsync();
+
+        var vinculadosSet = idsVinculados.ToHashSet();
+        var chamados = await ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
+            .Where(c => c.Id != chamadoId && !StatusBloqueadosVinculo.Contains(c.Status))
+            .OrderByDescending(c => c.DataCriacao)
+            .ThenBy(c => c.Id)
+            .Select(c => new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                c.Titulo,
+                c.Status
+            })
+            .ToListAsync();
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = chamados.Select(c => new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                titulo = c.Titulo,
+                status = FormatarStatusChamado(c.Status),
+                vinculado = vinculadosSet.Contains(c.Id)
+            })
+        });
+    }
+
+    public async Task<IActionResult> OnGetCandidatosVinculoChamadoAsync(int chamadoId, string? termo)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var termoNormalizado = (termo ?? string.Empty).Trim();
+        if (termoNormalizado.Length < TamanhoMinimoPesquisaVinculo)
+            return new JsonResult(new { success = true, dados = Array.Empty<object>() });
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+
+        var query = ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
+            .Where(c => c.Id != chamadoId && !StatusBloqueadosVinculo.Contains(c.Status));
+
+        var padrao = $"%{EscaparLike(termoNormalizado)}%";
+        query = query.Where(c =>
+            EF.Functions.Like(c.Titulo ?? string.Empty, padrao, "\\") ||
+            EF.Functions.Like(c.Descricao ?? string.Empty, padrao, "\\") ||
+            EF.Functions.Like(c.Solucao ?? string.Empty, padrao, "\\"));
+
+        var candidatos = await query
+            .OrderByDescending(c => c.DataCriacao)
+            .ThenBy(c => c.Id)
+            .Select(c => new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                c.Titulo,
+                c.Status
+            })
+            .Take(LimiteCandidatosVinculo)
+            .ToListAsync();
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = candidatos.Select(c => new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                titulo = c.Titulo,
+                status = FormatarStatusChamado(c.Status)
+            })
+        });
+    }
+
+    public async Task<IActionResult> OnPostVincularChamadoAsync([FromBody] VinculoChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0 || request.ChamadoVinculadoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamados inválidos para vínculo." });
+
+        if (request.ChamadoId == request.ChamadoVinculadoId)
+            return new JsonResult(new { success = false, message = "Um chamado não pode ser vinculado a ele mesmo." });
+
+        var acessoOrigem = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acessoOrigem.Success)
+            return new JsonResult(new { success = false, message = acessoOrigem.Message });
+
+        var acessoDestino = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoVinculadoId);
+        if (!acessoDestino.Success || StatusBloqueadosVinculo.Contains(acessoDestino.Chamado!.Status))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para vincular este chamado." });
+
+        var menor = Math.Min(request.ChamadoId, request.ChamadoVinculadoId);
+        var maior = Math.Max(request.ChamadoId, request.ChamadoVinculadoId);
+        const int maxTentativas = 3;
+
+        for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            try
+            {
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    try
+                    {
+                        var existe = await _context.ChamadosVinculos
+                            .AsNoTracking()
+                            .AnyAsync(v => v.ChamadoIdMenor == menor && v.ChamadoIdMaior == maior);
+
+                        if (!existe)
+                        {
+                            _context.ChamadosVinculos.Add(new ChamadoVinculo
+                            {
+                                ChamadoIdMenor = menor,
+                                ChamadoIdMaior = maior,
+                                GrupoId = GrupoId,
+                                DataVinculo = DateTime.UtcNow,
+                                VinculadoPorUsuarioId = idUsuario.Value
+                            });
+
+                            await _context.SaveChangesAsync();
+                        }
+
+                        await transaction.CommitAsync();
+                        var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, request.ChamadoId, acessoOrigem.ContextoMembro!.Permissao);
+
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = true,
+                            dados = new
+                            {
+                                chamadoId = request.ChamadoId,
+                                vinculos,
+                                message = existe ? "Este chamado já estava vinculado." : "Chamado vinculado com sucesso."
+                            }
+                        });
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+            }
+            catch (DbUpdateException ex) when (tentativa < maxTentativas && EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+                var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, request.ChamadoId, acessoOrigem.ContextoMembro!.Permissao);
+                return new JsonResult(new
+                {
+                    success = true,
+                    dados = new
+                    {
+                        chamadoId = request.ChamadoId,
+                        vinculos,
+                        message = "Este chamado já estava vinculado."
+                    }
+                });
+            }
+        }
+
+        return new JsonResult(new { success = false, message = "Não foi possível vincular o chamado." });
+    }
+
+    public async Task<IActionResult> OnPostRemoverVinculoChamadoAsync([FromBody] VinculoChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0 || request.ChamadoVinculadoId <= 0)
+            return new JsonResult(new { success = false, message = "Vínculo inválido." });
+
+        var acessoOrigem = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acessoOrigem.Success)
+            return new JsonResult(new { success = false, message = acessoOrigem.Message });
+
+        var acessoDestino = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoVinculadoId);
+        if (!acessoDestino.Success)
+            return new JsonResult(new { success = false, message = "Você não tem permissão para remover este vínculo." });
+
+        var menor = Math.Min(request.ChamadoId, request.ChamadoVinculadoId);
+        var maior = Math.Max(request.ChamadoId, request.ChamadoVinculadoId);
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var vinculo = await _context.ChamadosVinculos
+                        .FirstOrDefaultAsync(v => v.ChamadoIdMenor == menor && v.ChamadoIdMaior == maior && v.GrupoId == GrupoId);
+
+                    if (vinculo != null)
+                    {
+                        _context.ChamadosVinculos.Remove(vinculo);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, request.ChamadoId, acessoOrigem.ContextoMembro!.Permissao);
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        dados = new
+                        {
+                            chamadoId = request.ChamadoId,
+                            vinculos,
+                            message = "Vínculo removido com sucesso."
+                        }
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao remover vínculo do chamado {ChamadoId}.", request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível remover o vínculo." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostSalvarVinculosChamadoAsync([FromBody] SalvarVinculosChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamado inválido para vínculos." });
+
+        var chamadosIds = request.ChamadosIds?
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList() ?? new List<int>();
+
+        if (chamadosIds.Contains(request.ChamadoId))
+            return new JsonResult(new { success = false, message = "Um chamado não pode ser vinculado a ele mesmo." });
+
+        var acessoOrigem = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acessoOrigem.Success)
+            return new JsonResult(new { success = false, message = acessoOrigem.Message });
+
+        var idsGerenciaveis = await ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acessoOrigem.ContextoMembro!.Permissao)
+            .Where(c => c.Id != request.ChamadoId && !StatusBloqueadosVinculo.Contains(c.Status))
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        var idsGerenciaveisSet = idsGerenciaveis.ToHashSet();
+        if (chamadosIds.Any(id => !idsGerenciaveisSet.Contains(id)))
+            return new JsonResult(new { success = false, message = "Um ou mais chamados não podem ser vinculados." });
+
+        const int maxTentativas = 3;
+
+        for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            try
+            {
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    try
+                    {
+                        var atuais = await _context.ChamadosVinculos
+                            .Where(v => v.GrupoId == GrupoId &&
+                                        (v.ChamadoIdMenor == request.ChamadoId || v.ChamadoIdMaior == request.ChamadoId))
+                            .ToListAsync();
+
+                        var desejados = chamadosIds.ToHashSet();
+                        var atuaisPorOutroId = atuais.ToDictionary(
+                            v => v.ChamadoIdMenor == request.ChamadoId ? v.ChamadoIdMaior : v.ChamadoIdMenor,
+                            v => v);
+
+                        _context.ChamadosVinculos.RemoveRange(
+                            atuaisPorOutroId
+                                .Where(par => idsGerenciaveisSet.Contains(par.Key) && !desejados.Contains(par.Key))
+                                .Select(par => par.Value));
+
+                        foreach (var chamadoVinculadoId in desejados.Where(id => !atuaisPorOutroId.ContainsKey(id)))
+                        {
+                            var menor = Math.Min(request.ChamadoId, chamadoVinculadoId);
+                            var maior = Math.Max(request.ChamadoId, chamadoVinculadoId);
+
+                            _context.ChamadosVinculos.Add(new ChamadoVinculo
+                            {
+                                ChamadoIdMenor = menor,
+                                ChamadoIdMaior = maior,
+                                GrupoId = GrupoId,
+                                DataVinculo = DateTime.UtcNow,
+                                VinculadoPorUsuarioId = idUsuario.Value
+                            });
+                        }
+
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, request.ChamadoId, acessoOrigem.ContextoMembro!.Permissao);
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = true,
+                            dados = new
+                            {
+                                chamadoId = request.ChamadoId,
+                                vinculos,
+                                message = "Vínculos atualizados com sucesso."
+                            }
+                        });
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+            }
+            catch (DbUpdateException ex) when (tentativa < maxTentativas && EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+                var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, request.ChamadoId, acessoOrigem.ContextoMembro!.Permissao);
+                return new JsonResult(new
+                {
+                    success = true,
+                    dados = new
+                    {
+                        chamadoId = request.ChamadoId,
+                        vinculos,
+                        message = "Vínculos atualizados com sucesso."
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao salvar vínculos do chamado {ChamadoId}.", request.ChamadoId);
+                return new JsonResult(new { success = false, message = "Não foi possível salvar os vínculos." });
+            }
+        }
+
+        return new JsonResult(new { success = false, message = "Não foi possível salvar os vínculos." });
+    }
+
     private async Task<ChamadoAcessoResultado> ObterChamadoComAcessoAsync(int usuarioId, int grupoId, int chamadoId)
     {
         if (grupoId <= 0 || chamadoId <= 0)
@@ -1606,6 +2011,73 @@ public class HomeModel : PageModel
 
         return ChamadoAcessoResultado.Ok(chamado, contextoMembro);
     }
+
+    private IQueryable<Chamado> ConstruirQueryChamadosPermitidos(int usuarioId, int grupoId, PermissaoUsuario permissao)
+    {
+        var query = _context.Chamados
+            .AsNoTracking()
+            .Where(c => c.GrupoId == grupoId && c.Status != StatusChamado.Excluido);
+
+        if (permissao == PermissaoUsuario.Colaborador)
+        {
+            query = query.Where(c => c.Publico || c.CriadorChamadoId == usuarioId);
+        }
+        else if (permissao == PermissaoUsuario.Nenhuma)
+        {
+            query = query.Where(c => c.Publico);
+        }
+
+        return query;
+    }
+
+    private async Task<List<ChamadoVinculoDto>> ObterVinculosVisiveisAsync(int usuarioId, int grupoId, int chamadoId, PermissaoUsuario permissao)
+    {
+        var idsVinculados = await _context.ChamadosVinculos
+            .AsNoTracking()
+            .Where(v => v.GrupoId == grupoId && (v.ChamadoIdMenor == chamadoId || v.ChamadoIdMaior == chamadoId))
+            .Select(v => v.ChamadoIdMenor == chamadoId ? v.ChamadoIdMaior : v.ChamadoIdMenor)
+            .ToListAsync();
+
+        if (idsVinculados.Count == 0)
+            return new List<ChamadoVinculoDto>();
+
+        var vinculos = await ConstruirQueryChamadosPermitidos(usuarioId, grupoId, permissao)
+            .Where(c => idsVinculados.Contains(c.Id))
+            .OrderByDescending(c => c.DataCriacao)
+            .ThenBy(c => c.Id)
+            .Select(c => new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                c.Titulo,
+                c.Status,
+                c.DataCriacao
+            })
+            .ToListAsync();
+
+        return vinculos.Select(v => new ChamadoVinculoDto
+            {
+                Id = v.Id,
+                NumeroChamadoGrupo = v.NumeroChamadoGrupo,
+                Titulo = v.Titulo,
+                Status = FormatarStatusChamado(v.Status),
+                DataCriacao = ParaDataHoraRegionalIso(v.DataCriacao)
+            })
+            .ToList();
+    }
+
+    private static string EscaparLike(string valor) =>
+        valor
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
+
+    private static string FormatarStatusChamado(StatusChamado status) => status switch
+    {
+        StatusChamado.EmAndamento => "Em andamento",
+        StatusChamado.Concluido => "Concluido",
+        _ => status.ToString()
+    };
 
     private void RegistrarTransicaoStatusChamado(
         Chamado chamado,
@@ -2072,6 +2544,18 @@ public class HomeModel : PageModel
         public int ChamadoId { get; set; }
     }
 
+    public class VinculoChamadoRequest
+    {
+        public int ChamadoId { get; set; }
+        public int ChamadoVinculadoId { get; set; }
+    }
+
+    public class SalvarVinculosChamadoRequest
+    {
+        public int ChamadoId { get; set; }
+        public List<int> ChamadosIds { get; set; } = new();
+    }
+
     public class EditarChamadoRequest
     {
         public int Id { get; set; }
@@ -2106,5 +2590,14 @@ public class HomeModel : PageModel
 
         public static ChamadoAcessoResultado Fail(string message) =>
             new() { Success = false, Message = message };
+    }
+
+    private sealed class ChamadoVinculoDto
+    {
+        public int Id { get; set; }
+        public int NumeroChamadoGrupo { get; set; }
+        public string? Titulo { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string DataCriacao { get; set; } = string.Empty;
     }
 }

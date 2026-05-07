@@ -98,13 +98,11 @@ public class GroupModel : PageModel
             AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Descricao", grupo.DescricaoGrupo, descricao);
             AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Cor", grupo.EtiquetaCor.ToString(), cor.ToString());
             AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "Slug", config.Slug, slug);
-            AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "Ativo", config.Ativo.ToString(), request.Ativo.ToString());
 
             grupo.Nome = nome;
             grupo.DescricaoGrupo = string.IsNullOrWhiteSpace(descricao) ? null : descricao;
             grupo.EtiquetaCor = cor;
             config.Slug = string.IsNullOrWhiteSpace(slug) ? null : slug;
-            config.Ativo = request.Ativo;
             config.AtualizadoPorUsuarioId = usuarioId.Value;
             config.DataAtualizacao = DateTime.UtcNow;
 
@@ -422,6 +420,63 @@ public class GroupModel : PageModel
         return new JsonResult(new { success = true, message = "Setor excluido." });
     }
 
+    public async Task<IActionResult> OnPostExcluirGrupoAsync([FromBody] ExcluirGrupoRequest request)
+    {
+        var usuarioId = await ValidarPostAdminAsync();
+        if (usuarioId.Result != null)
+            return usuarioId.Result;
+
+        var grupo = await _context.Grupos.FirstOrDefaultAsync(g => g.Id == GrupoId);
+        if (grupo == null)
+            return NotFound(new { success = false, message = "Grupo não encontrado." });
+
+        var nomeConfirmacao = Limpar(request.NomeConfirmacao);
+        if (!string.Equals(nomeConfirmacao, grupo.Nome, StringComparison.Ordinal))
+            return BadRequest(new { success = false, message = "Digite o nome do grupo exatamente como exibido para confirmar." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var agora = DateTime.UtcNow;
+                var config = await ObterOuCriarConfigAsync(usuarioId.Id);
+                var membrosAtivos = await _context.UsuariosGrupos
+                    .Where(ug => ug.GrupoId == GrupoId && ug.Ativo)
+                    .ToListAsync();
+                config.Ativo = false;
+                config.AtualizadoPorUsuarioId = usuarioId.Id;
+                config.DataAtualizacao = agora;
+
+                foreach (var membro in membrosAtivos)
+                {
+                    membro.Ativo = false;
+                    membro.DataRemocao = agora;
+                    membro.RemovidoPorUsuarioId = usuarioId.Id;
+                }
+
+                Auditar(usuarioId.Id, "Excluir", "Grupo", grupo.Id, "Acesso", "Ativo", "Inativo para todos os membros");
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                InvalidarCacheCatalogoGrupo();
+                return (IActionResult)new JsonResult(new
+                {
+                    success = true,
+                    message = "Grupo excluído.",
+                    redirectUrl = Url.Page("/Menu/Menu")
+                });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+    }
+
     private void InvalidarCacheCatalogoGrupo()
     {
         _memoryCache.Remove($"catalogo:setores:{GrupoId}");
@@ -708,7 +763,7 @@ public class GroupModel : PageModel
         return int.TryParse(claim, out var id) ? id : null;
     }
 
-    public record SalvarGeralRequest(string? Nome, string? Descricao, string? Slug, string? EtiquetaCor, bool Ativo);
+    public record SalvarGeralRequest(string? Nome, string? Descricao, string? Slug, string? EtiquetaCor);
     public record SalvarRegrasRequest(bool ObrigarSetor, bool ObrigarTipoOcorrencia, bool ObrigarCategoria, bool ObrigarSubcategoria, bool PermitirChamadoPublico, bool ExigirSolucaoParaConcluir, int? DiasParaFechamentoAutomatico);
     public record SalvarSlaRequest(bool AutomatizarPendentePorPrazoConclusao, int? HorasAposVencimentoParaPendente, int? HorasAntesPrazoParaAlerta, bool NotificarAdministradoresSla, bool ExibirDataFinalizacaoModal = true, bool ExibirPrazoRespostaModal = true, bool ExibirPrazoConclusaoModal = true);
     public record NomeRequest(string? Nome);
@@ -716,6 +771,7 @@ public class GroupModel : PageModel
     public record CategoriaRequest(int TipoId, string? Nome);
     public record SubcategoriaRequest(int CategoriaId, string? Nome);
     public record IdRequest(int Id);
+    public record ExcluirGrupoRequest(string? NomeConfirmacao);
     public record ItemVm(int Id, string Nome, int Vinculos);
     public record CategoriaVm(int Id, int TipoId, string TipoNome, string Nome, int Subcategorias, int Vinculos);
     public record SubcategoriaVm(int Id, int CategoriaId, string TipoNome, string CategoriaNome, string Nome, int Vinculos);
