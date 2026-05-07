@@ -344,6 +344,7 @@ public class HomeModel : PageModel
                 podeEditarPrazoResposta = podeEditarPrazoResposta,
                 podeEditarPrazoConclusao = podeEditarPrazoConclusao,
                 podeEditarPublico = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Publico, idUsuario.Value, chamado.CriadorChamadoId),
+                podeAcessarVinculosChamado = PodeAcessarVinculosChamado(contextoMembro.Permissao),
                 podeExcluir = GrupoPermissionService.PodeExcluirChamado(contextoMembro.Permissao, idUsuario.Value, chamado.CriadorChamadoId)
             }
         });
@@ -1603,6 +1604,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
         if (!acesso.Success)
             return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarVinculosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar vínculos." });
 
         var vinculos = await ObterVinculosVisiveisAsync(idUsuario.Value, GrupoId, chamadoId, acesso.ContextoMembro!.Permissao);
         return new JsonResult(new { success = true, dados = new { chamadoId, vinculos } });
@@ -1617,6 +1620,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
         if (!acesso.Success)
             return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarVinculosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar vínculos." });
 
         var idsVinculados = await _context.ChamadosVinculos
             .AsNoTracking()
@@ -1665,6 +1670,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
         if (!acesso.Success)
             return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarVinculosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar vínculos." });
 
         var query = ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
             .Where(c => c.Id != chamadoId && !StatusBloqueadosVinculo.Contains(c.Status));
@@ -1716,6 +1723,8 @@ public class HomeModel : PageModel
         var acessoOrigem = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
         if (!acessoOrigem.Success)
             return new JsonResult(new { success = false, message = acessoOrigem.Message });
+        if (!PodeAcessarVinculosChamado(acessoOrigem.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para vincular chamados." });
 
         var acessoDestino = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoVinculadoId);
         if (!acessoDestino.Success || StatusBloqueadosVinculo.Contains(acessoDestino.Chamado!.Status))
@@ -1812,6 +1821,8 @@ public class HomeModel : PageModel
         var acessoOrigem = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
         if (!acessoOrigem.Success)
             return new JsonResult(new { success = false, message = acessoOrigem.Message });
+        if (!PodeAcessarVinculosChamado(acessoOrigem.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para remover vínculos." });
 
         var acessoDestino = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoVinculadoId);
         if (!acessoDestino.Success)
@@ -1886,6 +1897,8 @@ public class HomeModel : PageModel
         var acessoOrigem = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
         if (!acessoOrigem.Success)
             return new JsonResult(new { success = false, message = acessoOrigem.Message });
+        if (!PodeAcessarVinculosChamado(acessoOrigem.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para salvar vínculos." });
 
         var idsGerenciaveis = await ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acessoOrigem.ContextoMembro!.Permissao)
             .Where(c => c.Id != request.ChamadoId && !StatusBloqueadosVinculo.Contains(c.Status))
@@ -2029,6 +2042,9 @@ public class HomeModel : PageModel
 
         return query;
     }
+
+    private static bool PodeAcessarVinculosChamado(PermissaoUsuario permissao) =>
+        permissao is PermissaoUsuario.Administracao or PermissaoUsuario.Tecnico;
 
     private async Task<List<ChamadoVinculoDto>> ObterVinculosVisiveisAsync(int usuarioId, int grupoId, int chamadoId, PermissaoUsuario permissao)
     {

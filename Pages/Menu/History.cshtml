@@ -1402,7 +1402,14 @@
                     </div>
                 `).join("")
                 : '<div class="text-muted small">Nenhum comentário registrado.</div>';
-            const vinculosHtml = renderizarVinculosChamado(dados.vinculos || []);
+            const vinculosHtml = dados.podeAcessarVinculosChamado
+                ? `
+                    <div class="detail-block mt-3">
+                        <span class="detail-label">Vínculos</span>
+                        <div class="linked-call-list mt-2">${renderizarVinculosChamado(dados.vinculos || [])}</div>
+                    </div>
+                `
+                : "";
 
             detalhesConteudo.innerHTML = `
                 <div class="detail-grid mb-3">
@@ -1422,10 +1429,7 @@
                 </div>
                 ${renderizarDetalhe("Descrição", dados.descricao || "Não registrada", true)}
                 ${renderizarDetalhe("Solução", dados.solucao || "Não registrada", true)}
-                <div class="detail-block mt-3">
-                    <span class="detail-label">Vínculos</span>
-                    <div class="linked-call-list mt-2">${vinculosHtml}</div>
-                </div>
+                ${vinculosHtml}
                 <div class="detail-block mt-3">
                     <span class="detail-label">Comentários recentes</span>
                     <div class="detail-comments">${comentariosHtml}</div>

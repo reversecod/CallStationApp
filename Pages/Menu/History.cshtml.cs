@@ -365,7 +365,10 @@ public class HistoryModel : PageModel
             .Take(8)
             .ToListAsync();
 
-        var vinculos = await ObterVinculosVisiveisAsync(usuarioId.Value, chamado.GrupoId, chamado.Id, resultadoAcesso.ContextoMembro!.Permissao);
+        var podeAcessarVinculosChamado = PodeAcessarVinculosChamado(resultadoAcesso.ContextoMembro!.Permissao);
+        var vinculos = podeAcessarVinculosChamado
+            ? await ObterVinculosVisiveisAsync(usuarioId.Value, chamado.GrupoId, chamado.Id, resultadoAcesso.ContextoMembro!.Permissao)
+            : new List<ChamadoVinculoDto>();
 
         return new JsonResult(new
         {
@@ -396,6 +399,7 @@ public class HistoryModel : PageModel
                     dataComentario = ParaDataHoraRegionalIso(comentario.dataComentario),
                     comentario.possuiAnexo
                 }),
+                podeAcessarVinculosChamado,
                 vinculos
             }
         });
@@ -525,6 +529,8 @@ public class HistoryModel : PageModel
         var resultadoOrigem = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoOrigem.Success)
             return new JsonResult(new { success = false, message = resultadoOrigem.Message });
+        if (!PodeAcessarVinculosChamado(resultadoOrigem.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para vincular chamados." });
 
         var resultadoDestino = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoVinculadoId);
         if (!resultadoDestino.Success)
@@ -621,6 +627,8 @@ public class HistoryModel : PageModel
         var resultadoOrigem = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoOrigem.Success)
             return new JsonResult(new { success = false, message = resultadoOrigem.Message });
+        if (!PodeAcessarVinculosChamado(resultadoOrigem.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para remover vínculos." });
 
         var resultadoDestino = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoVinculadoId);
         if (!resultadoDestino.Success)
@@ -1287,6 +1295,9 @@ public class HistoryModel : PageModel
 
         return query;
     }
+
+    private static bool PodeAcessarVinculosChamado(PermissaoUsuario permissao) =>
+        permissao is PermissaoUsuario.Administracao or PermissaoUsuario.Tecnico;
 
     private static string EscaparLike(string valor) =>
         valor

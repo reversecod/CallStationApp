@@ -7,6 +7,8 @@ let modalComentariosChamado = null;
 let modalVinculosChamado = null;
 let salvandoEdicaoChamado = false;
 let candidatosVinculoTimer = null;
+let usuarioPodeAcessarVinculosChamado = false;
+let editorFechamentoTimer = null;
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
     { id: "editPrazoResposta", nome: "Prazo resposta" },
@@ -529,7 +531,30 @@ function setCheckedIfExists(id, value) {
     }
 }
 
+function animarAberturaEditorChamado() {
+    const card = document.getElementById("formEdicaoChamado")?.closest(".chamado-editor-card");
+    if (!card) return;
+
+    window.clearTimeout(editorFechamentoTimer);
+    card.classList.remove("editor-closing", "editor-active");
+    void card.offsetWidth;
+    card.classList.add("editor-active");
+}
+
+function animarFechamentoEditorChamado() {
+    const card = document.getElementById("formEdicaoChamado")?.closest(".chamado-editor-card");
+    if (!card) return;
+
+    card.classList.remove("editor-active", "editor-closing");
+    void card.offsetWidth;
+    card.classList.add("editor-closing");
+    window.setTimeout(() => card.classList.remove("editor-closing"), 160);
+}
+
 function aplicarPermissoesChamado(permissoes) {
+    usuarioPodeAcessarVinculosChamado = !!permissoes.podeAcessarVinculosChamado;
+    document.querySelector(".chamado-vinculos-bar")?.classList.toggle("d-none", !usuarioPodeAcessarVinculosChamado);
+
     configurarCampo("wrapEditTitulo", "editTitulo", !!permissoes.podeEditarTitulo);
     configurarCampo("wrapEditDescricao", "editDescricao", !!permissoes.podeEditarDescricao);
     configurarCampo("wrapEditSolucao", "editSolucao", !!permissoes.podeEditarSolucao);
@@ -666,10 +691,17 @@ async function preencherFormularioEdicao(data) {
 
     if (msg) msg.classList.add("d-none");
     form.classList.remove("d-none");
+    animarAberturaEditorChamado();
 
     atualizarResumoChamado(data);
     atualizarIndicadorComentarioBotao(data.id);
-    await carregarResumoVinculosChamado(data.id);
+    usuarioPodeAcessarVinculosChamado = !!data.permissoes?.podeAcessarVinculosChamado;
+    document.querySelector(".chamado-vinculos-bar")?.classList.toggle("d-none", !usuarioPodeAcessarVinculosChamado);
+    if (usuarioPodeAcessarVinculosChamado) {
+        await carregarResumoVinculosChamado(data.id);
+    } else {
+        atualizarResumoVinculosChamado([]);
+    }
 
     setValueIfExists("editId", data.id);
     setValueIfExists("editTitulo", data.titulo);
@@ -744,6 +776,7 @@ function inicializarBotoesEdicao() {
     });
 
     document.getElementById("btnAbrirVinculosChamado")?.addEventListener("click", () => {
+        if (!usuarioPodeAcessarVinculosChamado) return;
         abrirVinculosChamado(chamadoSelecionadoId);
     });
 
@@ -879,6 +912,11 @@ async function abrirComentariosChamado(chamadoId) {
 }
 
 async function abrirVinculosChamado(chamadoId) {
+    if (!usuarioPodeAcessarVinculosChamado) {
+        mostrarToast("Você não tem permissão para acessar vínculos.");
+        return;
+    }
+
     if (!chamadoId || !modalVinculosChamado) {
         mostrarToast("Selecione um chamado para abrir os vinculados.");
         return;
@@ -1022,6 +1060,11 @@ function renderizarVinculosChamado(vinculos) {
 }
 
 async function carregarResumoVinculosChamado(chamadoId) {
+    if (!usuarioPodeAcessarVinculosChamado) {
+        atualizarResumoVinculosChamado([]);
+        return;
+    }
+
     try {
         const grupoId = document.getElementById("grupoIdAtual")?.value || "";
         const response = await fetch(`?handler=VinculosChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
@@ -1372,21 +1415,26 @@ function cancelarEdicaoChamado() {
     const statusInfo = document.getElementById("chamadoStatusInfo");
     const statusWrap = document.getElementById("chamadoStatusWrap");
 
-    if (form) form.classList.add("d-none");
-    if (msg) msg.classList.remove("d-none");
-    if (metaInfo) metaInfo.classList.add("d-none");
-    if (criadoPorWrap) criadoPorWrap.classList.add("d-none");
-    if (statusInfo) statusInfo.className = "meta-badge badge-status-aberto";
-    if (statusWrap) statusWrap.classList.add("d-none");
+    animarFechamentoEditorChamado();
 
-    if (label) {
-        label.classList.add("d-none");
-        label.textContent = "";
-        label.className = "badge badge-chamado-selecionado d-none";
-    }
+    window.clearTimeout(editorFechamentoTimer);
+    editorFechamentoTimer = window.setTimeout(() => {
+        if (form) form.classList.add("d-none");
+        if (msg) msg.classList.remove("d-none");
+        if (metaInfo) metaInfo.classList.add("d-none");
+        if (criadoPorWrap) criadoPorWrap.classList.add("d-none");
+        if (statusInfo) statusInfo.className = "meta-badge badge-status-aberto";
+        if (statusWrap) statusWrap.classList.add("d-none");
 
-    atualizarIndicadorComentarioBotao(null);
-    chamadoSelecionadoId = null;
+        if (label) {
+            label.classList.add("d-none");
+            label.textContent = "";
+            label.className = "badge badge-chamado-selecionado d-none";
+        }
+
+        atualizarIndicadorComentarioBotao(null);
+        chamadoSelecionadoId = null;
+    }, 130);
 }
 
 async function excluirChamado() {

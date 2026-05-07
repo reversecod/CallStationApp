@@ -406,6 +406,24 @@
         overflow: hidden;
       }
 
+      .chamado-editor-card.editor-active {
+        animation: chamadoEditorAbrir .18s ease-out;
+      }
+
+      .chamado-editor-card.editor-closing {
+        animation: chamadoEditorFechar .14s ease-in;
+      }
+
+      @@keyframes chamadoEditorAbrir {
+        from { opacity: .74; transform: translateY(.35rem) scale(.992); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      @@keyframes chamadoEditorFechar {
+        from { opacity: 1; transform: translateY(0) scale(1); }
+        to { opacity: .72; transform: translateY(.25rem) scale(.994); }
+      }
+
       .chamado-editor-card .card-body {
         padding: 1rem 1.05rem 1.1rem;
       }
@@ -1114,6 +1132,8 @@
                                               aria-hidden="true"
                                               title="Novo comentário"></span>
                                     </button>
+                                    @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Colaborador)
+                                    {
                                     <div class="chamado-vinculos-bar">
                                         <button type="button" class="chamado-vinculos-label" id="btnAbrirVinculosChamado">
                                             Vínculos
@@ -1122,6 +1142,7 @@
                                             <span class="text-muted small">Nenhum</span>
                                         </div>
                                     </div>
+                                    }
                                 </div>
 
                                 <div class="mb-2" id="wrapEditSetorId">
@@ -1288,6 +1309,8 @@
         </div>
     </div>
 
+    @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Colaborador)
+    {
     <div class="modal fade" id="modalVinculosChamado" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content chamado-editor-card">
@@ -1309,6 +1332,7 @@
             </div>
         </div>
     </div>
+    }
 
     <div class="modal fade" id="modalSelecionarListaTarefa" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
