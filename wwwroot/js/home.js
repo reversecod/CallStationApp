@@ -123,6 +123,8 @@ document.addEventListener("DOMContentLoaded", () => {
     inicializarSelectsLongos();
     inicializarCamposDataHoraChamado();
     inicializarLimpezaSelecaoChamado();
+    inicializarPreviewImagemChamado();
+    inicializarAtualizacaoAutomaticaHome();
     inicializarComentariosChamado();
     inicializarVinculosChamado();
     atualizarCronometros();
@@ -1265,9 +1267,7 @@ function renderizarComentariosChamado(comentarios) {
     }
 
     lista.innerHTML = comentarios.map(comentario => {
-        const anexo = comentario.anexoUrl
-            ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentário"></a>`
-            : "";
+        const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
 
         return `
             <div class="comment-card">
@@ -1280,6 +1280,37 @@ function renderizarComentariosChamado(comentarios) {
             </div>
         `;
     }).join("");
+}
+
+function montarPreviewAnexoComentario(anexoUrl) {
+    return anexoUrl
+        ? `<button type="button" class="comment-attachment comment-attachment-preview border-0 p-0" data-preview-image="${escapeHtml(anexoUrl)}"><img src="${escapeHtml(anexoUrl)}" alt="Imagem anexada ao comentário"></button>`
+        : "";
+}
+
+function inicializarPreviewImagemChamado() {
+    document.addEventListener("click", event => {
+        const botao = event.target.closest("[data-preview-image]");
+        if (!botao) return;
+
+        const imagem = document.getElementById("imagemVisualizacaoChamado");
+        const modalElement = document.getElementById("modalVisualizarImagemChamado");
+        if (!imagem || !modalElement || !window.bootstrap) return;
+
+        imagem.src = botao.dataset.previewImage || "";
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+    });
+}
+
+function inicializarAtualizacaoAutomaticaHome() {
+    setInterval(() => {
+        if (document.hidden) return;
+        if (document.querySelector(".modal.show")) return;
+        if (!document.getElementById("formEdicaoChamado")?.classList.contains("d-none")) return;
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+
+        window.location.reload();
+    }, 90000);
 }
 
 function renderizarComentariosChamadoPaginado(dados, anexar = false) {
@@ -1318,9 +1349,7 @@ function renderizarComentariosChamadoPaginado(dados, anexar = false) {
 }
 
 function renderizarComentarioChamadoPaginado(comentario) {
-    const anexo = comentario.anexoUrl
-        ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentario"></a>`
-        : "";
+    const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
 
     return `
         <div class="comment-card">

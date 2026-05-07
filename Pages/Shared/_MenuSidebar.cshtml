@@ -477,6 +477,11 @@
         }
 
         carregarContadorNotificacoes();
+        setInterval(() => {
+            if (!document.hidden) {
+                carregarContadorNotificacoes();
+            }
+        }, 30000);
 
         if (modalOrganizacoes) {
             modalOrganizacoes.addEventListener("show.bs.modal", carregarOrganizacoesRecentes);

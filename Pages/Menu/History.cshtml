@@ -492,6 +492,18 @@
             object-fit:contain;
         }
 
+        .comment-attachment-preview {
+            cursor:zoom-in;
+        }
+
+        .modal-image-preview {
+            display:block;
+            max-width:100%;
+            max-height:75vh;
+            margin:0 auto;
+            object-fit:contain;
+        }
+
         .detail-grid {
             display:grid;
             grid-template-columns:repeat(2, minmax(0, 1fr));
@@ -928,6 +940,20 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalVisualizarImagemHistorico" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Imagem anexada</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-body-tertiary">
+                <img id="imagemVisualizacaoHistorico" class="modal-image-preview" alt="Imagem anexada ao chamado">
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
@@ -937,9 +963,12 @@
         const comentariosModalElement = document.getElementById("modalComentariosHistorico");
         const detalhesModalElement = document.getElementById("modalDetalhesHistorico");
         const statusModalElement = document.getElementById("modalStatusHistorico");
+        const imagemPreviewElement = document.getElementById("modalVisualizarImagemHistorico");
+        const imagemPreview = document.getElementById("imagemVisualizacaoHistorico");
         const comentariosModal = comentariosModalElement ? bootstrap.Modal.getOrCreateInstance(comentariosModalElement) : null;
         const detalhesModal = detalhesModalElement ? bootstrap.Modal.getOrCreateInstance(detalhesModalElement) : null;
         const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
+        const imagemPreviewModal = imagemPreviewElement ? bootstrap.Modal.getOrCreateInstance(imagemPreviewElement) : null;
         const listaComentarios = document.getElementById("listaComentariosHistorico");
         const detalhesTitulo = document.getElementById("detalhesHistoricoTitulo");
         const detalhesConteudo = document.getElementById("detalhesHistoricoConteudo");
@@ -961,6 +990,14 @@
         let activeDirection = null;
         let pesquisaTimer = null;
         let termoPesquisaAtual = "";
+
+        document.addEventListener("click", event => {
+            const botao = event.target.closest("[data-preview-image]");
+            if (!botao || !imagemPreview || !imagemPreviewModal) return;
+
+            imagemPreview.src = botao.dataset.previewImage || "";
+            imagemPreviewModal.show();
+        });
         let paginaPesquisaAtual = 1;
         let detalhesChamadoAtualId = null;
         let candidatosVinculoTimer = null;
@@ -1588,9 +1625,7 @@
             }
 
             listaComentarios.innerHTML = comentarios.map(comentario => {
-                const anexo = comentario.anexoUrl
-                    ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentário"></a>`
-                    : "";
+                const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
 
                 return `
                     <div class="comment-item">
@@ -1641,9 +1676,7 @@
         }
 
         function renderizarComentarioHistorico(comentario) {
-            const anexo = comentario.anexoUrl
-                ? `<a class="comment-attachment" href="${escapeHtml(comentario.anexoUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(comentario.anexoUrl)}" alt="Imagem anexada ao comentário"></a>`
-                : "";
+            const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
 
             return `
                 <div class="comment-item">
@@ -1657,6 +1690,12 @@
                     </div>
                 </div>
             `;
+        }
+
+        function montarPreviewAnexoComentario(anexoUrl) {
+            return anexoUrl
+                ? `<button type="button" class="comment-attachment comment-attachment-preview border-0 p-0" data-preview-image="${escapeHtml(anexoUrl)}"><img src="${escapeHtml(anexoUrl)}" alt="Imagem anexada ao comentário"></button>`
+                : "";
         }
 
         function removerIndicadorComentario(chamadoId) {

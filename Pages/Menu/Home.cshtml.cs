@@ -393,7 +393,7 @@ public class HomeModel : PageModel
         if (!System.IO.File.Exists(caminhoFisico))
             return NotFound();
 
-        return PhysicalFile(caminhoFisico, ObterContentTypeAnexo(nomeArquivo), nomeArquivo);
+        return PhysicalFile(caminhoFisico, ObterContentTypeAnexo(nomeArquivo));
     }
 
     public async Task<IActionResult> OnPostNovoChamadoAsync(int grupoId)
@@ -1528,7 +1528,7 @@ public class HomeModel : PageModel
         if (!System.IO.File.Exists(caminho))
             return NotFound();
 
-        return PhysicalFile(caminho, ObterContentTypeAnexo(comentario.AnexoComentario), comentario.AnexoComentario);
+        return PhysicalFile(caminho, ObterContentTypeAnexo(comentario.AnexoComentario));
     }
 
     public async Task<IActionResult> OnPostMarcarComentariosVisualizadosAsync([FromBody] MarcarComentariosVisualizadosRequest request)
