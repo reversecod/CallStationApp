@@ -832,6 +832,104 @@ public class HomeModel : PageModel
         }
     }
 
+    public async Task<IActionResult> OnPostAvancarStatusChamadoAsync([FromBody] AvancarStatusChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.Id <= 0 || request.GrupoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamado inválido." });
+
+        var chamado = await _context.Chamados
+            .FirstOrDefaultAsync(c => c.Id == request.Id && c.GrupoId == request.GrupoId && c.Status != StatusChamado.Excluido);
+
+        if (chamado == null)
+            return new JsonResult(new { success = false, message = "Chamado não encontrado." });
+
+        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, chamado.GrupoId);
+        if (contextoMembro == null)
+            return new JsonResult(new { success = false, message = "Você não tem acesso a este chamado." });
+
+        if (!GrupoPermissionService.PodeVerChamado(contextoMembro.Permissao, chamado.Publico, idUsuario.Value, chamado.CriadorChamadoId))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para visualizar este chamado." });
+
+        if (!GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Status, idUsuario.Value, chamado.CriadorChamadoId))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para alterar o status deste chamado." });
+
+        var novoStatus = chamado.Status switch
+        {
+            StatusChamado.Aberto => StatusChamado.EmAndamento,
+            StatusChamado.EmAndamento => StatusChamado.Concluido,
+            _ => (StatusChamado?)null
+        };
+
+        if (!novoStatus.HasValue)
+            return new JsonResult(new { success = false, message = "Este chamado não possui próximo status rápido." });
+
+        var config = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GrupoId == chamado.GrupoId);
+
+        if (config?.ExigirSolucaoParaConcluir == true &&
+            novoStatus.Value == StatusChamado.Concluido &&
+            string.IsNullOrWhiteSpace(chamado.Solucao))
+        {
+            return new JsonResult(new { success = false, message = "Informe a solução antes de concluir o chamado." });
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var statusAnterior = chamado.Status;
+                    chamado.Status = novoStatus.Value;
+
+                    if (chamado.Status == StatusChamado.EmAndamento && chamado.DataInicioAtendimento == null)
+                        chamado.DataInicioAtendimento = DateTime.UtcNow;
+
+                    if (StatusFinais.Contains(chamado.Status) && chamado.DataFinalizacao == null)
+                        chamado.DataFinalizacao = DateTime.UtcNow;
+
+                    RegistrarTransicaoStatusChamado(chamado, statusAnterior, chamado.Status, idUsuario.Value, false, "Atualizacao rapida");
+                    RegistrarHistoricoAlteracaoStatus(chamado, statusAnterior, chamado.Status, idUsuario.Value, "StatusRapido");
+                    _notificacaoService.CriarNotificacaoChamadoAlteradoParaDono(chamado, idUsuario.Value, "alteracao");
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = $"Status alterado para {FormatarStatusChamado(chamado.Status)}.",
+                        dados = new
+                        {
+                            chamado.Id,
+                            status = chamado.Status.ToString(),
+                            statusTexto = FormatarStatusChamado(chamado.Status)
+                        }
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao avancar status do chamado {ChamadoId}.", request.Id);
+            return new JsonResult(new { success = false, message = "Não foi possível avançar o status do chamado." });
+        }
+    }
+
     public async Task<IActionResult> OnPostSalvarChamadoAsync([FromForm] EditarChamadoRequest request)
     {
         var idUsuario = GetUsuarioLogadoId();
@@ -2539,6 +2637,12 @@ public class HomeModel : PageModel
     public class ExcluirChamadoRequest
     {
         public int Id { get; set; }
+    }
+
+    public class AvancarStatusChamadoRequest
+    {
+        public int Id { get; set; }
+        public int GrupoId { get; set; }
     }
 
     public class CriarTarefaDeChamadoRequest

@@ -9,6 +9,7 @@ let salvandoEdicaoChamado = false;
 let candidatosVinculoTimer = null;
 let usuarioPodeAcessarVinculosChamado = false;
 let editorFechamentoTimer = null;
+let ticketLogoClickTimer = null;
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
     { id: "editPrazoResposta", nome: "Prazo resposta" },
@@ -102,7 +103,27 @@ document.addEventListener("DOMContentLoaded", () => {
             const id = Number(card.dataset.id);
             if (!id) return;
 
+            if (e.target.closest(".ticket-icon")) {
+                window.clearTimeout(ticketLogoClickTimer);
+                ticketLogoClickTimer = window.setTimeout(() => carregarChamado(id), 240);
+                return;
+            }
+
             carregarChamado(id);
+        });
+
+        containerChamados.addEventListener("dblclick", async e => {
+            const logo = e.target.closest(".ticket-icon");
+            if (!logo) return;
+
+            const card = logo.closest(".ticket-card");
+            const id = Number(card?.dataset.id || 0);
+            if (!id) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+            window.clearTimeout(ticketLogoClickTimer);
+            await avancarStatusChamadoRapido(id, card);
         });
 
         containerChamados.addEventListener("dragstart", e => {
@@ -289,6 +310,7 @@ async function criarNovoChamado() {
 
     const chamadoDiv = document.createElement("div");
     chamadoDiv.className = "ticket-card ticket-aberto";
+    chamadoDiv.dataset.status = "Aberto";
 
     const img = document.createElement("img");
     img.src = "/images/logoticket.png";
@@ -529,6 +551,69 @@ function setCheckedIfExists(id, value) {
     if (el) {
         el.checked = !!value;
     }
+}
+
+async function avancarStatusChamadoRapido(chamadoId, card) {
+    const statusAtual = normalizarStatusRapido(card?.dataset.status);
+    const proximoStatus = obterProximoStatusRapido(statusAtual);
+
+    if (!proximoStatus) {
+        mostrarToast("Este chamado não possui próximo status rápido.");
+        return;
+    }
+
+    try {
+        const grupoId = Number(document.getElementById("grupoIdAtual")?.value || 0);
+        const data = await fetchJson("?handler=AvancarStatusChamado", {
+            id: chamadoId,
+            grupoId
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível avançar o status.");
+            return;
+        }
+
+        atualizarCardChamadoStatusRapido(chamadoId, data.dados?.status || proximoStatus);
+        if (chamadoSelecionadoId === chamadoId) {
+            await carregarChamado(chamadoId);
+        }
+
+        mostrarToast(data.message || "Status atualizado com sucesso.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível avançar o status.");
+    }
+}
+
+function normalizarStatusRapido(status) {
+    return String(status || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "");
+}
+
+function obterProximoStatusRapido(statusNormalizado) {
+    if (statusNormalizado === "aberto") return "EmAndamento";
+    if (statusNormalizado === "emandamento") return "Concluido";
+    return null;
+}
+
+function atualizarCardChamadoStatusRapido(chamadoId, status) {
+    const card = document.querySelector(`.ticket-card[data-id="${chamadoId}"]`);
+    if (!card) return;
+
+    card.dataset.status = status;
+    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-andamento", "ticket-reaberto");
+
+    if (status === "Concluido") {
+        card.remove();
+        if (chamadoSelecionadoId === chamadoId) {
+            cancelarEdicaoChamado();
+        }
+        return;
+    }
+
+    card.classList.add(status === "EmAndamento" ? "ticket-em-andamento" : "ticket-aberto");
 }
 
 function animarAberturaEditorChamado() {

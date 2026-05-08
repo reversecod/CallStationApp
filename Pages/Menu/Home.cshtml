@@ -1009,12 +1009,12 @@
                                 _ => "ticket-aberto"
                             };
 
-                            <div class="ticket-card @classeStatus" data-id="@chamado.Id" role="button" draggable="true">
+                            <div class="ticket-card @classeStatus" data-id="@chamado.Id" data-status="@chamado.Status" role="button" draggable="true">
                                 @if (chamado.TemComentariosNaoLidos)
                                 {
                                     <span class="ticket-comment-alert" data-comment-badge title="Novo comentário"></span>
                                 }
-                                <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="eager" />
+                                <img src="~/images/logoticket.png" class="ticket-icon" alt="Ticket" loading="eager" title="Clique duas vezes para avançar o status" />
                                 <span class="ticket-text">
                                     @textoTicket -
                                     <span class="cronometro" data-criado-em="@DateTime.SpecifyKind(chamado.DataCriacao, DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")"></span>
