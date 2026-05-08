@@ -875,9 +875,12 @@ namespace CallStationApp.Data
             modelBuilder.Entity<AnexoTarefa>(entity =>
             {
                 entity.ToTable("Anexos_tarefas");
+                entity.Property(a => a.NomeOriginal).IsRequired().HasColumnName("nome_original").HasColumnType("varchar(255)").HasMaxLength(255);
                 entity.Property(a => a.NomeArquivo).IsRequired().HasColumnName("nome_arquivo").HasColumnType("varchar(255)").HasMaxLength(255);
                 entity.Property(a => a.CaminhoArquivo).IsRequired().HasColumnName("caminho_arquivo").HasColumnType("varchar(500)").HasMaxLength(500);
                 entity.Property(a => a.TipoArquivo).HasColumnName("tipo_arquivo").HasColumnType("varchar(100)").HasMaxLength(100);
+                entity.Property(a => a.Extensao).HasColumnName("extensao").HasColumnType("varchar(20)").HasMaxLength(20);
+                entity.Property(a => a.EhImagem).HasColumnName("eh_imagem").HasColumnType("boolean").HasDefaultValue(false);
                 entity.Property(a => a.EhCapa).HasColumnName("eh_capa").HasColumnType("boolean").HasDefaultValue(false);
                 entity.Property(a => a.DataUpload).HasColumnName("data_upload").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.HasIndex(a => a.CartaoTarefaId).HasDatabaseName("idx_anexos_tarefas_cartao");
@@ -913,8 +916,10 @@ namespace CallStationApp.Data
                 entity.Property(e => e.Nome).IsRequired().HasColumnType("varchar(50)").HasMaxLength(50);
                 entity.Property(e => e.Cor).IsRequired().HasColumnType("varchar(20)").HasMaxLength(20);
                 entity.Property(e => e.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.HasIndex(e => new { e.GrupoId, e.Nome }).IsUnique().HasDatabaseName("uq_etiquetas_tarefas_grupo_nome");
+                entity.HasIndex(e => new { e.GrupoId, e.UsuarioId }).HasDatabaseName("idx_etiquetas_tarefas_grupo_usuario");
+                entity.HasIndex(e => new { e.GrupoId, e.UsuarioId, e.Nome }).IsUnique().HasDatabaseName("uq_etiquetas_tarefas_grupo_usuario_nome");
                 entity.HasOne(e => e.Grupo).WithMany().HasForeignKey(e => e.GrupoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.Usuario).WithMany().HasForeignKey(e => e.UsuarioId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<CartaoTarefaEtiqueta>(entity =>

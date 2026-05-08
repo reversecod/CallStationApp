@@ -4,6 +4,7 @@ let modalLista = null;
 let modalCartao = null;
 let modalMembrosCartao = null;
 let modalChamadosCartao = null;
+let modalVisualizarAnexoTarefa = null;
 let modalTemplateCartao = null;
 let modalSelecionarTemplate = null;
 let modalAcoesLista = null;
@@ -20,6 +21,11 @@ let cartaoAtualEstado = {
     arquivado: false,
     podeEditar: false,
     podeSairVinculo: false,
+    podeGerenciarEtiquetas: true,
+    etiquetasDisponiveis: [],
+    etiquetasAplicadas: [],
+    checklists: [],
+    anexos: [],
     titulo: "",
     colunaId: null
 };
@@ -58,6 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
     modalCartao = new bootstrap.Modal(document.getElementById("modalCartao"));
     modalMembrosCartao = new bootstrap.Modal(document.getElementById("modalMembrosCartao"));
     modalChamadosCartao = new bootstrap.Modal(document.getElementById("modalChamadosCartao"));
+    modalVisualizarAnexoTarefa = new bootstrap.Modal(document.getElementById("modalVisualizarAnexoTarefa"));
     modalTemplateCartao = new bootstrap.Modal(document.getElementById("modalTemplateCartao"));
     modalSelecionarTemplate = new bootstrap.Modal(document.getElementById("modalSelecionarTemplate"));
     modalAcoesLista = new bootstrap.Modal(document.getElementById("modalAcoesLista"));
@@ -85,6 +92,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btnFocoChamados")?.addEventListener("click", abrirModalChamadosCartao);
     document.getElementById("btnSalvarMembrosCartao")?.addEventListener("click", salvarMembrosCartao);
     document.getElementById("btnSalvarChamadosCartao")?.addEventListener("click", salvarChamadosCartao);
+    document.getElementById("btnAlternarEtiquetasTarefa")?.addEventListener("click", alternarPainelEtiquetasTarefa);
+    document.getElementById("btnCriarEtiquetaTarefa")?.addEventListener("click", criarEtiquetaTarefa);
+    document.getElementById("btnCriarChecklistTarefa")?.addEventListener("click", criarChecklistTarefa);
+    document.getElementById("btnEnviarAnexoTarefa")?.addEventListener("click", enviarAnexoTarefa);
     document.getElementById("cartaoGrupoTodoModal")?.addEventListener("change", atualizarMembrosModalGrupoTodo);
     document.getElementById("cartaoMembros")?.addEventListener("change", () => {
         atualizarResumoMembros();
@@ -434,7 +445,7 @@ async function excluirListaAtual() {
     }
 }
 
-function abrirModalCartaoNovo(colunaId) {
+async function abrirModalCartaoNovo(colunaId) {
     document.getElementById("formCartao").reset();
     setValue("cartaoId", "");
     setValue("cartaoColunaId", colunaId);
@@ -453,6 +464,11 @@ function abrirModalCartaoNovo(colunaId) {
         arquivado: false,
         podeEditar: true,
         podeSairVinculo: false,
+        podeGerenciarEtiquetas: true,
+        etiquetasDisponiveis: [],
+        etiquetasAplicadas: [],
+        checklists: [],
+        anexos: [],
         titulo: "",
         colunaId
     };
@@ -460,6 +476,10 @@ function abrirModalCartaoNovo(colunaId) {
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados();
+    await carregarEtiquetasTarefaUsuario();
+    renderizarEtiquetasTarefa(cartaoAtualEstado.etiquetasDisponiveis, []);
+    renderizarChecklistsTarefa([]);
+    renderizarAnexosTarefa([]);
     ocultarSalvarComoTemplate();
     document.getElementById("btnArquivarCartao")?.classList.add("d-none");
     document.getElementById("btnSairCartao")?.classList.add("d-none");
@@ -513,6 +533,11 @@ async function abrirModalCartaoExistente(id) {
         arquivado: !!data.arquivado,
         podeEditar: !!data.podeEditar,
         podeSairVinculo: !!data.podeSairVinculo,
+        podeGerenciarEtiquetas: true,
+        etiquetasDisponiveis: data.etiquetasDisponiveis || [],
+        etiquetasAplicadas: data.etiquetasAplicadas || [],
+        checklists: data.checklists || [],
+        anexos: data.anexos || [],
         titulo: data.titulo || "",
         colunaId: data.colunaId
     };
@@ -520,6 +545,9 @@ async function abrirModalCartaoExistente(id) {
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
     atualizarResumoChamados(data.chamadosVinculados || []);
+    renderizarEtiquetasTarefa(data.etiquetasDisponiveis || [], data.etiquetasAplicadas || []);
+    renderizarChecklistsTarefa(data.checklists || []);
+    renderizarAnexosTarefa(data.anexos || []);
     renderizarAtividade(data.atividade || []);
     ocultarSalvarComoTemplate();
 
@@ -601,7 +629,8 @@ function montarPayloadSalvarCartao(id) {
         corCapa: getNullableString("cartaoCorCapa"),
         compartilharGrupo: !!document.getElementById("cartaoCompartilharGrupo")?.checked,
         membrosIds: getSelectedNumbers("cartaoMembros"),
-        chamadosIds: getSelectedNumbers("cartaoChamados")
+        chamadosIds: getSelectedNumbers("cartaoChamados"),
+        etiquetasIds: [...document.querySelectorAll("[data-etiqueta-tarefa]:checked")].map(input => Number(input.dataset.etiquetaTarefa))
     };
 }
 
@@ -1510,6 +1539,275 @@ function atualizarResumoChamados(chamadosVinculados) {
         : "Nenhum chamado vinculado.";
 }
 
+function corEtiquetaSegura(cor) {
+    return /^#[0-9a-fA-F]{6}$/.test(String(cor || "")) ? cor : "#6c757d";
+}
+
+function alternarPainelEtiquetasTarefa() {
+    const painel = document.getElementById("painelEtiquetasTarefa");
+    const botao = document.getElementById("btnAlternarEtiquetasTarefa");
+    if (!painel || !botao) return;
+
+    const abrir = painel.classList.contains("d-none");
+    painel.classList.toggle("d-none", !abrir);
+    botao.classList.toggle("is-open", abrir);
+    botao.querySelector("i")?.classList.toggle("bi-plus-lg", !abrir);
+    botao.querySelector("i")?.classList.toggle("bi-x-lg", abrir);
+}
+
+function renderizarEtiquetasTarefa(disponiveis, aplicadas) {
+    cartaoAtualEstado.etiquetasDisponiveis = disponiveis || [];
+    cartaoAtualEstado.etiquetasAplicadas = aplicadas || [];
+    const podeGerenciar = cartaoAtualEstado.podeGerenciarEtiquetas !== false;
+    const aplicadasIds = new Set(cartaoAtualEstado.etiquetasAplicadas.map(e => Number(e.id)));
+    const resumo = document.getElementById("cartaoEtiquetasResumo");
+    const lista = document.getElementById("listaEtiquetasTarefa");
+
+    if (resumo) {
+        resumo.innerHTML = cartaoAtualEstado.etiquetasAplicadas.length
+            ? cartaoAtualEstado.etiquetasAplicadas.map(e => `<span class="task-label-chip" style="background:${corEtiquetaSegura(e.cor)}">${escapeHtml(e.nome)}</span>`).join("")
+            : '<span class="text-muted small">Nenhuma</span>';
+    }
+
+    if (!lista) return;
+    lista.innerHTML = cartaoAtualEstado.etiquetasDisponiveis.length
+        ? cartaoAtualEstado.etiquetasDisponiveis.map(e => `
+            <label class="task-check-row">
+                <input type="checkbox" class="form-check-input" data-etiqueta-tarefa="${e.id}" ${aplicadasIds.has(Number(e.id)) ? "checked" : ""} ${podeGerenciar ? "" : "disabled"}>
+                <span class="task-label-chip" style="background:${corEtiquetaSegura(e.cor)}">${escapeHtml(e.nome)}</span>
+                <button type="button" class="btn btn-sm btn-link text-light ms-auto" data-editar-etiqueta="${e.id}" ${podeGerenciar ? "" : "disabled"}><i class="bi bi-pencil"></i></button>
+                <button type="button" class="btn btn-sm btn-link text-danger" data-excluir-etiqueta="${e.id}" ${podeGerenciar ? "" : "disabled"}><i class="bi bi-trash"></i></button>
+            </label>
+        `).join("")
+        : '<div class="text-muted small">Crie uma etiqueta para usar nesta tarefa.</div>';
+
+    lista.querySelectorAll("[data-etiqueta-tarefa]").forEach(input => input.addEventListener("change", salvarEtiquetasCartao));
+    lista.querySelectorAll("[data-editar-etiqueta]").forEach(btn => btn.addEventListener("click", editarEtiquetaTarefa));
+    lista.querySelectorAll("[data-excluir-etiqueta]").forEach(btn => btn.addEventListener("click", excluirEtiquetaTarefa));
+}
+
+async function carregarEtiquetasTarefaUsuario() {
+    try {
+        const response = await fetch(`?handler=EtiquetasTarefaUsuario&grupoId=${encodeURIComponent(getGrupoId())}`);
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+        const data = await response.json();
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel carregar as etiquetas.");
+            return;
+        }
+
+        cartaoAtualEstado.etiquetasDisponiveis = data.dados || [];
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel carregar as etiquetas.");
+    }
+}
+
+async function criarEtiquetaTarefa() {
+    try {
+        const data = await fetchJson("?handler=CriarEtiquetaTarefa", { grupoId: getGrupoId(), nome: getValue("novaEtiquetaNome"), cor: getValue("novaEtiquetaCor") || "#dc3545" });
+        if (!data.success) return mostrarToast(data.message || "Nao foi possivel criar a etiqueta.");
+        cartaoAtualEstado.etiquetasDisponiveis.push(data.dados);
+        setValue("novaEtiquetaNome", "");
+        renderizarEtiquetasTarefa(cartaoAtualEstado.etiquetasDisponiveis, cartaoAtualEstado.etiquetasAplicadas);
+        mostrarToast("Etiqueta criada.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel criar a etiqueta.");
+    }
+}
+
+async function editarEtiquetaTarefa(event) {
+    const etiqueta = cartaoAtualEstado.etiquetasDisponiveis.find(e => Number(e.id) === Number(event.currentTarget.dataset.editarEtiqueta));
+    if (!etiqueta) return;
+    const nome = prompt("Nome da etiqueta", etiqueta.nome);
+    if (!nome) return;
+    const cor = prompt("Cor hexadecimal", etiqueta.cor);
+    if (!cor) return;
+    try {
+        const data = await fetchJson("?handler=EditarEtiquetaTarefa", { grupoId: getGrupoId(), etiquetaId: etiqueta.id, nome, cor });
+        if (!data.success) return mostrarToast(data.message || "Nao foi possivel editar a etiqueta.");
+        cartaoAtualEstado.etiquetasDisponiveis = cartaoAtualEstado.etiquetasDisponiveis.map(e => Number(e.id) === Number(etiqueta.id) ? data.dados : e);
+        cartaoAtualEstado.etiquetasAplicadas = cartaoAtualEstado.etiquetasAplicadas.map(e => Number(e.id) === Number(etiqueta.id) ? data.dados : e);
+        renderizarEtiquetasTarefa(cartaoAtualEstado.etiquetasDisponiveis, cartaoAtualEstado.etiquetasAplicadas);
+        atualizarEtiquetasCard(toNullableInt(getValue("cartaoId")), cartaoAtualEstado.etiquetasAplicadas);
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel editar a etiqueta.");
+    }
+}
+
+async function excluirEtiquetaTarefa(event) {
+    const etiquetaId = Number(event.currentTarget.dataset.excluirEtiqueta);
+    if (!confirm("Excluir esta etiqueta? Ela sera removida das tarefas onde estiver aplicada.")) return;
+    try {
+        const data = await fetchJson("?handler=ExcluirEtiquetaTarefa", { grupoId: getGrupoId(), etiquetaId });
+        if (!data.success) return mostrarToast(data.message || "Nao foi possivel excluir a etiqueta.");
+        cartaoAtualEstado.etiquetasDisponiveis = cartaoAtualEstado.etiquetasDisponiveis.filter(e => Number(e.id) !== etiquetaId);
+        cartaoAtualEstado.etiquetasAplicadas = cartaoAtualEstado.etiquetasAplicadas.filter(e => Number(e.id) !== etiquetaId);
+        renderizarEtiquetasTarefa(cartaoAtualEstado.etiquetasDisponiveis, cartaoAtualEstado.etiquetasAplicadas);
+        atualizarEtiquetasCard(toNullableInt(getValue("cartaoId")), cartaoAtualEstado.etiquetasAplicadas);
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel excluir a etiqueta.");
+    }
+}
+
+async function salvarEtiquetasCartao() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    const etiquetasIds = [...document.querySelectorAll("[data-etiqueta-tarefa]:checked")].map(input => Number(input.dataset.etiquetaTarefa));
+    if (!cartaoId) {
+        const selecionadas = cartaoAtualEstado.etiquetasDisponiveis.filter(e => etiquetasIds.includes(Number(e.id)));
+        renderizarEtiquetasTarefa(cartaoAtualEstado.etiquetasDisponiveis, selecionadas);
+        return;
+    }
+
+    try {
+        const data = await fetchJson("?handler=SalvarEtiquetasCartao", { grupoId: getGrupoId(), cartaoId, etiquetasIds });
+        if (!data.success) return mostrarToast(data.message || "Nao foi possivel salvar as etiquetas.");
+        renderizarEtiquetasTarefa(cartaoAtualEstado.etiquetasDisponiveis, data.dados || []);
+        atualizarEtiquetasCard(cartaoId, data.dados || []);
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel salvar as etiquetas.");
+    }
+}
+
+function atualizarEtiquetasCard(cartaoId, etiquetas) {
+    const card = document.querySelector(`.task-card[data-card-id="${cartaoId}"]`);
+    if (!card) return;
+    card.querySelector(".task-card-labels")?.remove();
+    if (!etiquetas?.length) return;
+    const labels = document.createElement("div");
+    labels.className = "task-card-labels";
+    labels.innerHTML = etiquetas.map(e => `<span class="task-label-chip" style="background:${corEtiquetaSegura(e.cor)}">${escapeHtml(e.nome)}</span>`).join("");
+    card.querySelector(".task-card-main")?.after(labels);
+}
+
+function renderizarChecklistsTarefa(checklists) {
+    cartaoAtualEstado.checklists = checklists || [];
+    const container = document.getElementById("listaChecklistsTarefa");
+    if (!container) return;
+    container.innerHTML = cartaoAtualEstado.checklists.length ? cartaoAtualEstado.checklists.map(checklist => {
+        const total = checklist.itens?.length || 0;
+        const feitos = (checklist.itens || []).filter(i => i.concluido).length;
+        return `<div class="task-checklist" data-checklist-id="${checklist.id}">
+            <div class="task-checklist-title"><strong>${escapeHtml(checklist.titulo)}</strong><span class="small text-muted">${feitos}/${total}</span><button type="button" class="btn btn-sm btn-link text-light" data-editar-checklist="${checklist.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-pencil"></i></button><button type="button" class="btn btn-sm btn-link text-danger" data-excluir-checklist="${checklist.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-trash"></i></button></div>
+            <div class="task-check-list">${(checklist.itens || []).map(item => `<label class="task-check-row"><input type="checkbox" class="form-check-input" data-item-checklist="${item.id}" ${item.concluido ? "checked" : ""} ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><span class="${item.concluido ? "text-decoration-line-through text-muted" : ""}">${escapeHtml(item.descricao)}</span><button type="button" class="btn btn-sm btn-link text-light ms-auto" data-editar-item-checklist="${item.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-pencil"></i></button><button type="button" class="btn btn-sm btn-link text-danger" data-excluir-item-checklist="${item.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-trash"></i></button></label>`).join("")}</div>
+            <div class="input-group input-group-sm mt-2"><input type="text" class="form-control" maxlength="255" placeholder="Novo item" data-novo-item-checklist="${checklist.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><button type="button" class="btn btn-outline-primary" data-criar-item-checklist="${checklist.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-plus-lg"></i></button></div>
+        </div>`;
+    }).join("") : '<div class="text-muted small">Nenhum checklist criado.</div>';
+
+    container.querySelectorAll("[data-editar-checklist]").forEach(btn => btn.addEventListener("click", editarChecklistTarefa));
+    container.querySelectorAll("[data-excluir-checklist]").forEach(btn => btn.addEventListener("click", excluirChecklistTarefa));
+    container.querySelectorAll("[data-criar-item-checklist]").forEach(btn => btn.addEventListener("click", criarItemChecklistTarefa));
+    container.querySelectorAll("[data-item-checklist]").forEach(input => input.addEventListener("change", alternarItemChecklistTarefa));
+    container.querySelectorAll("[data-editar-item-checklist]").forEach(btn => btn.addEventListener("click", editarItemChecklistTarefa));
+    container.querySelectorAll("[data-excluir-item-checklist]").forEach(btn => btn.addEventListener("click", excluirItemChecklistTarefa));
+}
+
+async function criarChecklistTarefa() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) return mostrarToast("Salve a tarefa antes de criar checklists.", "warning");
+    await atualizarChecklists("?handler=CriarChecklistTarefa", { grupoId: getGrupoId(), cartaoId, titulo: getValue("novoChecklistTitulo") }, () => setValue("novoChecklistTitulo", ""));
+}
+
+async function editarChecklistTarefa(event) {
+    const checklistId = Number(event.currentTarget.dataset.editarChecklist);
+    const checklist = cartaoAtualEstado.checklists.find(c => Number(c.id) === checklistId);
+    const titulo = prompt("Titulo do checklist", checklist?.titulo || "");
+    if (titulo) await atualizarChecklists("?handler=EditarChecklistTarefa", { grupoId: getGrupoId(), checklistId, titulo });
+}
+
+async function excluirChecklistTarefa(event) {
+    const checklistId = Number(event.currentTarget.dataset.excluirChecklist);
+    if (confirm("Excluir este checklist?")) await atualizarChecklists("?handler=ExcluirChecklistTarefa", { grupoId: getGrupoId(), checklistId });
+}
+
+async function criarItemChecklistTarefa(event) {
+    const checklistId = Number(event.currentTarget.dataset.criarItemChecklist);
+    const input = document.querySelector(`[data-novo-item-checklist="${checklistId}"]`);
+    await atualizarChecklists("?handler=CriarItemChecklistTarefa", { grupoId: getGrupoId(), checklistId, descricao: input?.value || "" }, () => { if (input) input.value = ""; });
+}
+
+async function alternarItemChecklistTarefa(event) {
+    await atualizarChecklists("?handler=AlternarItemChecklistTarefa", { grupoId: getGrupoId(), itemId: Number(event.currentTarget.dataset.itemChecklist), concluido: !!event.currentTarget.checked });
+}
+
+async function editarItemChecklistTarefa(event) {
+    const itemId = Number(event.currentTarget.dataset.editarItemChecklist);
+    const item = cartaoAtualEstado.checklists.flatMap(c => c.itens || []).find(i => Number(i.id) === itemId);
+    const descricao = prompt("Descricao do item", item?.descricao || "");
+    if (descricao) await atualizarChecklists("?handler=EditarItemChecklistTarefa", { grupoId: getGrupoId(), itemId, descricao });
+}
+
+async function excluirItemChecklistTarefa(event) {
+    const itemId = Number(event.currentTarget.dataset.excluirItemChecklist);
+    if (confirm("Excluir este item?")) await atualizarChecklists("?handler=ExcluirItemChecklistTarefa", { grupoId: getGrupoId(), itemId });
+}
+
+async function atualizarChecklists(handler, payload, aoSucesso) {
+    try {
+        const data = await fetchJson(handler, payload);
+        if (!data.success) return mostrarToast(data.message || "Nao foi possivel atualizar o checklist.");
+        aoSucesso?.();
+        renderizarChecklistsTarefa(data.dados || []);
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel atualizar o checklist.");
+    }
+}
+
+function renderizarAnexosTarefa(anexos) {
+    cartaoAtualEstado.anexos = anexos || [];
+    const container = document.getElementById("listaAnexosTarefa");
+    if (!container) return;
+    container.innerHTML = cartaoAtualEstado.anexos.length ? cartaoAtualEstado.anexos.map(anexo => `<div class="task-attachment-row"><div class="min-w-0"><div class="fw-semibold text-truncate">${escapeHtml(anexo.nomeOriginal)}</div><div class="small text-muted">${escapeHtml(formatarTamanhoArquivo(anexo.tamanhoBytes))} - ${escapeHtml(anexo.usuario || "")} - ${escapeHtml(formatActivityDateTime(anexo.dataUpload))}</div></div><div class="d-flex gap-1">${anexo.ehImagem ? `<button type="button" class="btn btn-sm btn-outline-light" data-preview-anexo="${anexo.id}"><i class="bi bi-eye"></i></button>` : ""}<a class="btn btn-sm btn-outline-light" href="?handler=BaixarAnexoTarefa&anexoId=${encodeURIComponent(anexo.id)}&grupoId=${encodeURIComponent(getGrupoId())}"><i class="bi bi-download"></i></a><button type="button" class="btn btn-sm btn-outline-danger" data-excluir-anexo="${anexo.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-trash"></i></button></div></div>`).join("") : '<div class="text-muted small">Nenhum anexo enviado.</div>';
+    container.querySelectorAll("[data-preview-anexo]").forEach(btn => btn.addEventListener("click", visualizarAnexoTarefa));
+    container.querySelectorAll("[data-excluir-anexo]").forEach(btn => btn.addEventListener("click", excluirAnexoTarefa));
+}
+
+async function enviarAnexoTarefa() {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    const input = document.getElementById("arquivoAnexoTarefa");
+    if (!cartaoId || !input?.files?.length) return;
+    const formData = new FormData();
+    formData.append("grupoId", getGrupoId());
+    formData.append("cartaoId", cartaoId);
+    formData.append("arquivo", input.files[0]);
+    try {
+        const response = await fetch("?handler=EnviarAnexoTarefa", { method: "POST", body: formData, headers: { "RequestVerificationToken": getToken() } });
+        const data = await response.json();
+        if (!response.ok || !data.success) return mostrarToast(data.message || "Nao foi possivel enviar o anexo.");
+        input.value = "";
+        renderizarAnexosTarefa(data.dados || []);
+        mostrarToast("Anexo enviado.", "success");
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel enviar o anexo.");
+    }
+}
+
+function visualizarAnexoTarefa(event) {
+    const anexoId = Number(event.currentTarget.dataset.previewAnexo);
+    const anexo = cartaoAtualEstado.anexos.find(a => Number(a.id) === anexoId);
+    document.getElementById("modalVisualizarAnexoTarefaTitulo").textContent = anexo?.nomeOriginal || "Imagem";
+    document.getElementById("imagemPreviewAnexoTarefa").src = `?handler=VisualizarAnexoTarefa&anexoId=${encodeURIComponent(anexoId)}&grupoId=${encodeURIComponent(getGrupoId())}`;
+    modalVisualizarAnexoTarefa?.show();
+}
+
+async function excluirAnexoTarefa(event) {
+    const anexoId = Number(event.currentTarget.dataset.excluirAnexo);
+    if (!confirm("Excluir este anexo?")) return;
+    try {
+        const data = await fetchJson("?handler=ExcluirAnexoTarefa", { grupoId: getGrupoId(), anexoId });
+        if (!data.success) return mostrarToast(data.message || "Nao foi possivel excluir o anexo.");
+        renderizarAnexosTarefa(data.dados || []);
+    } catch (error) {
+        mostrarToast(error.message || "Nao foi possivel excluir o anexo.");
+    }
+}
+
+function formatarTamanhoArquivo(bytes) {
+    const valor = Number(bytes || 0);
+    if (valor < 1024) return `${valor} B`;
+    if (valor < 1024 * 1024) return `${(valor / 1024).toFixed(1)} KB`;
+    return `${(valor / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function atualizarContadorLista(lista) {
     const contador = lista?.querySelector(".task-list-count");
     const total = lista?.querySelectorAll(".task-card").length ?? 0;
@@ -1587,6 +1885,7 @@ async function fetchJson(url, payload) {
 function configurarEdicao(podeEditar) {
     document.querySelectorAll("#formCartao input, #formCartao textarea, #formCartao select").forEach(el => {
         if (el.id === "comentarioTexto") return;
+        if (el.closest("#secaoEtiquetasTarefa")) return;
         el.disabled = !podeEditar;
     });
 

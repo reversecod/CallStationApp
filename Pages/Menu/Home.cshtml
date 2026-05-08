@@ -1020,7 +1020,7 @@
                             };
 
                             <div class="ticket-card @classeStatus" data-id="@chamado.Id" data-status="@chamado.Status" role="button" draggable="true">
-                                @if (chamado.TemComentariosNaoLidos)
+                                @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Nenhuma && chamado.TemComentariosNaoLidos)
                                 {
                                     <span class="ticket-comment-alert" data-comment-badge title="Novo comentário"></span>
                                 }
@@ -1135,6 +1135,8 @@
                                 </div>
 
                                 <div class="mb-2 chamado-actions-row">
+                                    @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Nenhuma)
+                                    {
                                     <button type="button" class="btn btn-outline-primary btn-comentarios-chamado" id="btnAbrirComentariosChamado">
                                         Comentários
                                         <span id="comentariosChamadoIndicador"
@@ -1142,6 +1144,7 @@
                                               aria-hidden="true"
                                               title="Novo comentário"></span>
                                     </button>
+                                    }
                                     @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Colaborador)
                                     {
                                     <div class="chamado-vinculos-bar">
@@ -1288,6 +1291,8 @@
         </div>
     </main>
 
+    @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Nenhuma)
+    {
     <div class="modal fade" id="modalComentariosChamado" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content chamado-editor-card">
@@ -1318,6 +1323,7 @@
             </div>
         </div>
     </div>
+    }
 
     @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Colaborador)
     {

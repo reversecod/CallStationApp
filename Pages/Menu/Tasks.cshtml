@@ -114,6 +114,15 @@
                                     </button>
                                     <div class="task-title">@cartao.Titulo</div>
                                 </div>
+                                @if (cartao.Etiquetas.Any())
+                                {
+                                    <div class="task-card-labels">
+                                        @foreach (var etiqueta in cartao.Etiquetas)
+                                        {
+                                            <span class="task-label-chip" style="background:@etiqueta.Cor">@etiqueta.Nome</span>
+                                        }
+                                    </div>
+                                }
 
                                 <div class="task-meta">
                                     @if (cartao.Chamados.Any())
@@ -255,8 +264,40 @@
                             </div>
 
                             <div class="mb-3">
+                                <div class="task-label-compact mb-3" id="secaoEtiquetasTarefa">
+                                    <div class="task-label-compact-header">
+                                        <div class="d-flex align-items-center gap-2 min-w-0">
+                                            <span class="fw-semibold">Etiquetas</span>
+                                            <div id="cartaoEtiquetasResumo" class="task-label-list"></div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-light task-label-toggle" id="btnAlternarEtiquetasTarefa" aria-label="Configurar etiquetas">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                    <div class="task-label-compact-body d-none" id="painelEtiquetasTarefa">
+                                        <div id="listaEtiquetasTarefa" class="task-check-list mb-3"></div>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control" id="novaEtiquetaNome" maxlength="50" placeholder="Nova etiqueta">
+                                            <input type="color" class="form-control form-control-color" id="novaEtiquetaCor" value="#dc3545" title="Cor">
+                                            <button type="button" class="btn btn-outline-primary" id="btnCriarEtiquetaTarefa">
+                                                <i class="bi bi-plus-lg"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                                 <label class="form-label" for="cartaoDescricao">Descrição</label>
                                 <textarea class="form-control" id="cartaoDescricao" rows="5" placeholder="Adicione uma descrição mais detalhada..."></textarea>
+                            </div>
+
+                            <div class="side-panel mb-3" id="secaoAnexosTarefa">
+                                <h3><i class="bi bi-paperclip me-2"></i>Anexos</h3>
+                                <div id="listaAnexosTarefa" class="task-attachments"></div>
+                                <div class="input-group input-group-sm mt-3">
+                                    <input type="file" class="form-control" id="arquivoAnexoTarefa">
+                                    <button type="button" class="btn btn-outline-primary" id="btnEnviarAnexoTarefa">
+                                        <i class="bi bi-upload"></i>
+                                    </button>
+                                </div>
                             </div>
 
                             <div class="row g-3">
@@ -303,13 +344,9 @@
                                 </div>
                             </div>
 
-                            <div class="mt-3">
-                                <label class="form-label" for="cartaoCorCapa">Cor da capa</label>
-                                <input type="color" class="form-control form-control-color" id="cartaoCorCapa" value="#0d6efd">
-                            </div>
                         </div>
 
-                        <div class="col-lg-5">
+                        <div class="col-lg-5 task-side-stack">
                             <div class="side-panel" id="secaoMembros">
                                 <h3><i class="bi bi-people me-2"></i>Visibilidade</h3>
                                 <div class="form-check form-switch mb-3">
@@ -326,7 +363,7 @@
                                 <div id="cartaoChamadosResumo" class="selection-summary text-muted small">Nenhum chamado vinculado.</div>
                             </div>
 
-                            <div class="side-panel mt-3">
+                            <div class="side-panel mt-3 task-activity-panel">
                                 <h3><i class="bi bi-chat-left-text me-2"></i>Comentários e atividade</h3>
                                 <div class="input-group input-group-sm mb-3">
                                     <input type="text" class="form-control" id="comentarioTexto" maxlength="250" placeholder="Escrever um comentário...">
@@ -335,6 +372,24 @@
                                 <div id="cartaoAtividade" class="activity-list">
                                     <div class="text-muted small">Sem atividade carregada.</div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="side-panel mt-3" id="secaoChecklistsTarefa">
+                                <h3><i class="bi bi-check2-square me-2"></i>Checklists</h3>
+                                <div id="listaChecklistsTarefa" class="task-checklists"></div>
+                                <div class="input-group input-group-sm mt-3">
+                                    <input type="text" class="form-control" id="novoChecklistTitulo" maxlength="120" placeholder="Novo checklist">
+                                    <button type="button" class="btn btn-outline-primary" id="btnCriarChecklistTarefa">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="side-panel mt-3">
+                                <h3><i class="bi bi-palette me-2"></i>Cor da capa</h3>
+                                <input type="color" class="form-control form-control-color" id="cartaoCorCapa" value="#0d6efd">
                             </div>
                         </div>
                     </div>
@@ -410,6 +465,20 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary" id="btnSalvarChamadosCartao">Aplicar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalVisualizarAnexoTarefa" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="modalVisualizarAnexoTarefaTitulo">Imagem</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="imagemPreviewAnexoTarefa" class="img-fluid rounded" alt="Preview do anexo">
             </div>
         </div>
     </div>

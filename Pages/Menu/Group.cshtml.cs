@@ -398,27 +398,211 @@ public class GroupModel : PageModel
         return new JsonResult(new { success = true, message = "Tipo de chamado arquivado." });
     }
 
-    public async Task<IActionResult> OnPostExcluirSetorAsync([FromBody] IdRequest request)
-    {
-        var usuarioId = await ValidarPostAdminAsync();
-        if (usuarioId.Result != null)
-            return usuarioId.Result;
+    public Task<IActionResult> OnPostEditarSetorAsync([FromBody] EditarNomeRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var setor = await _context.Setores.FirstOrDefaultAsync(s => s.Id == request.Id && s.GrupoId == GrupoId);
+            if (setor == null)
+                return NotFound(new { success = false, message = "Setor não encontrado." });
 
-        var emUso = await _context.Chamados.AnyAsync(c => c.GrupoId == GrupoId && c.SetorId == request.Id);
-        if (emUso)
-            return BadRequest(new { success = false, message = "Setor vinculado a chamados. Exclusao fisica bloqueada." });
+            var nome = Limpar(request.Nome);
+            if (!NomeValido(nome, 50))
+                return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
 
-        var setor = await _context.Setores.FirstOrDefaultAsync(s => s.Id == request.Id && s.GrupoId == GrupoId);
-        if (setor == null)
-            return NotFound(new { success = false, message = "Setor não encontrado." });
+            if (await _context.Setores.AnyAsync(s => s.GrupoId == GrupoId && s.Id != request.Id && s.NomeSetor == nome))
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
 
-        _context.Setores.Remove(setor);
-        Auditar(usuarioId.Id, "Excluir", "Setor", setor.Id, null, setor.NomeSetor, null);
-        await _context.SaveChangesAsync();
-        InvalidarCacheCatalogoGrupo();
+            AuditarSeMudou(usuarioId, "Setor", setor.Id, "Nome", setor.NomeSetor, nome);
+            setor.NomeSetor = nome;
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoGrupo();
+            return new JsonResult(new { success = true, message = "Setor atualizado." });
+        });
 
-        return new JsonResult(new { success = true, message = "Setor excluido." });
-    }
+    public Task<IActionResult> OnPostEditarTipoOcorrenciaAsync([FromBody] EditarNomeRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var tipo = await _context.OcorrenciasTipo.FirstOrDefaultAsync(t => t.Id == request.Id && t.GrupoId == GrupoId);
+            if (tipo == null)
+                return NotFound(new { success = false, message = "Tipo de ocorrência não encontrado." });
+
+            var nome = Limpar(request.Nome);
+            if (!NomeValido(nome, 50))
+                return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
+
+            if (await _context.OcorrenciasTipo.AnyAsync(t => t.GrupoId == GrupoId && t.Id != request.Id && t.TipoOcorrencia == nome))
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+            AuditarSeMudou(usuarioId, "OcorrenciaTipo", tipo.Id, "Nome", tipo.TipoOcorrencia, nome);
+            tipo.TipoOcorrencia = nome;
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoGrupo();
+            return new JsonResult(new { success = true, message = "Tipo de ocorrência atualizado." });
+        });
+
+    public Task<IActionResult> OnPostEditarCategoriaAsync([FromBody] EditarNomeRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var categoria = await (from c in _context.OcorrenciasCategoria
+                                   join t in _context.OcorrenciasTipo on c.TipoId equals t.Id
+                                   where c.Id == request.Id && t.GrupoId == GrupoId
+                                   select c).FirstOrDefaultAsync();
+            if (categoria == null)
+                return NotFound(new { success = false, message = "Categoria não encontrada." });
+
+            var nome = Limpar(request.Nome);
+            if (!NomeValido(nome, 50))
+                return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
+
+            if (await _context.OcorrenciasCategoria.AnyAsync(c => c.TipoId == categoria.TipoId && c.Id != request.Id && c.CategoriaOcorrencia == nome))
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+            AuditarSeMudou(usuarioId, "OcorrenciaCategoria", categoria.Id, "Nome", categoria.CategoriaOcorrencia, nome);
+            categoria.CategoriaOcorrencia = nome;
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoTipo(categoria.TipoId);
+            return new JsonResult(new { success = true, message = "Categoria atualizada." });
+        });
+
+    public Task<IActionResult> OnPostEditarSubcategoriaAsync([FromBody] EditarNomeRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var subcategoria = await (from s in _context.OcorrenciasSubcategoria
+                                      join c in _context.OcorrenciasCategoria on s.CategoriaId equals c.Id
+                                      join t in _context.OcorrenciasTipo on c.TipoId equals t.Id
+                                      where s.Id == request.Id && t.GrupoId == GrupoId
+                                      select s).FirstOrDefaultAsync();
+            if (subcategoria == null)
+                return NotFound(new { success = false, message = "Subcategoria não encontrada." });
+
+            var nome = Limpar(request.Nome);
+            if (!NomeValido(nome, 100))
+                return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
+
+            if (await _context.OcorrenciasSubcategoria.AnyAsync(s => s.CategoriaId == subcategoria.CategoriaId && s.Id != request.Id && s.SubcategoriaOcorrencia == nome))
+                return BadRequest(new { success = false, message = "Ja existe um item com este nome." });
+
+            AuditarSeMudou(usuarioId, "OcorrenciaSubcategoria", subcategoria.Id, "Nome", subcategoria.SubcategoriaOcorrencia, nome);
+            subcategoria.SubcategoriaOcorrencia = nome;
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoCategoria(subcategoria.CategoriaId);
+            return new JsonResult(new { success = true, message = "Subcategoria atualizada." });
+        });
+
+    public Task<IActionResult> OnPostEditarTipoChamadoAsync([FromBody] EditarTipoChamadoRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var tipo = await _context.GruposTiposChamados.FirstOrDefaultAsync(t => t.Id == request.Id && t.GrupoId == GrupoId);
+            if (tipo == null)
+                return NotFound(new { success = false, message = "Tipo de chamado não encontrado." });
+
+            var nome = Limpar(request.Nome);
+            var descricao = Limpar(request.Descricao);
+            if (!NomeValido(nome, 50))
+                return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
+            if (descricao.Length > 160)
+                return BadRequest(new { success = false, message = "Descrição deve ter até 160 caracteres." });
+
+            if (await _context.GruposTiposChamados.AnyAsync(t => t.GrupoId == GrupoId && t.Id != request.Id && t.Nome == nome))
+                return BadRequest(new { success = false, message = "Tipo de chamado duplicado." });
+
+            AuditarSeMudou(usuarioId, "GrupoTipoChamado", tipo.Id, "Nome", tipo.Nome, nome);
+            AuditarSeMudou(usuarioId, "GrupoTipoChamado", tipo.Id, "Descricao", tipo.Descricao, descricao);
+            tipo.Nome = nome;
+            tipo.Descricao = string.IsNullOrWhiteSpace(descricao) ? null : descricao;
+            await _context.SaveChangesAsync();
+            return new JsonResult(new { success = true, message = "Tipo de chamado atualizado." });
+        });
+
+    public Task<IActionResult> OnPostExcluirTipoOcorrenciaAsync([FromBody] IdRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var tipo = await _context.OcorrenciasTipo.FirstOrDefaultAsync(t => t.Id == request.Id && t.GrupoId == GrupoId);
+            if (tipo == null)
+                return NotFound(new { success = false, message = "Tipo de ocorrência não encontrado." });
+            if (await _context.Chamados.AnyAsync(c => c.GrupoId == GrupoId && c.OcorrenciaTipoId == request.Id))
+                return BadRequest(new { success = false, message = "Tipo vinculado a chamados. Exclusão bloqueada." });
+            if (await _context.OcorrenciasCategoria.AnyAsync(c => c.TipoId == request.Id))
+                return BadRequest(new { success = false, message = "Tipo possui categorias. Exclua as categorias antes." });
+
+            _context.OcorrenciasTipo.Remove(tipo);
+            Auditar(usuarioId, "Excluir", "OcorrenciaTipo", tipo.Id, null, tipo.TipoOcorrencia, null);
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoGrupo();
+            return new JsonResult(new { success = true, message = "Tipo de ocorrência excluído." });
+        });
+
+    public Task<IActionResult> OnPostExcluirCategoriaAsync([FromBody] IdRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var categoria = await (from c in _context.OcorrenciasCategoria
+                                   join t in _context.OcorrenciasTipo on c.TipoId equals t.Id
+                                   where c.Id == request.Id && t.GrupoId == GrupoId
+                                   select c).FirstOrDefaultAsync();
+            if (categoria == null)
+                return NotFound(new { success = false, message = "Categoria não encontrada." });
+            if (await _context.Chamados.AnyAsync(c => c.GrupoId == GrupoId && c.OcorrenciaCategoriaId == request.Id))
+                return BadRequest(new { success = false, message = "Categoria vinculada a chamados. Exclusão bloqueada." });
+            if (await _context.OcorrenciasSubcategoria.AnyAsync(s => s.CategoriaId == request.Id))
+                return BadRequest(new { success = false, message = "Categoria possui subcategorias. Exclua as subcategorias antes." });
+
+            _context.OcorrenciasCategoria.Remove(categoria);
+            Auditar(usuarioId, "Excluir", "OcorrenciaCategoria", categoria.Id, null, categoria.CategoriaOcorrencia, null);
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoTipo(categoria.TipoId);
+            return new JsonResult(new { success = true, message = "Categoria excluída." });
+        });
+
+    public Task<IActionResult> OnPostExcluirSubcategoriaAsync([FromBody] IdRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var subcategoria = await (from s in _context.OcorrenciasSubcategoria
+                                      join c in _context.OcorrenciasCategoria on s.CategoriaId equals c.Id
+                                      join t in _context.OcorrenciasTipo on c.TipoId equals t.Id
+                                      where s.Id == request.Id && t.GrupoId == GrupoId
+                                      select s).FirstOrDefaultAsync();
+            if (subcategoria == null)
+                return NotFound(new { success = false, message = "Subcategoria não encontrada." });
+            if (await _context.Chamados.AnyAsync(c => c.GrupoId == GrupoId && c.OcorrenciaSubcategoriaId == request.Id))
+                return BadRequest(new { success = false, message = "Subcategoria vinculada a chamados. Exclusão bloqueada." });
+
+            _context.OcorrenciasSubcategoria.Remove(subcategoria);
+            Auditar(usuarioId, "Excluir", "OcorrenciaSubcategoria", subcategoria.Id, null, subcategoria.SubcategoriaOcorrencia, null);
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoCategoria(subcategoria.CategoriaId);
+            return new JsonResult(new { success = true, message = "Subcategoria excluída." });
+        });
+
+    public Task<IActionResult> OnPostExcluirTipoChamadoAsync([FromBody] IdRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var tipo = await _context.GruposTiposChamados.FirstOrDefaultAsync(t => t.Id == request.Id && t.GrupoId == GrupoId);
+            if (tipo == null)
+                return NotFound(new { success = false, message = "Tipo de chamado não encontrado." });
+
+            _context.GruposTiposChamados.Remove(tipo);
+            Auditar(usuarioId, "Excluir", "GrupoTipoChamado", tipo.Id, null, tipo.Nome, null);
+            await _context.SaveChangesAsync();
+            return new JsonResult(new { success = true, message = "Tipo de chamado excluído." });
+        });
+
+    public Task<IActionResult> OnPostExcluirSetorAsync([FromBody] IdRequest request) =>
+        ExecutarCatalogoAsync(async usuarioId =>
+        {
+            var emUso = await _context.Chamados.AnyAsync(c => c.GrupoId == GrupoId && c.SetorId == request.Id);
+            if (emUso)
+                return BadRequest(new { success = false, message = "Setor vinculado a chamados. Exclusão bloqueada." });
+
+            var setor = await _context.Setores.FirstOrDefaultAsync(s => s.Id == request.Id && s.GrupoId == GrupoId);
+            if (setor == null)
+                return NotFound(new { success = false, message = "Setor não encontrado." });
+
+            _context.Setores.Remove(setor);
+            Auditar(usuarioId, "Excluir", "Setor", setor.Id, null, setor.NomeSetor, null);
+            await _context.SaveChangesAsync();
+            InvalidarCacheCatalogoGrupo();
+            return new JsonResult(new { success = true, message = "Setor excluído." });
+        });
 
     public async Task<IActionResult> OnPostExcluirGrupoAsync([FromBody] ExcluirGrupoRequest request)
     {
@@ -488,6 +672,30 @@ public class GroupModel : PageModel
 
     private void InvalidarCacheCatalogoCategoria(int categoriaId) =>
         _memoryCache.Remove($"catalogo:subcategorias:{categoriaId}");
+
+    private async Task<IActionResult> ExecutarCatalogoAsync(Func<int, Task<IActionResult>> operacao)
+    {
+        var usuarioId = await ValidarPostAdminAsync();
+        if (usuarioId.Result != null)
+            return usuarioId.Result;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var resultado = await operacao(usuarioId.Id);
+                await transaction.CommitAsync();
+                return resultado;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+    }
 
     private async Task CarregarAsync(int usuarioId)
     {
@@ -767,7 +975,9 @@ public class GroupModel : PageModel
     public record SalvarRegrasRequest(bool ObrigarSetor, bool ObrigarTipoOcorrencia, bool ObrigarCategoria, bool ObrigarSubcategoria, bool PermitirChamadoPublico, bool ExigirSolucaoParaConcluir, int? DiasParaFechamentoAutomatico);
     public record SalvarSlaRequest(bool AutomatizarPendentePorPrazoConclusao, int? HorasAposVencimentoParaPendente, int? HorasAntesPrazoParaAlerta, bool NotificarAdministradoresSla, bool ExibirDataFinalizacaoModal = true, bool ExibirPrazoRespostaModal = true, bool ExibirPrazoConclusaoModal = true);
     public record NomeRequest(string? Nome);
+    public record EditarNomeRequest(int Id, string? Nome);
     public record TipoChamadoRequest(string? Nome, string? Descricao);
+    public record EditarTipoChamadoRequest(int Id, string? Nome, string? Descricao);
     public record CategoriaRequest(int TipoId, string? Nome);
     public record SubcategoriaRequest(int CategoriaId, string? Nome);
     public record IdRequest(int Id);

@@ -350,6 +350,11 @@ namespace CallStationApp.Models
         public int UsuarioId { get; set; }
 
         [Required]
+        [Column("nome_original", TypeName = "varchar(255)")]
+        [StringLength(255)]
+        public string NomeOriginal { get; set; } = string.Empty;
+
+        [Required]
         [Column("nome_arquivo", TypeName = "varchar(255)")]
         [StringLength(255)]
         public string NomeArquivo { get; set; } = string.Empty;
@@ -363,8 +368,15 @@ namespace CallStationApp.Models
         [StringLength(100)]
         public string? TipoArquivo { get; set; }
 
+        [Column("extensao", TypeName = "varchar(20)")]
+        [StringLength(20)]
+        public string? Extensao { get; set; }
+
         [Column("tamanho_bytes")]
         public long? TamanhoBytes { get; set; }
+
+        [Column("eh_imagem")]
+        public bool EhImagem { get; set; }
 
         [Column("eh_capa")]
         public bool EhCapa { get; set; }
@@ -445,6 +457,9 @@ namespace CallStationApp.Models
         [Column("grupo_id")]
         public int GrupoId { get; set; }
 
+        [Column("usuario_id")]
+        public int UsuarioId { get; set; }
+
         [Required]
         [Column("nome", TypeName = "varchar(50)")]
         [StringLength(50)]
@@ -460,6 +475,9 @@ namespace CallStationApp.Models
 
         [ForeignKey(nameof(GrupoId))]
         public Grupo Grupo { get; set; } = null!;
+
+        [ForeignKey(nameof(UsuarioId))]
+        public Usuario Usuario { get; set; } = null!;
     }
 
     public class CartaoTarefaEtiqueta

@@ -344,6 +344,7 @@ public class HomeModel : PageModel
                 podeEditarPrazoResposta = podeEditarPrazoResposta,
                 podeEditarPrazoConclusao = podeEditarPrazoConclusao,
                 podeEditarPublico = GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Publico, idUsuario.Value, chamado.CriadorChamadoId),
+                podeAcessarComentariosChamado = PodeAcessarComentariosChamado(contextoMembro.Permissao),
                 podeAcessarVinculosChamado = PodeAcessarVinculosChamado(contextoMembro.Permissao),
                 podeExcluir = GrupoPermissionService.PodeExcluirChamado(contextoMembro.Permissao, idUsuario.Value, chamado.CriadorChamadoId)
             }
@@ -1444,6 +1445,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
         if (!acesso.Success)
             return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarComentariosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar comentários." });
 
         var chamado = acesso.Chamado!;
         var pagina = Math.Max(page, 1);
@@ -1516,6 +1519,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
         if (!acesso.Success)
             return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarComentariosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para comentar neste chamado." });
 
         string? nomeArquivo = null;
         string? caminhoArquivoSalvo = null;
@@ -1615,6 +1620,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
         if (!acesso.Success)
             return Forbid();
+        if (!PodeAcessarComentariosChamado(acesso.ContextoMembro!.Permissao))
+            return Forbid();
 
         var comentario = await _context.ComentariosChamados
             .AsNoTracking()
@@ -1642,6 +1649,8 @@ public class HomeModel : PageModel
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
         if (!acesso.Success)
             return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarComentariosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar comentários." });
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -2143,6 +2152,9 @@ public class HomeModel : PageModel
 
     private static bool PodeAcessarVinculosChamado(PermissaoUsuario permissao) =>
         permissao is PermissaoUsuario.Administracao or PermissaoUsuario.Tecnico;
+
+    private static bool PodeAcessarComentariosChamado(PermissaoUsuario permissao) =>
+        permissao != PermissaoUsuario.Nenhuma;
 
     private async Task<List<ChamadoVinculoDto>> ObterVinculosVisiveisAsync(int usuarioId, int grupoId, int chamadoId, PermissaoUsuario permissao)
     {

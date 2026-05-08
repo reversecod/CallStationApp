@@ -551,10 +551,13 @@ CREATE TABLE Anexos_tarefas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cartao_tarefa_id INT NOT NULL,
     usuario_id INT NOT NULL,
+    nome_original VARCHAR(255) NOT NULL,
     nome_arquivo VARCHAR(255) NOT NULL,
     caminho_arquivo VARCHAR(500) NOT NULL,
     tipo_arquivo VARCHAR(100) NULL,
+    extensao VARCHAR(20) NULL,
     tamanho_bytes BIGINT NULL,
+    eh_imagem BOOLEAN NOT NULL DEFAULT FALSE,
     eh_capa BOOLEAN NOT NULL DEFAULT FALSE,
     data_upload DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -612,6 +615,7 @@ CREATE INDEX idx_checklist_itens_tarefas_checklist_posicao
 CREATE TABLE Etiquetas_tarefas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     grupo_id INT NOT NULL,
+    usuario_id INT NOT NULL,
     nome VARCHAR(50) NOT NULL,
     cor VARCHAR(20) NOT NULL,
     data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -619,9 +623,15 @@ CREATE TABLE Etiquetas_tarefas (
     CONSTRAINT fk_etiquetas_tarefas_grupo
         FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
 
-    CONSTRAINT uq_etiquetas_tarefas_grupo_nome
-        UNIQUE (grupo_id, nome)
+    CONSTRAINT fk_etiquetas_tarefas_usuario
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id),
+
+    CONSTRAINT uq_etiquetas_tarefas_grupo_usuario_nome
+        UNIQUE (grupo_id, usuario_id, nome)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX idx_etiquetas_tarefas_grupo_usuario
+    ON Etiquetas_tarefas (grupo_id, usuario_id);
 
 CREATE TABLE Cartoes_tarefas_etiquetas (
     cartao_tarefa_id INT NOT NULL,

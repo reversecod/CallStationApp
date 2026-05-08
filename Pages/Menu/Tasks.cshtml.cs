@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace CallStationApp.Pages.Menu;
 
@@ -14,15 +15,27 @@ public class TasksModel : PageModel
     private const decimal OrdemBase = 1024m;
     private const string PrefixoColunaArquivoSistema = "__callstation_archive__";
     private const int LimiteCaracteresComentario = 250;
+    private const long LimiteAnexoTarefaBytes = 10 * 1024 * 1024;
+    private static readonly Regex CorHexRegex = new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
+    private static readonly HashSet<string> ExtensoesAnexoTarefaPermitidas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".xls", ".xlsx", ".csv"
+    };
+    private static readonly HashSet<string> ExtensoesImagemTarefaPermitidas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".gif", ".webp"
+    };
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<TasksModel> _logger;
 
-    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, ILogger<TasksModel> logger)
+    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -444,6 +457,12 @@ public class TasksModel : PageModel
             })
             .ToList();
 
+        var etiquetasDisponiveis = await ObterEtiquetasUsuarioAsync(grupoId, usuarioId.Value);
+        var etiquetasAplicadas = await ObterEtiquetasAplicadasAsync(id, usuarioId.Value);
+        var checklists = await ObterChecklistsCartaoAsync(id);
+        var anexos = await ObterAnexosCartaoAsync(id);
+        var podeEditar = PodeEditarCartao(cartao, usuarioId.Value, membros);
+
         return new JsonResult(new
         {
             success = true,
@@ -465,10 +484,709 @@ public class TasksModel : PageModel
             chamados = chamados.Select(c => c.Id).ToList(),
             chamadosVinculados = chamados,
             chamadosOpcoes,
-            podeEditar = PodeEditarCartao(cartao, usuarioId.Value, membros),
+            etiquetasDisponiveis,
+            etiquetasAplicadas,
+            checklists,
+            anexos,
+            podeEditar,
             podeSairVinculo = cartao.CriadorId != usuarioId.Value && membros.Contains(usuarioId.Value),
             atividade
         });
+    }
+
+    public async Task<IActionResult> OnGetEtiquetasTarefaUsuarioAsync(int grupoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, grupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var etiquetas = await ObterEtiquetasUsuarioAsync(grupoId, usuarioId.Value);
+        return new JsonResult(new { success = true, dados = etiquetas });
+    }
+
+    public async Task<IActionResult> OnPostCriarEtiquetaTarefaAsync([FromBody] SalvarEtiquetaTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var nome = request.Nome?.Trim();
+        var cor = request.Cor?.Trim();
+        if (string.IsNullOrWhiteSpace(nome) || nome.Length > 50)
+            return BadRequest(new { success = false, message = "Nome da etiqueta invalido." });
+        if (string.IsNullOrWhiteSpace(cor) || !CorHexRegex.IsMatch(cor))
+            return BadRequest(new { success = false, message = "Cor da etiqueta invalida." });
+
+        const int maxTentativas = 3;
+        for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            try
+            {
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
+                    {
+                        var existe = await _context.EtiquetasTarefas
+                            .AnyAsync(e => e.GrupoId == request.GrupoId && e.UsuarioId == usuarioId.Value && e.Nome == nome);
+                        if (existe)
+                            return (IActionResult)BadRequest(new { success = false, message = "Ja existe uma etiqueta com este nome." });
+
+                        var etiqueta = new EtiquetaTarefa
+                        {
+                            GrupoId = request.GrupoId,
+                            UsuarioId = usuarioId.Value,
+                            Nome = nome,
+                            Cor = cor,
+                            DataCriacao = DateTime.UtcNow
+                        };
+                        _context.EtiquetasTarefas.Add(etiqueta);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        return (IActionResult)new JsonResult(new { success = true, dados = new EtiquetaTarefaDto(etiqueta.Id, etiqueta.Nome, etiqueta.Cor) });
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+                if (tentativa == maxTentativas)
+                    return BadRequest(new { success = false, message = "Ja existe uma etiqueta com este nome." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao criar etiqueta no grupo {GrupoId}.", request.GrupoId);
+                return BadRequest(new { success = false, message = "Nao foi possivel criar a etiqueta." });
+            }
+        }
+
+        return BadRequest(new { success = false, message = "Nao foi possivel criar a etiqueta." });
+    }
+
+    public async Task<IActionResult> OnPostEditarEtiquetaTarefaAsync([FromBody] EditarEtiquetaTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var nome = request.Nome?.Trim();
+        var cor = request.Cor?.Trim();
+        if (request.EtiquetaId <= 0 || string.IsNullOrWhiteSpace(nome) || nome.Length > 50)
+            return BadRequest(new { success = false, message = "Etiqueta invalida." });
+        if (string.IsNullOrWhiteSpace(cor) || !CorHexRegex.IsMatch(cor))
+            return BadRequest(new { success = false, message = "Cor da etiqueta invalida." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var etiqueta = await _context.EtiquetasTarefas
+                        .FirstOrDefaultAsync(e => e.Id == request.EtiquetaId && e.GrupoId == request.GrupoId && e.UsuarioId == usuarioId.Value);
+                    if (etiqueta == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Etiqueta nao encontrada." });
+
+                    var existe = await _context.EtiquetasTarefas
+                        .AnyAsync(e => e.Id != etiqueta.Id && e.GrupoId == request.GrupoId && e.UsuarioId == usuarioId.Value && e.Nome == nome);
+                    if (existe)
+                        return (IActionResult)BadRequest(new { success = false, message = "Ja existe uma etiqueta com este nome." });
+
+                    etiqueta.Nome = nome;
+                    etiqueta.Cor = cor;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, dados = new EtiquetaTarefaDto(etiqueta.Id, etiqueta.Nome, etiqueta.Cor) });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+        {
+            return BadRequest(new { success = false, message = "Ja existe uma etiqueta com este nome." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao editar etiqueta {EtiquetaId}.", request.EtiquetaId);
+            return BadRequest(new { success = false, message = "Nao foi possivel editar a etiqueta." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostExcluirEtiquetaTarefaAsync([FromBody] EtiquetaTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, request.GrupoId);
+        if (contexto == null)
+            return Forbid();
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var etiqueta = await _context.EtiquetasTarefas
+                        .FirstOrDefaultAsync(e => e.Id == request.EtiquetaId && e.GrupoId == request.GrupoId && e.UsuarioId == usuarioId.Value);
+                    if (etiqueta == null)
+                        return (IActionResult)NotFound(new { success = false, message = "Etiqueta nao encontrada." });
+
+                    var vinculos = await _context.CartoesTarefasEtiquetas
+                        .Where(v => v.EtiquetaId == etiqueta.Id)
+                        .ToListAsync();
+                    _context.CartoesTarefasEtiquetas.RemoveRange(vinculos);
+                    _context.EtiquetasTarefas.Remove(etiqueta);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir etiqueta {EtiquetaId}.", request.EtiquetaId);
+            return BadRequest(new { success = false, message = "Nao foi possivel excluir a etiqueta." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostSalvarEtiquetasCartaoAsync([FromBody] SalvarEtiquetasCartaoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var acesso = await ObterCartaoComAcessoAsync(request.CartaoId, request.GrupoId, usuarioId.Value, exigirEdicao: false);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var etiquetasIds = request.EtiquetasIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+        var etiquetasPermitidas = etiquetasIds.Count == 0
+            ? new List<int>()
+            : await _context.EtiquetasTarefas.AsNoTracking()
+                .Where(e => etiquetasIds.Contains(e.Id) && e.GrupoId == request.GrupoId && e.UsuarioId == usuarioId.Value)
+                .Select(e => e.Id)
+                .ToListAsync();
+
+        if (etiquetasPermitidas.Count != etiquetasIds.Count)
+            return BadRequest(new { success = false, message = "Etiqueta invalida para esta tarefa." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var atuais = await _context.CartoesTarefasEtiquetas
+                        .Where(v => v.CartaoTarefaId == request.CartaoId)
+                        .Join(_context.EtiquetasTarefas.Where(e => e.UsuarioId == usuarioId.Value && e.GrupoId == request.GrupoId),
+                            v => v.EtiquetaId,
+                            e => e.Id,
+                            (v, e) => v)
+                        .ToListAsync();
+
+                    var atuaisIds = atuais.Select(v => v.EtiquetaId).ToHashSet();
+                    var novosIds = etiquetasPermitidas.ToHashSet();
+                    _context.CartoesTarefasEtiquetas.RemoveRange(atuais.Where(v => !novosIds.Contains(v.EtiquetaId)));
+                    foreach (var etiquetaId in novosIds.Where(id => !atuaisIds.Contains(id)))
+                    {
+                        _context.CartoesTarefasEtiquetas.Add(new CartaoTarefaEtiqueta
+                        {
+                            CartaoTarefaId = request.CartaoId,
+                            EtiquetaId = etiquetaId
+                        });
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var aplicadas = await ObterEtiquetasAplicadasAsync(request.CartaoId, usuarioId.Value);
+                    return (IActionResult)new JsonResult(new { success = true, dados = aplicadas });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao salvar etiquetas da tarefa {CartaoId}.", request.CartaoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel salvar as etiquetas." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostCriarChecklistTarefaAsync([FromBody] SalvarChecklistTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var acesso = await ObterCartaoComAcessoAsync(request.CartaoId, request.GrupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var titulo = request.Titulo?.Trim();
+        if (string.IsNullOrWhiteSpace(titulo) || titulo.Length > 120)
+            return BadRequest(new { success = false, message = "Titulo do checklist invalido." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var ultimaPosicao = await _context.ChecklistsTarefas
+                        .Where(c => c.CartaoTarefaId == request.CartaoId)
+                        .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
+
+                    var checklist = new ChecklistTarefa
+                    {
+                        CartaoTarefaId = request.CartaoId,
+                        Titulo = titulo,
+                        Posicao = ultimaPosicao + OrdemBase,
+                        DataCriacao = DateTime.UtcNow
+                    };
+                    _context.ChecklistsTarefas.Add(checklist);
+                    RegistrarHistorico(request.CartaoId, usuarioId.Value, "Checklist criado");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var checklists = await ObterChecklistsCartaoAsync(request.CartaoId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = checklists });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao criar checklist na tarefa {CartaoId}.", request.CartaoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel criar o checklist." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostEditarChecklistTarefaAsync([FromBody] EditarChecklistTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var titulo = request.Titulo?.Trim();
+        if (request.ChecklistId <= 0 || string.IsNullOrWhiteSpace(titulo) || titulo.Length > 120)
+            return BadRequest(new { success = false, message = "Checklist invalido." });
+
+        var checklist = await _context.ChecklistsTarefas
+            .Include(c => c.CartaoTarefa)
+            .FirstOrDefaultAsync(c => c.Id == request.ChecklistId && c.CartaoTarefa.GrupoId == request.GrupoId);
+        if (checklist == null)
+            return NotFound(new { success = false, message = "Checklist nao encontrado." });
+
+        var acesso = await ObterCartaoComAcessoAsync(checklist.CartaoTarefaId, request.GrupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    checklist.Titulo = titulo;
+                    RegistrarHistorico(checklist.CartaoTarefaId, usuarioId.Value, "Checklist editado");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var checklists = await ObterChecklistsCartaoAsync(checklist.CartaoTarefaId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = checklists });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao editar checklist {ChecklistId}.", request.ChecklistId);
+            return BadRequest(new { success = false, message = "Nao foi possivel editar o checklist." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostExcluirChecklistTarefaAsync([FromBody] ChecklistTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var checklist = await _context.ChecklistsTarefas
+            .Include(c => c.CartaoTarefa)
+            .FirstOrDefaultAsync(c => c.Id == request.ChecklistId && c.CartaoTarefa.GrupoId == request.GrupoId);
+        if (checklist == null)
+            return NotFound(new { success = false, message = "Checklist nao encontrado." });
+
+        var acesso = await ObterCartaoComAcessoAsync(checklist.CartaoTarefaId, request.GrupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var itens = await _context.ChecklistItensTarefas
+                        .Where(i => i.ChecklistId == checklist.Id)
+                        .ToListAsync();
+                    _context.ChecklistItensTarefas.RemoveRange(itens);
+                    _context.ChecklistsTarefas.Remove(checklist);
+                    RegistrarHistorico(checklist.CartaoTarefaId, usuarioId.Value, "Checklist excluido");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var checklists = await ObterChecklistsCartaoAsync(checklist.CartaoTarefaId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = checklists });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir checklist {ChecklistId}.", request.ChecklistId);
+            return BadRequest(new { success = false, message = "Nao foi possivel excluir o checklist." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostCriarItemChecklistTarefaAsync([FromBody] SalvarItemChecklistTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var descricao = request.Descricao?.Trim();
+        if (request.ChecklistId <= 0 || string.IsNullOrWhiteSpace(descricao) || descricao.Length > 255)
+            return BadRequest(new { success = false, message = "Item invalido." });
+
+        var checklist = await _context.ChecklistsTarefas
+            .Include(c => c.CartaoTarefa)
+            .FirstOrDefaultAsync(c => c.Id == request.ChecklistId && c.CartaoTarefa.GrupoId == request.GrupoId);
+        if (checklist == null)
+            return NotFound(new { success = false, message = "Checklist nao encontrado." });
+
+        var acesso = await ObterCartaoComAcessoAsync(checklist.CartaoTarefaId, request.GrupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var ultimaPosicao = await _context.ChecklistItensTarefas
+                        .Where(i => i.ChecklistId == request.ChecklistId)
+                        .MaxAsync(i => (decimal?)i.Posicao) ?? 0m;
+                    _context.ChecklistItensTarefas.Add(new ChecklistItemTarefa
+                    {
+                        ChecklistId = request.ChecklistId,
+                        Descricao = descricao,
+                        Concluido = false,
+                        Posicao = ultimaPosicao + OrdemBase
+                    });
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var checklists = await ObterChecklistsCartaoAsync(checklist.CartaoTarefaId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = checklists });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao criar item no checklist {ChecklistId}.", request.ChecklistId);
+            return BadRequest(new { success = false, message = "Nao foi possivel criar o item." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostEditarItemChecklistTarefaAsync([FromBody] EditarItemChecklistTarefaRequest request)
+    {
+        return await AtualizarItemChecklistAsync(request.ItemId, request.GrupoId, request.Descricao, null);
+    }
+
+    public async Task<IActionResult> OnPostAlternarItemChecklistTarefaAsync([FromBody] AlternarItemChecklistTarefaRequest request)
+    {
+        return await AtualizarItemChecklistAsync(request.ItemId, request.GrupoId, null, request.Concluido);
+    }
+
+    public async Task<IActionResult> OnPostExcluirItemChecklistTarefaAsync([FromBody] ItemChecklistTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var item = await _context.ChecklistItensTarefas
+            .Include(i => i.Checklist)
+            .ThenInclude(c => c.CartaoTarefa)
+            .FirstOrDefaultAsync(i => i.Id == request.ItemId && i.Checklist.CartaoTarefa.GrupoId == request.GrupoId);
+        if (item == null)
+            return NotFound(new { success = false, message = "Item nao encontrado." });
+
+        var cartaoId = item.Checklist.CartaoTarefaId;
+        var acesso = await ObterCartaoComAcessoAsync(cartaoId, request.GrupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    _context.ChecklistItensTarefas.Remove(item);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    var checklists = await ObterChecklistsCartaoAsync(cartaoId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = checklists });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir item {ItemId}.", request.ItemId);
+            return BadRequest(new { success = false, message = "Nao foi possivel excluir o item." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostEnviarAnexoTarefaAsync([FromForm] EnviarAnexoTarefaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        if (request.Arquivo == null || request.Arquivo.Length == 0)
+            return BadRequest(new { success = false, message = "Selecione um arquivo." });
+
+        var acesso = await ObterCartaoComAcessoAsync(request.CartaoId, request.GrupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        if (request.Arquivo.Length > LimiteAnexoTarefaBytes)
+            return BadRequest(new { success = false, message = "O anexo deve ter no maximo 10 MB." });
+
+        var extensao = Path.GetExtension(request.Arquivo.FileName).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(extensao) || !ExtensoesAnexoTarefaPermitidas.Contains(extensao))
+            return BadRequest(new { success = false, message = "Tipo de arquivo nao permitido." });
+
+        var ehImagem = ExtensoesImagemTarefaPermitidas.Contains(extensao);
+        if (ehImagem && !await AssinaturaAnexoTarefaPermitidaAsync(request.Arquivo, extensao))
+            return BadRequest(new { success = false, message = "Arquivo de imagem invalido." });
+
+        if (extensao == ".pdf" && !await AssinaturaAnexoTarefaPermitidaAsync(request.Arquivo, extensao))
+            return BadRequest(new { success = false, message = "Arquivo PDF invalido." });
+
+        var nomeOriginal = Path.GetFileName(request.Arquivo.FileName);
+        if (string.IsNullOrWhiteSpace(nomeOriginal))
+            nomeOriginal = $"anexo{extensao}";
+        if (nomeOriginal.Length > 255)
+            nomeOriginal = nomeOriginal[..255];
+
+        var nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
+        var caminhoRelativo = Path.Combine("tarefas", "anexos", nomeArquivo).Replace('\\', '/');
+        var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "tarefas", "anexos");
+        Directory.CreateDirectory(uploadsRoot);
+        var caminhoFisico = Path.Combine(uploadsRoot, nomeArquivo);
+
+        try
+        {
+            await using (var stream = System.IO.File.Create(caminhoFisico))
+            {
+                await request.Arquivo.CopyToAsync(stream);
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var anexo = new AnexoTarefa
+                    {
+                        CartaoTarefaId = request.CartaoId,
+                        UsuarioId = usuarioId.Value,
+                        NomeOriginal = nomeOriginal,
+                        NomeArquivo = nomeArquivo,
+                        CaminhoArquivo = caminhoRelativo,
+                        TipoArquivo = ObterContentTypeAnexoTarefa(extensao),
+                        Extensao = extensao,
+                        TamanhoBytes = request.Arquivo.Length,
+                        EhImagem = ehImagem,
+                        EhCapa = false,
+                        DataUpload = DateTime.UtcNow
+                    };
+                    _context.AnexosTarefas.Add(anexo);
+                    RegistrarHistorico(request.CartaoId, usuarioId.Value, "Anexo adicionado");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var anexos = await ObterAnexosCartaoAsync(request.CartaoId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = anexos });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            if (System.IO.File.Exists(caminhoFisico))
+                System.IO.File.Delete(caminhoFisico);
+
+            _logger.LogError(ex, "Erro ao anexar arquivo na tarefa {CartaoId}.", request.CartaoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel anexar o arquivo." });
+        }
+    }
+
+    public async Task<IActionResult> OnGetBaixarAnexoTarefaAsync(int anexoId, int grupoId)
+    {
+        var acesso = await ObterAnexoComAcessoAsync(anexoId, grupoId, exigirEdicao: false);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var caminho = ObterCaminhoFisicoAnexoTarefa(acesso.Anexo!.CaminhoArquivo);
+        if (!System.IO.File.Exists(caminho))
+            return NotFound();
+
+        return PhysicalFile(caminho, acesso.Anexo.TipoArquivo ?? "application/octet-stream", acesso.Anexo.NomeOriginal);
+    }
+
+    public async Task<IActionResult> OnGetVisualizarAnexoTarefaAsync(int anexoId, int grupoId)
+    {
+        var acesso = await ObterAnexoComAcessoAsync(anexoId, grupoId, exigirEdicao: false);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        if (!acesso.Anexo!.EhImagem)
+            return BadRequest(new { success = false, message = "Este anexo nao e uma imagem." });
+
+        var caminho = ObterCaminhoFisicoAnexoTarefa(acesso.Anexo.CaminhoArquivo);
+        if (!System.IO.File.Exists(caminho))
+            return NotFound();
+
+        return PhysicalFile(caminho, acesso.Anexo.TipoArquivo ?? ObterContentTypeAnexoTarefa(acesso.Anexo.Extensao));
+    }
+
+    public async Task<IActionResult> OnPostExcluirAnexoTarefaAsync([FromBody] AnexoTarefaRequest request)
+    {
+        var acesso = await ObterAnexoComAcessoAsync(request.AnexoId, request.GrupoId, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var caminho = ObterCaminhoFisicoAnexoTarefa(acesso.Anexo!.CaminhoArquivo);
+        var cartaoId = acesso.Anexo.CartaoTarefaId;
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    _context.AnexosTarefas.Remove(acesso.Anexo);
+                    RegistrarHistorico(cartaoId, usuarioId.Value, "Anexo excluido");
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    if (System.IO.File.Exists(caminho))
+                        System.IO.File.Delete(caminho);
+
+                    var anexos = await ObterAnexosCartaoAsync(cartaoId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = anexos });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir anexo {AnexoId}.", request.AnexoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel excluir o anexo." });
+        }
     }
 
     public async Task<IActionResult> OnPostSairCartaoAsync([FromBody] SairCartaoRequest request)
@@ -1711,6 +2429,248 @@ public class TasksModel : PageModel
         }
     }
 
+    private async Task<IActionResult> AtualizarItemChecklistAsync(int itemId, int grupoId, string? descricao, bool? concluido)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var item = await _context.ChecklistItensTarefas
+            .Include(i => i.Checklist)
+            .ThenInclude(c => c.CartaoTarefa)
+            .FirstOrDefaultAsync(i => i.Id == itemId && i.Checklist.CartaoTarefa.GrupoId == grupoId);
+        if (item == null)
+            return NotFound(new { success = false, message = "Item nao encontrado." });
+
+        var cartaoId = item.Checklist.CartaoTarefaId;
+        var acesso = await ObterCartaoComAcessoAsync(cartaoId, grupoId, usuarioId.Value, exigirEdicao: true);
+        if (acesso.Resultado != null)
+            return acesso.Resultado;
+
+        var texto = descricao?.Trim();
+        if (descricao != null && (string.IsNullOrWhiteSpace(texto) || texto.Length > 255))
+            return BadRequest(new { success = false, message = "Item invalido." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    if (descricao != null)
+                        item.Descricao = texto!;
+                    if (concluido.HasValue)
+                    {
+                        item.Concluido = concluido.Value;
+                        item.ConcluidoPorUsuarioId = concluido.Value ? usuarioId.Value : null;
+                        item.DataConclusao = concluido.Value ? DateTime.UtcNow : null;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    var checklists = await ObterChecklistsCartaoAsync(cartaoId);
+                    return (IActionResult)new JsonResult(new { success = true, dados = checklists });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao atualizar item {ItemId}.", itemId);
+            return BadRequest(new { success = false, message = "Nao foi possivel atualizar o item." });
+        }
+    }
+
+    private async Task<(CartaoTarefa? Cartao, IActionResult? Resultado)> ObterCartaoComAcessoAsync(int cartaoId, int grupoId, int usuarioId, bool exigirEdicao)
+    {
+        if (cartaoId <= 0 || grupoId <= 0)
+            return (null, BadRequest(new { success = false, message = "Tarefa invalida." }));
+
+        var contexto = exigirEdicao
+            ? await ValidarMembroComPermissaoAsync(usuarioId, grupoId)
+            : await ValidarMembroAsync(usuarioId, grupoId);
+        if (contexto == null)
+            return (null, Forbid());
+
+        var cartao = await _context.CartoesTarefas
+            .FirstOrDefaultAsync(c => c.Id == cartaoId && c.GrupoId == grupoId);
+        if (cartao == null)
+            return (null, NotFound(new { success = false, message = "Tarefa nao encontrada." }));
+
+        var membros = await _context.CartoesTarefasUsuarios
+            .AsNoTracking()
+            .Where(x => x.CartaoTarefaId == cartao.Id)
+            .Select(x => x.UsuarioId)
+            .ToListAsync();
+
+        if (!PodeVerCartao(cartao, usuarioId, membros))
+            return (null, Forbid());
+        if (exigirEdicao && !PodeEditarCartao(cartao, usuarioId, membros))
+            return (null, Forbid());
+
+        return (cartao, null);
+    }
+
+    private async Task<(AnexoTarefa? Anexo, IActionResult? Resultado)> ObterAnexoComAcessoAsync(int anexoId, int grupoId, bool exigirEdicao)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return (null, Unauthorized());
+
+        var anexo = await _context.AnexosTarefas
+            .Include(a => a.CartaoTarefa)
+            .FirstOrDefaultAsync(a => a.Id == anexoId && a.CartaoTarefa.GrupoId == grupoId);
+        if (anexo == null)
+            return (null, NotFound(new { success = false, message = "Anexo nao encontrado." }));
+
+        var acesso = await ObterCartaoComAcessoAsync(anexo.CartaoTarefaId, grupoId, usuarioId.Value, exigirEdicao);
+        if (acesso.Resultado != null)
+            return (null, acesso.Resultado);
+
+        return (anexo, null);
+    }
+
+    private async Task<List<EtiquetaTarefaDto>> ObterEtiquetasUsuarioAsync(int grupoId, int usuarioId)
+    {
+        return await _context.EtiquetasTarefas
+            .AsNoTracking()
+            .Where(e => e.GrupoId == grupoId && e.UsuarioId == usuarioId)
+            .OrderBy(e => e.Nome)
+            .Select(e => new EtiquetaTarefaDto(e.Id, e.Nome, e.Cor))
+            .ToListAsync();
+    }
+
+    private async Task<List<EtiquetaTarefaDto>> ObterEtiquetasAplicadasAsync(int cartaoId, int usuarioId)
+    {
+        return await (
+            from vinculo in _context.CartoesTarefasEtiquetas.AsNoTracking()
+            join etiqueta in _context.EtiquetasTarefas.AsNoTracking()
+                on vinculo.EtiquetaId equals etiqueta.Id
+            where vinculo.CartaoTarefaId == cartaoId && etiqueta.UsuarioId == usuarioId
+            orderby etiqueta.Nome
+            select new EtiquetaTarefaDto(etiqueta.Id, etiqueta.Nome, etiqueta.Cor))
+            .ToListAsync();
+    }
+
+    private async Task<List<ChecklistTarefaDto>> ObterChecklistsCartaoAsync(int cartaoId)
+    {
+        var checklists = await _context.ChecklistsTarefas
+            .AsNoTracking()
+            .Where(c => c.CartaoTarefaId == cartaoId)
+            .OrderBy(c => c.Posicao)
+            .Select(c => new ChecklistTarefaDto
+            {
+                Id = c.Id,
+                Titulo = c.Titulo,
+                Itens = new List<ChecklistItemTarefaDto>()
+            })
+            .ToListAsync();
+
+        var checklistIds = checklists.Select(c => c.Id).ToList();
+        if (checklistIds.Count == 0)
+            return checklists;
+
+        var itens = await _context.ChecklistItensTarefas
+            .AsNoTracking()
+            .Where(i => checklistIds.Contains(i.ChecklistId))
+            .OrderBy(i => i.Posicao)
+            .Select(i => new ChecklistItemTarefaDto
+            {
+                Id = i.Id,
+                ChecklistId = i.ChecklistId,
+                Descricao = i.Descricao,
+                Concluido = i.Concluido
+            })
+            .ToListAsync();
+
+        var itensPorChecklist = itens.GroupBy(i => i.ChecklistId).ToDictionary(g => g.Key, g => g.ToList());
+        foreach (var checklist in checklists)
+        {
+            checklist.Itens = itensPorChecklist.TryGetValue(checklist.Id, out var itensChecklist)
+                ? itensChecklist
+                : new List<ChecklistItemTarefaDto>();
+        }
+
+        return checklists;
+    }
+
+    private async Task<List<AnexoTarefaDto>> ObterAnexosCartaoAsync(int cartaoId)
+    {
+        return await (
+            from anexo in _context.AnexosTarefas.AsNoTracking()
+            join usuario in _context.Usuarios.AsNoTracking()
+                on anexo.UsuarioId equals usuario.Id
+            where anexo.CartaoTarefaId == cartaoId
+            orderby anexo.DataUpload descending
+            select new AnexoTarefaDto
+            {
+                Id = anexo.Id,
+                NomeOriginal = anexo.NomeOriginal,
+                TipoArquivo = anexo.TipoArquivo,
+                Extensao = anexo.Extensao,
+                TamanhoBytes = anexo.TamanhoBytes,
+                EhImagem = anexo.EhImagem,
+                Usuario = usuario.NomeUsuario,
+                DataUpload = ParaDataHoraRegionalIso(anexo.DataUpload)
+            })
+            .ToListAsync();
+    }
+
+    private string ObterCaminhoFisicoAnexoTarefa(string caminhoRelativo)
+    {
+        var partes = caminhoRelativo
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(parte => Path.GetFileName(parte) ?? string.Empty)
+            .Where(parte => !string.IsNullOrWhiteSpace(parte))
+            .ToArray();
+
+        return Path.Combine(new[] { _environment.ContentRootPath, "uploads_privados" }.Concat(partes).ToArray());
+    }
+
+    private static string ObterContentTypeAnexoTarefa(string? extensao)
+    {
+        return (extensao ?? string.Empty).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".pdf" => "application/pdf",
+            ".txt" => "text/plain",
+            ".csv" => "text/csv",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls" => "application/vnd.ms-excel",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            _ => "application/octet-stream"
+        };
+    }
+
+    private static async Task<bool> AssinaturaAnexoTarefaPermitidaAsync(IFormFile arquivo, string extensao)
+    {
+        var buffer = new byte[12];
+        await using var stream = arquivo.OpenReadStream();
+        var bytesLidos = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length));
+
+        return extensao switch
+        {
+            ".jpg" or ".jpeg" => bytesLidos >= 3 && buffer[0] == 0xFF && buffer[1] == 0xD8 && buffer[2] == 0xFF,
+            ".png" => bytesLidos >= 8 && buffer[0] == 0x89 && buffer[1] == 0x50 && buffer[2] == 0x4E && buffer[3] == 0x47 && buffer[4] == 0x0D && buffer[5] == 0x0A && buffer[6] == 0x1A && buffer[7] == 0x0A,
+            ".gif" => bytesLidos >= 6 && buffer[0] == 0x47 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x38 && (buffer[4] == 0x37 || buffer[4] == 0x39) && buffer[5] == 0x61,
+            ".webp" => bytesLidos >= 12 && buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46 && buffer[8] == 0x57 && buffer[9] == 0x45 && buffer[10] == 0x42 && buffer[11] == 0x50,
+            ".pdf" => bytesLidos >= 4 && buffer[0] == 0x25 && buffer[1] == 0x50 && buffer[2] == 0x44 && buffer[3] == 0x46,
+            _ => true
+        };
+    }
+
     private async Task<ColunaQuadro> ObterOuCriarColunaArquivoSistemaAsync(int quadroId)
     {
         var colunaArquivo = await _context.ColunasQuadro
@@ -1864,6 +2824,36 @@ public class TasksModel : PageModel
             cartao.Chamados = chamadosPorCartao.TryGetValue(cartao.Id, out var chamadosCartao)
                 ? chamadosCartao
                 : new List<ChamadoOpcaoViewModel>();
+        }
+
+        var etiquetas = cartaoIds.Count == 0
+            ? new List<BoardEtiquetaTarefaViewModel>()
+            : await (
+                from vinculo in _context.CartoesTarefasEtiquetas.AsNoTracking()
+                join etiqueta in _context.EtiquetasTarefas.AsNoTracking()
+                    on vinculo.EtiquetaId equals etiqueta.Id
+                where cartaoIds.Contains(vinculo.CartaoTarefaId) &&
+                      etiqueta.GrupoId == GrupoId &&
+                      etiqueta.UsuarioId == usuarioId
+                orderby etiqueta.Nome
+                select new BoardEtiquetaTarefaViewModel
+                {
+                    CartaoTarefaId = vinculo.CartaoTarefaId,
+                    Id = etiqueta.Id,
+                    Nome = etiqueta.Nome,
+                    Cor = etiqueta.Cor
+                })
+                .ToListAsync();
+
+        var etiquetasPorCartao = etiquetas
+            .GroupBy(e => e.CartaoTarefaId)
+            .ToDictionary(g => g.Key, g => g.Select(e => new EtiquetaTarefaDto(e.Id, e.Nome, e.Cor)).ToList());
+
+        foreach (var cartao in cartoes)
+        {
+            cartao.Etiquetas = etiquetasPorCartao.TryGetValue(cartao.Id, out var etiquetasCartao)
+                ? etiquetasCartao
+                : new List<EtiquetaTarefaDto>();
         }
 
         var cartoesPorColuna = cartoes
@@ -2066,10 +3056,50 @@ public class TasksModel : PageModel
 
         var usuariosComAcesso = await SincronizarMembrosAsync(cartao.Id, request.GrupoId, request.MembrosIds, usuarioId, cartao.CriadorId);
         await SincronizarChamadosAsync(cartao, request.ChamadosIds, request.GrupoId, usuarioId, usuariosComAcesso);
+        await SincronizarEtiquetasUsuarioCartaoAsync(cartao.Id, request.GrupoId, usuarioId, request.EtiquetasIds);
         RegistrarHistorico(cartao.Id, usuarioId, novo ? "Cartao criado" : "Cartao atualizado");
         await _context.SaveChangesAsync();
 
         return cartao;
+    }
+
+    private async Task SincronizarEtiquetasUsuarioCartaoAsync(int cartaoId, int grupoId, int usuarioId, List<int>? etiquetasIds)
+    {
+        etiquetasIds ??= new List<int>();
+        var idsSolicitados = etiquetasIds.Where(id => id > 0).Distinct().ToList();
+
+        var idsValidos = idsSolicitados.Count == 0
+            ? new List<int>()
+            : await _context.EtiquetasTarefas
+                .AsNoTracking()
+                .Where(e => idsSolicitados.Contains(e.Id) && e.GrupoId == grupoId && e.UsuarioId == usuarioId)
+                .Select(e => e.Id)
+                .ToListAsync();
+
+        if (idsValidos.Count != idsSolicitados.Count)
+            throw new UnauthorizedAccessException("Uma ou mais etiquetas nao pertencem ao usuario neste grupo.");
+
+        var atuais = await _context.CartoesTarefasEtiquetas
+            .Where(v => v.CartaoTarefaId == cartaoId)
+            .Join(_context.EtiquetasTarefas.Where(e => e.UsuarioId == usuarioId && e.GrupoId == grupoId),
+                v => v.EtiquetaId,
+                e => e.Id,
+                (v, e) => v)
+            .ToListAsync();
+
+        var atuaisIds = atuais.Select(v => v.EtiquetaId).ToHashSet();
+        var novosIds = idsValidos.ToHashSet();
+
+        _context.CartoesTarefasEtiquetas.RemoveRange(atuais.Where(v => !novosIds.Contains(v.EtiquetaId)));
+
+        foreach (var etiquetaId in novosIds.Where(id => !atuaisIds.Contains(id)))
+        {
+            _context.CartoesTarefasEtiquetas.Add(new CartaoTarefaEtiqueta
+            {
+                CartaoTarefaId = cartaoId,
+                EtiquetaId = etiquetaId
+            });
+        }
     }
 
     private async Task<List<int>> SincronizarMembrosAsync(int cartaoId, int grupoId, List<int> membrosIds, int usuarioId, int criadorId)
@@ -2503,6 +3533,7 @@ public class TasksModel : PageModel
         public bool Privado { get; set; }
         public bool Concluido { get; set; }
         public List<ChamadoOpcaoViewModel> Chamados { get; set; } = new();
+        public List<EtiquetaTarefaDto> Etiquetas { get; set; } = new();
     }
 
     public class MembroViewModel
@@ -2527,6 +3558,43 @@ public class TasksModel : PageModel
         public string? Titulo { get; set; }
         public bool Publico { get; set; }
         public int CriadorChamadoId { get; set; }
+    }
+
+    private class BoardEtiquetaTarefaViewModel
+    {
+        public int CartaoTarefaId { get; set; }
+        public int Id { get; set; }
+        public string Nome { get; set; } = string.Empty;
+        public string Cor { get; set; } = string.Empty;
+    }
+
+    public record EtiquetaTarefaDto(int Id, string Nome, string Cor);
+
+    public class ChecklistTarefaDto
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; } = string.Empty;
+        public List<ChecklistItemTarefaDto> Itens { get; set; } = new();
+    }
+
+    public class ChecklistItemTarefaDto
+    {
+        public int Id { get; set; }
+        public int ChecklistId { get; set; }
+        public string Descricao { get; set; } = string.Empty;
+        public bool Concluido { get; set; }
+    }
+
+    public class AnexoTarefaDto
+    {
+        public int Id { get; set; }
+        public string NomeOriginal { get; set; } = string.Empty;
+        public string? TipoArquivo { get; set; }
+        public string? Extensao { get; set; }
+        public long? TamanhoBytes { get; set; }
+        public bool EhImagem { get; set; }
+        public string Usuario { get; set; } = string.Empty;
+        public string? DataUpload { get; set; }
     }
 
     public class CriarListaRequest
@@ -2564,6 +3632,7 @@ public class TasksModel : PageModel
         public bool CompartilharGrupo { get; set; }
         public List<int> MembrosIds { get; set; } = new();
         public List<int> ChamadosIds { get; set; } = new();
+        public List<int> EtiquetasIds { get; set; } = new();
     }
 
     public class SalvarMembrosCartaoRequest
@@ -2585,6 +3654,91 @@ public class TasksModel : PageModel
     {
         public int CartaoId { get; set; }
         public int GrupoId { get; set; }
+    }
+
+    public class SalvarEtiquetaTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public string? Nome { get; set; }
+        public string? Cor { get; set; }
+    }
+
+    public class EditarEtiquetaTarefaRequest : SalvarEtiquetaTarefaRequest
+    {
+        public int EtiquetaId { get; set; }
+    }
+
+    public class EtiquetaTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int EtiquetaId { get; set; }
+    }
+
+    public class SalvarEtiquetasCartaoRequest
+    {
+        public int GrupoId { get; set; }
+        public int CartaoId { get; set; }
+        public List<int> EtiquetasIds { get; set; } = new();
+    }
+
+    public class SalvarChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int CartaoId { get; set; }
+        public string? Titulo { get; set; }
+    }
+
+    public class EditarChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ChecklistId { get; set; }
+        public string? Titulo { get; set; }
+    }
+
+    public class ChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ChecklistId { get; set; }
+    }
+
+    public class SalvarItemChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ChecklistId { get; set; }
+        public string? Descricao { get; set; }
+    }
+
+    public class EditarItemChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ItemId { get; set; }
+        public string? Descricao { get; set; }
+    }
+
+    public class AlternarItemChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ItemId { get; set; }
+        public bool Concluido { get; set; }
+    }
+
+    public class ItemChecklistTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int ItemId { get; set; }
+    }
+
+    public class EnviarAnexoTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int CartaoId { get; set; }
+        public IFormFile? Arquivo { get; set; }
+    }
+
+    public class AnexoTarefaRequest
+    {
+        public int GrupoId { get; set; }
+        public int AnexoId { get; set; }
     }
 
     public class ReordenarCartoesRequest
