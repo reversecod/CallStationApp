@@ -198,6 +198,7 @@
         .ticket-status-cancelado { background:linear-gradient(135deg, #ea4335, #ff7c7c); }
 
         .ticket-icon-button {
+            position:relative;
             border:0;
             padding:0;
             background:transparent;
@@ -215,6 +216,19 @@
             width:3.25rem;
             height:3.25rem;
             border-radius:50%;
+        }
+
+        .ticket-pending-info-badge {
+            position:absolute;
+            top:-.1rem;
+            right:-.08rem;
+            width:.78rem;
+            height:.78rem;
+            border-radius:50%;
+            background:#ef4444;
+            border:2px solid #fff;
+            box-shadow:0 .15rem .35rem rgba(0,0,0,.22);
+            z-index:2;
         }
 
         .ticket-content {
@@ -519,13 +533,24 @@
         }
 
         .detail-label {
-            display:block;
+            display:flex;
+            align-items:center;
+            gap:.35rem;
             font-size:.72rem;
             font-weight:800;
             color:#64748b;
             text-transform:uppercase;
             letter-spacing:.04em;
             margin-bottom:.2rem;
+        }
+
+        .detail-field-pending {
+            width:.5rem;
+            height:.5rem;
+            border-radius:50%;
+            background:#ef4444;
+            box-shadow:0 0 0 2px rgba(239, 68, 68, .15);
+            flex:0 0 auto;
         }
 
         .detail-value {
@@ -540,6 +565,58 @@
             gap:.55rem;
             max-height:16rem;
             overflow-y:auto;
+        }
+
+        .history-edit-grid {
+            display:grid;
+            grid-template-columns:repeat(2, minmax(0, 1fr));
+            gap:.75rem;
+        }
+
+        .history-edit-field-full {
+            grid-column:1 / -1;
+        }
+
+        .history-field-audit {
+            margin-top:.25rem;
+            font-size:.72rem;
+            color:#64748b;
+        }
+
+        .history-field-audit details {
+            margin-top:.15rem;
+        }
+
+        .history-field-audit summary {
+            cursor:pointer;
+            width:max-content;
+        }
+
+        .detail-label-row {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:.5rem;
+            margin-bottom:.2rem;
+        }
+
+        .detail-edit-button {
+            width:1.65rem;
+            height:1.65rem;
+            border:1px solid #cbd5e1;
+            border-radius:999px;
+            background:#fff;
+            color:#475569;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            padding:0;
+        }
+
+        .detail-edit-button:hover,
+        .detail-edit-button:focus-visible {
+            background:#f1f5f9;
+            color:#0f172a;
         }
 
         .detail-comment {
@@ -736,6 +813,10 @@
                                 data-chamado-id="@chamado.Id"
                                 aria-label="Abrir detalhes do chamado #@chamado.NumeroChamadoGrupo">
                             <img src="~/images/logoticket.png" class="ticket-icon" alt="" loading="lazy" />
+                            @if (chamado.TemInformacoesPendentes)
+                            {
+                                <span class="ticket-pending-info-badge" title="Informações pendentes"></span>
+                            }
                         </button>
                         <div class="ticket-content">
                             <div class="ticket-header">
@@ -909,6 +990,7 @@
                 <div class="text-muted small">Carregando informações...</div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-primary d-none" id="btnSalvarDetalhesHistorico">Salvar alterações</button>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
@@ -1205,6 +1287,7 @@
                             data-chamado-id="${Number(chamado.id || 0)}"
                             aria-label="Abrir detalhes do chamado #${escapeHtml(chamado.numeroChamadoGrupo || "")}">
                         <img src="/images/logoticket.png" class="ticket-icon" alt="" loading="lazy" />
+                        ${chamado.temInformacoesPendentes ? '<span class="ticket-pending-info-badge" title="Informações pendentes"></span>' : ''}
                     </button>
                     <div class="ticket-content">
                         <div class="ticket-header">
@@ -1390,6 +1473,7 @@
             }
 
             const comentarios = dados.comentarios || [];
+            const camposPendentes = new Set((dados.camposPendentes || []).map(campo => campo.chave));
             const comentariosHtml = comentarios.length
                 ? comentarios.map(comentario => `
                     <div class="detail-comment">
@@ -1410,40 +1494,219 @@
                     </div>
                 `
                 : "";
-
             detalhesConteudo.innerHTML = `
                 <div class="detail-grid mb-3">
-                    ${renderizarDetalhe("Título", dados.titulo || numero || "Chamado")}
+                    ${renderizarDetalhe("Título", dados.titulo || numero || "Chamado", false, camposPendentes.has("titulo"), dados, "titulo")}
                     ${renderizarDetalhe("Status", formatarStatusDetalhe(dados.status))}
-                    ${renderizarDetalhe("Setor", dados.setor || "Não registrado")}
-                    ${renderizarDetalhe("Tipo de problema", dados.tipoProblema || "Não registrado")}
-                    ${renderizarDetalhe("Categoria", dados.categoria || "Não registrado")}
-                    ${renderizarDetalhe("Subcategoria", dados.subcategoria || "Não registrado")}
-                    ${renderizarDetalhe("Prioridade", formatarValorDetalhe(dados.prioridade))}
-                    ${renderizarDetalhe("Criticidade", formatarValorDetalhe(dados.criticidade))}
-                    ${renderizarDetalhe("Urgência", formatarValorDetalhe(dados.urgencia))}
+                    ${renderizarDetalhe("Setor", dados.setor || "Não registrado", false, camposPendentes.has("setor"), dados, "setor")}
+                    ${renderizarDetalhe("Tipo de problema", dados.tipoProblema || "Não registrado", false, camposPendentes.has("tipoProblema"), dados, "tipoProblema")}
+                    ${renderizarDetalhe("Categoria", dados.categoria || "Não registrado", false, camposPendentes.has("categoria"), dados, "categoria")}
+                    ${renderizarDetalhe("Subcategoria", dados.subcategoria || "Não registrado", false, camposPendentes.has("subcategoria"), dados, "subcategoria")}
+                    ${renderizarDetalhe("Prioridade", formatarValorDetalhe(dados.prioridade), false, camposPendentes.has("prioridade"))}
+                    ${renderizarDetalhe("Criticidade", formatarValorDetalhe(dados.criticidade), false, camposPendentes.has("criticidade"))}
+                    ${renderizarDetalhe("Urgência", formatarValorDetalhe(dados.urgencia), false, camposPendentes.has("urgencia"))}
                     ${renderizarDetalhe("Data de abertura", formatDateTimeLocal(dados.dataCriacao))}
                     ${renderizarDetalhe("Data de finalização", formatDateTimeLocal(dados.dataFinalizacao))}
                     ${renderizarDetalhe("Prazo de resposta", formatDateTimeLocal(dados.prazoResposta))}
                     ${renderizarDetalhe("Prazo de conclusão", formatDateTimeLocal(dados.prazoConclusao))}
                 </div>
-                ${renderizarDetalhe("Descrição", dados.descricao || "Não registrada", true)}
-                ${renderizarDetalhe("Solução", dados.solucao || "Não registrada", true)}
+                ${renderizarDetalhe("Descrição", dados.descricao || "Não registrada", true, camposPendentes.has("descricao"), dados, "descricao")}
+                ${renderizarDetalhe("Solução", dados.solucao || "Não registrada", true, camposPendentes.has("solucao"), dados, "solucao")}
                 ${vinculosHtml}
                 <div class="detail-block mt-3">
                     <span class="detail-label">Comentários recentes</span>
                     <div class="detail-comments">${comentariosHtml}</div>
                 </div>
             `;
+            inicializarEdicaoDetalhesHistorico(dados);
         }
 
-        function renderizarDetalhe(label, valor, completo = false) {
+        function renderizarAuditoriaCampo(campo, auditoriaCampos) {
+            const auditoria = auditoriaCampos?.[campo];
+            if (!auditoria) return "";
+
             return `
-                <div class="detail-block ${completo ? "mt-3" : ""}">
-                    <span class="detail-label">${escapeHtml(label)}</span>
-                    <div class="detail-value">${escapeHtml(valor || "-")}</div>
+                <div class="history-field-audit">
+                    Alterado por ${escapeHtml(auditoria.usuario || "Não registrado")} em ${escapeHtml(formatDateTimeLocal(auditoria.dataAlteracao))}
+                    <details>
+                        <summary>Ver anterior</summary>
+                        <div>Antes: ${escapeHtml(auditoria.valorAnterior || "Não registrado")}</div>
+                    </details>
                 </div>
             `;
+        }
+
+        function inicializarEdicaoDetalhesHistorico(dados) {
+            const btnSalvar = document.getElementById("btnSalvarDetalhesHistorico");
+            btnSalvar?.classList.add("d-none");
+            btnSalvar?.replaceWith(btnSalvar.cloneNode(true));
+
+            if (!dados.podeEditarHistorico) return;
+
+            document.getElementById("btnSalvarDetalhesHistorico")?.addEventListener("click", salvarDetalhesHistorico);
+            detalhesConteudo?.querySelectorAll("[data-editar-campo-historico]").forEach(botao => {
+                botao.addEventListener("click", () => ativarEdicaoCampoHistorico(botao.dataset.editarCampoHistorico, dados));
+            });
+        }
+
+        function ativarEdicaoCampoHistorico(campo, dados) {
+            const bloco = detalhesConteudo?.querySelector(`[data-campo-historico="${campo}"]`);
+            const valor = bloco?.querySelector("[data-detail-value]");
+            if (!bloco || !valor || valor.dataset.editando === "true") return;
+
+            valor.dataset.editando = "true";
+            valor.innerHTML = renderizarControleInlineHistorico(campo, dados);
+            bloco.querySelector("[data-editar-campo-historico]")?.classList.add("d-none");
+            document.getElementById("btnSalvarDetalhesHistorico")?.classList.remove("d-none");
+
+            if (campo === "tipoProblema") {
+                document.getElementById("editHistoricoTipoId")?.addEventListener("change", carregarCategoriasHistorico);
+            }
+            if (campo === "categoria") {
+                document.getElementById("editHistoricoCategoriaId")?.addEventListener("change", carregarSubcategoriasHistorico);
+            }
+        }
+
+        function renderizarControleInlineHistorico(campo, dados) {
+            const opcoes = dados.opcoesEdicao || {};
+            if (campo === "titulo") {
+                return `<input type="text" class="form-control" id="editHistoricoTitulo" maxlength="35" value="${escapeHtml(dados.titulo || "")}">`;
+            }
+            if (campo === "descricao") {
+                return `<textarea class="form-control" id="editHistoricoDescricao" rows="5" maxlength="500">${escapeHtml(dados.descricao || "")}</textarea>`;
+            }
+            if (campo === "solucao") {
+                return `<textarea class="form-control" id="editHistoricoSolucao" rows="5" maxlength="500">${escapeHtml(dados.solucao || "")}</textarea>`;
+            }
+            if (campo === "setor") {
+                return renderizarSelectInlineHistorico("editHistoricoSetorId", opcoes.setores || [], dados.setorId);
+            }
+            if (campo === "tipoProblema") {
+                return renderizarSelectInlineHistorico("editHistoricoTipoId", opcoes.tipos || [], dados.ocorrenciaTipoId);
+            }
+            if (campo === "categoria") {
+                return renderizarSelectInlineHistorico("editHistoricoCategoriaId", opcoes.categorias || [], dados.ocorrenciaCategoriaId);
+            }
+            if (campo === "subcategoria") {
+                return renderizarSelectInlineHistorico("editHistoricoSubcategoriaId", opcoes.subcategorias || [], dados.ocorrenciaSubcategoriaId);
+            }
+
+            return "";
+        }
+
+        function renderizarSelectInlineHistorico(id, opcoes, selecionado) {
+            return `
+                <select class="form-select" id="${id}">
+                    <option value="">Não registrado</option>
+                    ${(opcoes || []).map(opcao => `<option value="${Number(opcao.id || 0)}" ${Number(opcao.id || 0) === Number(selecionado || 0) ? "selected" : ""}>${escapeHtml(opcao.nome || "")}</option>`).join("")}
+                </select>
+            `;
+        }
+
+        async function carregarCategoriasHistorico() {
+            const tipoId = Number(document.getElementById("editHistoricoTipoId")?.value || 0);
+            const selectCategoria = document.getElementById("editHistoricoCategoriaId");
+            const selectSubcategoria = document.getElementById("editHistoricoSubcategoriaId");
+            substituirOpcoesSelect(selectCategoria, []);
+            substituirOpcoesSelect(selectSubcategoria, []);
+            if (!tipoId) return;
+
+            const response = await fetch(`?handler=CategoriasHistoricoPorTipo&grupoId=${encodeURIComponent(historyGrupoId)}&tipoId=${encodeURIComponent(tipoId)}`);
+            const data = await response.json();
+            if (response.ok && data.success) {
+                substituirOpcoesSelect(selectCategoria, data.dados || []);
+            }
+        }
+
+        async function carregarSubcategoriasHistorico() {
+            const categoriaId = Number(document.getElementById("editHistoricoCategoriaId")?.value || 0);
+            const selectSubcategoria = document.getElementById("editHistoricoSubcategoriaId");
+            substituirOpcoesSelect(selectSubcategoria, []);
+            if (!categoriaId) return;
+
+            const response = await fetch(`?handler=SubcategoriasHistoricoPorCategoria&grupoId=${encodeURIComponent(historyGrupoId)}&categoriaId=${encodeURIComponent(categoriaId)}`);
+            const data = await response.json();
+            if (response.ok && data.success) {
+                substituirOpcoesSelect(selectSubcategoria, data.dados || []);
+            }
+        }
+
+        function substituirOpcoesSelect(select, opcoes) {
+            if (!select) return;
+            select.innerHTML = '<option value="">Não registrado</option>' + (opcoes || [])
+                .map(opcao => `<option value="${Number(opcao.id || 0)}">${escapeHtml(opcao.nome || "")}</option>`)
+                .join("");
+        }
+
+        async function salvarDetalhesHistorico() {
+            if (!detalhesChamadoAtualId) return;
+
+            try {
+                const data = await fetchJson(`?handler=SalvarDetalhesChamadoHistorico&grupoId=${encodeURIComponent(historyGrupoId)}`, {
+                    chamadoId: detalhesChamadoAtualId,
+                    titulo: document.getElementById("editHistoricoTitulo")?.value ?? null,
+                    setorId: campoEstaEditando("setor") ? toNullableNumber(document.getElementById("editHistoricoSetorId")?.value) : null,
+                    ocorrenciaTipoId: campoEstaEditando("tipoProblema") ? toNullableNumber(document.getElementById("editHistoricoTipoId")?.value) : null,
+                    ocorrenciaCategoriaId: campoEstaEditando("categoria") ? toNullableNumber(document.getElementById("editHistoricoCategoriaId")?.value) : null,
+                    ocorrenciaSubcategoriaId: campoEstaEditando("subcategoria") ? toNullableNumber(document.getElementById("editHistoricoSubcategoriaId")?.value) : null,
+                    descricao: document.getElementById("editHistoricoDescricao")?.value ?? null,
+                    solucao: document.getElementById("editHistoricoSolucao")?.value ?? null,
+                    camposEditados: obterCamposHistoricoEditados()
+                });
+
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível salvar o chamado.");
+                    return;
+                }
+
+                mostrarToast(data.dados?.message || "Chamado atualizado com sucesso.", "success");
+                await abrirDetalhes(detalhesChamadoAtualId);
+                await pesquisarHistorico();
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível salvar o chamado.");
+            }
+        }
+
+        function toNullableNumber(value) {
+            const numero = Number(value || 0);
+            return numero > 0 ? numero : null;
+        }
+
+        function campoEstaEditando(campo) {
+            return !!detalhesConteudo?.querySelector(`[data-campo-historico="${campo}"] [data-detail-value][data-editando="true"]`);
+        }
+
+        function obterCamposHistoricoEditados() {
+            return [...detalhesConteudo?.querySelectorAll("[data-campo-historico] [data-detail-value][data-editando='true']") || []]
+                .map(el => el.closest("[data-campo-historico]")?.dataset.campoHistorico)
+                .filter(Boolean);
+        }
+
+        function renderizarDetalhe(label, valor, completo = false, pendente = false, dados = null, campo = null) {
+            const editavel = !!dados?.podeEditarHistorico && !!campo;
+            const auditoria = editavel ? renderizarAuditoriaCampo(campoParaAuditoria(campo), dados.auditoriaCampos) : "";
+            return `
+                <div class="detail-block ${completo ? "mt-3" : ""}" ${campo ? `data-campo-historico="${escapeHtml(campo)}"` : ""}>
+                    <div class="detail-label-row">
+                        <span class="detail-label">${escapeHtml(label)}${pendente ? '<span class="detail-field-pending" title="Informação pendente"></span>' : ''}</span>
+                        ${editavel ? `<button type="button" class="detail-edit-button" data-editar-campo-historico="${escapeHtml(campo)}" aria-label="Editar ${escapeHtml(label)}"><i class="bi bi-pencil"></i></button>` : ""}
+                    </div>
+                    <div class="detail-value" data-detail-value>${escapeHtml(valor || "-")}</div>
+                    ${auditoria}
+                </div>
+            `;
+        }
+
+        function campoParaAuditoria(campo) {
+            return {
+                titulo: "Titulo",
+                descricao: "Descricao",
+                solucao: "Solucao",
+                setor: "Setor",
+                tipoProblema: "TipoProblema",
+                categoria: "Categoria",
+                subcategoria: "Subcategoria"
+            }[campo] || campo;
         }
 
         function renderizarVinculosChamado(vinculos) {

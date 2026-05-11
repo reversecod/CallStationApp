@@ -147,12 +147,19 @@ public class HistoryModel : PageModel
                 x.Chamado.GrupoId,
                 x.Chamado.NumeroChamadoGrupo,
                 x.Chamado.Titulo,
+                x.Chamado.Descricao,
+                x.Chamado.Solucao,
                 x.Chamado.Status,
                 x.Chamado.DataCriacao,
                 x.Chamado.DataFinalizacao,
                 x.Chamado.CriadorChamadoId,
                 x.Chamado.SetorId,
-                x.Chamado.OcorrenciaTipoId
+                x.Chamado.OcorrenciaTipoId,
+                x.Chamado.OcorrenciaCategoriaId,
+                x.Chamado.OcorrenciaSubcategoriaId,
+                x.Chamado.Prioridade,
+                x.Chamado.Criticidade,
+                x.Chamado.Urgencia
             })
             .ToListAsync();
 
@@ -255,6 +262,18 @@ public class HistoryModel : PageModel
                     DataFinalTexto = ParaDataHoraRegionalDisplay(historicoFinal?.DataTransicao ?? chamado.DataFinalizacao),
                     CriadoPor = criadoresPorId.GetValueOrDefault(chamado.CriadorChamadoId, "Não registrado"),
                     FinalizadoPor = finalizadoPor,
+                    TemInformacoesPendentes = ChamadoTemPendenciasConclusao(
+                        chamado.Status,
+                        chamado.Titulo,
+                        chamado.Descricao,
+                        chamado.Solucao,
+                        chamado.SetorId,
+                        chamado.OcorrenciaTipoId,
+                        chamado.OcorrenciaCategoriaId,
+                        chamado.OcorrenciaSubcategoriaId,
+                        chamado.Prioridade,
+                        chamado.Criticidade,
+                        chamado.Urgencia),
                     Setor = chamado.SetorId.HasValue
                         ? setoresPorId.GetValueOrDefault(chamado.SetorId.Value, "Não registrado")
                         : "Não registrado",
@@ -326,6 +345,10 @@ public class HistoryModel : PageModel
                 c.Titulo,
                 c.Descricao,
                 c.Solucao,
+                c.SetorId,
+                c.OcorrenciaTipoId,
+                c.OcorrenciaCategoriaId,
+                c.OcorrenciaSubcategoriaId,
                 c.Status,
                 c.Prioridade,
                 c.Criticidade,
@@ -369,6 +392,23 @@ public class HistoryModel : PageModel
         var vinculos = podeAcessarVinculosChamado
             ? await ObterVinculosVisiveisAsync(usuarioId.Value, chamado.GrupoId, chamado.Id, resultadoAcesso.ContextoMembro!.Permissao)
             : new List<ChamadoVinculoDto>();
+        var podeEditarHistorico = PodeGerenciarChamadoNoHistorico(resultadoAcesso.ContextoMembro!.Permissao);
+        var camposPendentes = ObterCamposPendentesConclusao(
+            detalhes.Status,
+            detalhes.Titulo,
+            detalhes.Descricao,
+            detalhes.Solucao,
+            detalhes.Setor,
+            detalhes.TipoProblema,
+            detalhes.Categoria,
+            detalhes.Subcategoria,
+            detalhes.Prioridade,
+            detalhes.Criticidade,
+            detalhes.Urgencia);
+        var auditoriaCampos = await ObterUltimaAuditoriaCamposAsync(chamado.Id);
+        var opcoesEdicao = podeEditarHistorico
+            ? await ObterOpcoesEdicaoHistoricoAsync(chamado.GrupoId, detalhes.OcorrenciaTipoId, detalhes.OcorrenciaCategoriaId)
+            : null;
 
         return new JsonResult(new
         {
@@ -380,6 +420,10 @@ public class HistoryModel : PageModel
                 titulo = detalhes.Titulo,
                 descricao = detalhes.Descricao,
                 solucao = detalhes.Solucao,
+                setorId = detalhes.SetorId,
+                ocorrenciaTipoId = detalhes.OcorrenciaTipoId,
+                ocorrenciaCategoriaId = detalhes.OcorrenciaCategoriaId,
+                ocorrenciaSubcategoriaId = detalhes.OcorrenciaSubcategoriaId,
                 status = detalhes.Status.ToString(),
                 prioridade = detalhes.Prioridade?.ToString(),
                 criticidade = detalhes.Criticidade?.ToString(),
@@ -392,6 +436,10 @@ public class HistoryModel : PageModel
                 tipoProblema = detalhes.TipoProblema,
                 categoria = detalhes.Categoria,
                 subcategoria = detalhes.Subcategoria,
+                camposPendentes,
+                podeEditarHistorico,
+                auditoriaCampos,
+                opcoesEdicao,
                 comentarios = comentarios.Select(comentario => new
                 {
                     comentario.autor,
@@ -452,6 +500,7 @@ public class HistoryModel : PageModel
                     chamado.FinalizadoPor,
                     chamado.Setor,
                     chamado.TipoProblema,
+                    chamado.TemInformacoesPendentes,
                     chamado.TemComentariosNaoLidos
                 }),
                 pagina = Math.Max(page, 1),
@@ -1030,6 +1079,151 @@ public class HistoryModel : PageModel
         }
     }
 
+    public async Task<IActionResult> OnPostSalvarDetalhesChamadoHistoricoAsync([FromBody] SalvarDetalhesHistoricoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamado inválido." });
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        if (!PodeGerenciarChamadoNoHistorico(resultadoAcesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para editar este chamado." });
+
+        var titulo = request.Titulo?.Trim();
+        var descricao = request.Descricao?.Trim();
+        var solucao = request.Solucao?.Trim();
+        var camposEditados = request.CamposEditados?
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (camposEditados.Count == 0)
+            return new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Nenhuma alteração feita." } });
+
+        if (!string.IsNullOrWhiteSpace(titulo) && titulo.Length > 35)
+            return new JsonResult(new { success = false, message = "Título deve ter no máximo 35 caracteres." });
+        if (!string.IsNullOrWhiteSpace(descricao) && descricao.Length > 500)
+            return new JsonResult(new { success = false, message = "Descrição deve ter no máximo 500 caracteres." });
+        if (!string.IsNullOrWhiteSpace(solucao) && solucao.Length > 500)
+            return new JsonResult(new { success = false, message = "Solução deve ter no máximo 500 caracteres." });
+
+        var setorNome = camposEditados.Contains("setor") ? await ObterNomeSetorValidadoAsync(GrupoId, request.SetorId) : null;
+        if (request.SetorId.HasValue && setorNome == null)
+            return new JsonResult(new { success = false, message = "Setor inválido." });
+
+        var tipoNome = camposEditados.Contains("tipoProblema") ? await ObterNomeTipoValidadoAsync(GrupoId, request.OcorrenciaTipoId) : null;
+        if (request.OcorrenciaTipoId.HasValue && tipoNome == null)
+            return new JsonResult(new { success = false, message = "Tipo de problema inválido." });
+
+        var categoriaNome = camposEditados.Contains("categoria") ? await ObterNomeCategoriaValidadaAsync(GrupoId, request.OcorrenciaTipoId, request.OcorrenciaCategoriaId) : null;
+        if (request.OcorrenciaCategoriaId.HasValue && categoriaNome == null)
+            return new JsonResult(new { success = false, message = "Categoria inválida para o tipo selecionado." });
+
+        var subcategoriaNome = camposEditados.Contains("subcategoria") ? await ObterNomeSubcategoriaValidadaAsync(GrupoId, request.OcorrenciaCategoriaId, request.OcorrenciaSubcategoriaId) : null;
+        if (request.OcorrenciaSubcategoriaId.HasValue && subcategoriaNome == null)
+            return new JsonResult(new { success = false, message = "Subcategoria inválida para a categoria selecionada." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var chamado = await _context.Chamados
+                        .FirstOrDefaultAsync(c => c.Id == request.ChamadoId && c.GrupoId == GrupoId);
+
+                    if (chamado == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Chamado não encontrado." });
+
+                    var alterou = false;
+                    var agora = DateTime.UtcNow;
+                    var setorAnterior = await ObterNomeSetorValidadoAsync(GrupoId, chamado.SetorId);
+                    var tipoAnterior = await ObterNomeTipoValidadoAsync(GrupoId, chamado.OcorrenciaTipoId);
+                    var categoriaAnterior = await ObterNomeCategoriaValidadaAsync(GrupoId, chamado.OcorrenciaTipoId, chamado.OcorrenciaCategoriaId);
+                    var subcategoriaAnterior = await ObterNomeSubcategoriaValidadaAsync(GrupoId, chamado.OcorrenciaCategoriaId, chamado.OcorrenciaSubcategoriaId);
+
+                    if (camposEditados.Contains("titulo"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Titulo", chamado.Titulo, string.IsNullOrWhiteSpace(titulo) ? null : titulo, agora, valor => chamado.Titulo = valor);
+                    if (camposEditados.Contains("descricao"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Descricao", chamado.Descricao, string.IsNullOrWhiteSpace(descricao) ? null : descricao, agora, valor => chamado.Descricao = valor);
+                    if (camposEditados.Contains("solucao"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Solucao", chamado.Solucao, string.IsNullOrWhiteSpace(solucao) ? null : solucao, agora, valor => chamado.Solucao = valor);
+                    if (camposEditados.Contains("setor"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Setor", chamado.SetorId?.ToString(CultureInfo.InvariantCulture), request.SetorId?.ToString(CultureInfo.InvariantCulture), agora, valor => chamado.SetorId = string.IsNullOrWhiteSpace(valor) ? null : int.Parse(valor, CultureInfo.InvariantCulture), setorAnterior, setorNome);
+                    if (camposEditados.Contains("tipoProblema"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "TipoProblema", chamado.OcorrenciaTipoId?.ToString(CultureInfo.InvariantCulture), request.OcorrenciaTipoId?.ToString(CultureInfo.InvariantCulture), agora, valor => chamado.OcorrenciaTipoId = string.IsNullOrWhiteSpace(valor) ? null : int.Parse(valor, CultureInfo.InvariantCulture), tipoAnterior, tipoNome);
+                    if (camposEditados.Contains("categoria"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Categoria", chamado.OcorrenciaCategoriaId?.ToString(CultureInfo.InvariantCulture), request.OcorrenciaCategoriaId?.ToString(CultureInfo.InvariantCulture), agora, valor => chamado.OcorrenciaCategoriaId = string.IsNullOrWhiteSpace(valor) ? null : int.Parse(valor, CultureInfo.InvariantCulture), categoriaAnterior, categoriaNome);
+                    if (camposEditados.Contains("subcategoria"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Subcategoria", chamado.OcorrenciaSubcategoriaId?.ToString(CultureInfo.InvariantCulture), request.OcorrenciaSubcategoriaId?.ToString(CultureInfo.InvariantCulture), agora, valor => chamado.OcorrenciaSubcategoriaId = string.IsNullOrWhiteSpace(valor) ? null : int.Parse(valor, CultureInfo.InvariantCulture), subcategoriaAnterior, subcategoriaNome);
+
+                    if (!alterou)
+                        return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = chamado.Id, message = "Nenhuma alteração feita." } });
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        dados = new
+                        {
+                            chamadoId = chamado.Id,
+                            message = "Chamado atualizado com sucesso."
+                        }
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch
+        {
+            return new JsonResult(new { success = false, message = "Não foi possível salvar o chamado." });
+        }
+    }
+
+    public async Task<IActionResult> OnGetCategoriasHistoricoPorTipoAsync(int tipoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, GrupoId);
+        if (contexto == null || !PodeGerenciarChamadoNoHistorico(contexto.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para editar chamados." });
+
+        var categorias = await ObterCategoriasHistoricoAsync(GrupoId, tipoId);
+        return new JsonResult(new { success = true, dados = categorias });
+    }
+
+    public async Task<IActionResult> OnGetSubcategoriasHistoricoPorCategoriaAsync(int categoriaId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, GrupoId);
+        if (contexto == null || !PodeGerenciarChamadoNoHistorico(contexto.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para editar chamados." });
+
+        var subcategorias = await ObterSubcategoriasHistoricoAsync(GrupoId, categoriaId);
+        return new JsonResult(new { success = true, dados = subcategorias });
+    }
+
     private IQueryable<ChamadoHistoricoConsultaItem> ConstruirQueryHistoricoPermitido(int usuarioId, int grupoId, PermissaoUsuario permissao, bool limitarColaboradorAoCriador)
     {
         var query = _context.Chamados
@@ -1087,12 +1281,19 @@ public class HistoryModel : PageModel
                 x.Chamado.GrupoId,
                 x.Chamado.NumeroChamadoGrupo,
                 x.Chamado.Titulo,
+                x.Chamado.Descricao,
+                x.Chamado.Solucao,
                 x.Chamado.Status,
                 x.Chamado.DataCriacao,
                 x.Chamado.DataFinalizacao,
                 x.Chamado.CriadorChamadoId,
                 x.Chamado.SetorId,
-                x.Chamado.OcorrenciaTipoId
+                x.Chamado.OcorrenciaTipoId,
+                x.Chamado.OcorrenciaCategoriaId,
+                x.Chamado.OcorrenciaSubcategoriaId,
+                x.Chamado.Prioridade,
+                x.Chamado.Criticidade,
+                x.Chamado.Urgencia
             })
             .ToListAsync();
 
@@ -1195,6 +1396,18 @@ public class HistoryModel : PageModel
                     DataFinalTexto = ParaDataHoraRegionalDisplay(historicoFinal?.DataTransicao ?? chamado.DataFinalizacao),
                     CriadoPor = criadoresPorId.GetValueOrDefault(chamado.CriadorChamadoId, "Não registrado"),
                     FinalizadoPor = finalizadoPor,
+                    TemInformacoesPendentes = ChamadoTemPendenciasConclusao(
+                        chamado.Status,
+                        chamado.Titulo,
+                        chamado.Descricao,
+                        chamado.Solucao,
+                        chamado.SetorId,
+                        chamado.OcorrenciaTipoId,
+                        chamado.OcorrenciaCategoriaId,
+                        chamado.OcorrenciaSubcategoriaId,
+                        chamado.Prioridade,
+                        chamado.Criticidade,
+                        chamado.Urgencia),
                     Setor = chamado.SetorId.HasValue
                         ? setoresPorId.GetValueOrDefault(chamado.SetorId.Value, "Não registrado")
                         : "Não registrado",
@@ -1311,6 +1524,239 @@ public class HistoryModel : PageModel
         return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
                mensagem.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ChamadoTemPendenciasConclusao(
+        StatusChamado status,
+        string? titulo,
+        string? descricao,
+        string? solucao,
+        int? setorId,
+        int? ocorrenciaTipoId,
+        int? ocorrenciaCategoriaId,
+        int? ocorrenciaSubcategoriaId,
+        PrioridadeChamado? prioridade,
+        CriticidadeChamado? criticidade,
+        UrgenciaChamado? urgencia)
+    {
+        if (status != StatusChamado.Concluido)
+            return false;
+
+        return string.IsNullOrWhiteSpace(titulo) ||
+               string.IsNullOrWhiteSpace(descricao) ||
+               string.IsNullOrWhiteSpace(solucao) ||
+               !setorId.HasValue ||
+               !ocorrenciaTipoId.HasValue ||
+               !ocorrenciaCategoriaId.HasValue ||
+               !ocorrenciaSubcategoriaId.HasValue ||
+               !prioridade.HasValue ||
+               !criticidade.HasValue ||
+               !urgencia.HasValue;
+    }
+
+    private static List<object> ObterCamposPendentesConclusao(
+        StatusChamado status,
+        string? titulo,
+        string? descricao,
+        string? solucao,
+        string? setor,
+        string? tipoProblema,
+        string? categoria,
+        string? subcategoria,
+        PrioridadeChamado? prioridade,
+        CriticidadeChamado? criticidade,
+        UrgenciaChamado? urgencia)
+    {
+        if (status != StatusChamado.Concluido)
+            return new List<object>();
+
+        var campos = new List<object>();
+        AdicionarCampoPendente(campos, "titulo", "Título", string.IsNullOrWhiteSpace(titulo));
+        AdicionarCampoPendente(campos, "descricao", "Descrição", string.IsNullOrWhiteSpace(descricao));
+        AdicionarCampoPendente(campos, "solucao", "Solução", string.IsNullOrWhiteSpace(solucao));
+        AdicionarCampoPendente(campos, "setor", "Setor", string.IsNullOrWhiteSpace(setor));
+        AdicionarCampoPendente(campos, "tipoProblema", "Tipo de problema", string.IsNullOrWhiteSpace(tipoProblema));
+        AdicionarCampoPendente(campos, "categoria", "Categoria", string.IsNullOrWhiteSpace(categoria));
+        AdicionarCampoPendente(campos, "subcategoria", "Subcategoria", string.IsNullOrWhiteSpace(subcategoria));
+        AdicionarCampoPendente(campos, "prioridade", "Prioridade", !prioridade.HasValue);
+        AdicionarCampoPendente(campos, "criticidade", "Criticidade", !criticidade.HasValue);
+        AdicionarCampoPendente(campos, "urgencia", "Urgência", !urgencia.HasValue);
+
+        return campos;
+    }
+
+    private static void AdicionarCampoPendente(List<object> campos, string chave, string label, bool pendente)
+    {
+        if (pendente)
+            campos.Add(new { chave, label });
+    }
+
+    private bool RegistrarAlteracaoCampoSeMudou(
+        Chamado chamado,
+        int usuarioId,
+        string campo,
+        string? valorAnterior,
+        string? valorNovo,
+        DateTime dataAlteracao,
+        Action<string?> aplicarValor,
+        string? valorAnteriorDisplay = null,
+        string? valorNovoDisplay = null)
+    {
+        var anteriorNormalizado = string.IsNullOrWhiteSpace(valorAnterior) ? null : valorAnterior.Trim();
+        var novoNormalizado = string.IsNullOrWhiteSpace(valorNovo) ? null : valorNovo.Trim();
+
+        if (string.Equals(anteriorNormalizado, novoNormalizado, StringComparison.Ordinal))
+            return false;
+
+        aplicarValor(novoNormalizado);
+        _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+        {
+            ChamadoId = chamado.Id,
+            GrupoId = chamado.GrupoId,
+            UsuarioId = usuarioId,
+            CampoAlterado = campo,
+            ValorAnterior = NormalizarValorAuditoria(valorAnteriorDisplay ?? anteriorNormalizado),
+            ValorAlterado = NormalizarValorAuditoria(valorNovoDisplay ?? novoNormalizado),
+            TipoAlteracao = "EdicaoHistoricoChamado",
+            DataAlteracao = dataAlteracao
+        });
+
+        return true;
+    }
+
+    private static string? NormalizarValorAuditoria(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return null;
+
+        var texto = valor.Trim();
+        return texto.Length > 500 ? texto[..500] : texto;
+    }
+
+    private async Task<object> ObterOpcoesEdicaoHistoricoAsync(int grupoId, int? tipoId, int? categoriaId)
+    {
+        return new
+        {
+            setores = await _context.Setores
+                .AsNoTracking()
+                .Where(s => s.GrupoId == grupoId)
+                .OrderBy(s => s.NomeSetor)
+                .Select(s => new { id = s.Id, nome = s.NomeSetor })
+                .ToListAsync(),
+            tipos = await _context.OcorrenciasTipo
+                .AsNoTracking()
+                .Where(t => t.GrupoId == grupoId)
+                .OrderBy(t => t.TipoOcorrencia)
+                .Select(t => new { id = t.Id, nome = t.TipoOcorrencia })
+                .ToListAsync(),
+            categorias = tipoId.HasValue ? await ObterCategoriasHistoricoAsync(grupoId, tipoId.Value) : new List<object>(),
+            subcategorias = categoriaId.HasValue ? await ObterSubcategoriasHistoricoAsync(grupoId, categoriaId.Value) : new List<object>()
+        };
+    }
+
+    private async Task<List<object>> ObterCategoriasHistoricoAsync(int grupoId, int tipoId)
+    {
+        var categorias = await (
+            from categoria in _context.OcorrenciasCategoria.AsNoTracking()
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+            where categoria.TipoId == tipoId && tipo.GrupoId == grupoId
+            orderby categoria.CategoriaOcorrencia
+            select new { id = categoria.Id, nome = categoria.CategoriaOcorrencia })
+            .ToListAsync();
+
+        return categorias.Cast<object>().ToList();
+    }
+
+    private async Task<List<object>> ObterSubcategoriasHistoricoAsync(int grupoId, int categoriaId)
+    {
+        var subcategorias = await (
+            from subcategoria in _context.OcorrenciasSubcategoria.AsNoTracking()
+            join categoria in _context.OcorrenciasCategoria.AsNoTracking() on subcategoria.CategoriaId equals categoria.Id
+            join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+            where subcategoria.CategoriaId == categoriaId && tipo.GrupoId == grupoId
+            orderby subcategoria.SubcategoriaOcorrencia
+            select new { id = subcategoria.Id, nome = subcategoria.SubcategoriaOcorrencia })
+            .ToListAsync();
+
+        return subcategorias.Cast<object>().ToList();
+    }
+
+    private Task<string?> ObterNomeSetorValidadoAsync(int grupoId, int? setorId) =>
+        !setorId.HasValue
+            ? Task.FromResult<string?>(null)
+            : _context.Setores
+                .AsNoTracking()
+                .Where(s => s.Id == setorId.Value && s.GrupoId == grupoId)
+                .Select(s => s.NomeSetor)
+                .FirstOrDefaultAsync();
+
+    private Task<string?> ObterNomeTipoValidadoAsync(int grupoId, int? tipoId) =>
+        !tipoId.HasValue
+            ? Task.FromResult<string?>(null)
+            : _context.OcorrenciasTipo
+                .AsNoTracking()
+                .Where(t => t.Id == tipoId.Value && t.GrupoId == grupoId)
+                .Select(t => t.TipoOcorrencia)
+                .FirstOrDefaultAsync();
+
+    private Task<string?> ObterNomeCategoriaValidadaAsync(int grupoId, int? tipoId, int? categoriaId) =>
+        !categoriaId.HasValue
+            ? Task.FromResult<string?>(null)
+            : (from categoria in _context.OcorrenciasCategoria.AsNoTracking()
+               join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+               where categoria.Id == categoriaId.Value &&
+                     tipo.GrupoId == grupoId &&
+                     (!tipoId.HasValue || categoria.TipoId == tipoId.Value)
+               select categoria.CategoriaOcorrencia)
+              .FirstOrDefaultAsync();
+
+    private Task<string?> ObterNomeSubcategoriaValidadaAsync(int grupoId, int? categoriaId, int? subcategoriaId) =>
+        !subcategoriaId.HasValue
+            ? Task.FromResult<string?>(null)
+            : (from subcategoria in _context.OcorrenciasSubcategoria.AsNoTracking()
+               join categoria in _context.OcorrenciasCategoria.AsNoTracking() on subcategoria.CategoriaId equals categoria.Id
+               join tipo in _context.OcorrenciasTipo.AsNoTracking() on categoria.TipoId equals tipo.Id
+               where subcategoria.Id == subcategoriaId.Value &&
+                     tipo.GrupoId == grupoId &&
+                     (!categoriaId.HasValue || subcategoria.CategoriaId == categoriaId.Value)
+               select subcategoria.SubcategoriaOcorrencia)
+              .FirstOrDefaultAsync();
+
+    private async Task<Dictionary<string, object>> ObterUltimaAuditoriaCamposAsync(int chamadoId)
+    {
+        var campos = new[] { "Titulo", "Descricao", "Solucao", "Setor", "TipoProblema", "Categoria", "Subcategoria" };
+        var registros = await (
+            from historico in _context.HistoricoAlteracoesChamado.AsNoTracking()
+            join usuario in _context.Usuarios.AsNoTracking() on historico.UsuarioId equals usuario.Id
+            where historico.ChamadoId == chamadoId &&
+                  historico.TipoAlteracao == "EdicaoHistoricoChamado" &&
+                  campos.Contains(historico.CampoAlterado)
+            orderby historico.DataAlteracao descending, historico.Id descending
+            select new
+            {
+                historico.CampoAlterado,
+                historico.ValorAnterior,
+                historico.ValorAlterado,
+                historico.DataAlteracao,
+                usuario.NomeUsuario
+            })
+            .ToListAsync();
+
+        return registros
+            .GroupBy(r => r.CampoAlterado)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var item = g.First();
+                    return (object)new
+                    {
+                        usuario = item.NomeUsuario,
+                        valorAnterior = item.ValorAnterior,
+                        valorAlterado = item.ValorAlterado,
+                        dataAlteracao = ParaDataHoraRegionalIso(item.DataAlteracao)
+                    };
+                });
     }
 
     private static string ObterClasseStatusCard(StatusChamado status) => status switch
@@ -1523,6 +1969,7 @@ public class HistoryModel : PageModel
         public string Setor { get; set; } = string.Empty;
         public string TipoProblema { get; set; } = string.Empty;
         public bool TemComentariosNaoLidos { get; set; }
+        public bool TemInformacoesPendentes { get; set; }
         public TimeSpan? TempoResolucao =>
             DataFinal.HasValue && DataFinal.Value >= DataCriacao
                 ? DataFinal.Value - DataCriacao
@@ -1552,6 +1999,19 @@ public class HistoryModel : PageModel
     {
         public int ChamadoId { get; set; }
         public string? Status { get; set; }
+    }
+
+    public class SalvarDetalhesHistoricoRequest
+    {
+        public int ChamadoId { get; set; }
+        public string? Titulo { get; set; }
+        public int? SetorId { get; set; }
+        public int? OcorrenciaTipoId { get; set; }
+        public int? OcorrenciaCategoriaId { get; set; }
+        public int? OcorrenciaSubcategoriaId { get; set; }
+        public string? Descricao { get; set; }
+        public string? Solucao { get; set; }
+        public List<string> CamposEditados { get; set; } = new();
     }
 
     public class VinculoChamadoRequest
