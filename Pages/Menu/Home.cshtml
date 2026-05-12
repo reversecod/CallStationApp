@@ -45,6 +45,7 @@
 
       .content-wrapper {
         margin-left: 17.5rem; /* Espaço para a sidebar fixa */
+        position: relative;
         padding: 1rem 1.35rem; /* Espaço interno no conteúdo */
         min-height: 100vh; /* Garante que o conteúdo ocupe a altura total */
         overflow-y: auto; /* Ativa scroll vertical apenas no conteúdo */
@@ -205,10 +206,45 @@
       transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
     }
 
-    .ticket-card:hover {
+      .ticket-card:hover {
       transform: translateY(-0.12rem);
       box-shadow: 0 1.35rem 2.6rem rgba(15, 23, 42, .2);
       filter: saturate(1.05);
+    }
+
+    .ticket-sort-button {
+      position: absolute;
+      top: .55rem;
+      left: 5.55rem;
+      width: 1.45rem;
+      height: 1.45rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      padding: 0;
+      z-index: 4;
+      transition: transform .18s ease, filter .18s ease;
+    }
+
+    .ticket-sort-button:hover,
+    .ticket-sort-button:focus-visible {
+      filter: drop-shadow(0 .45rem .85rem rgba(15, 23, 42, .2));
+      transform: translateY(-.08rem);
+    }
+
+    .ticket-sort-button img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      transition: transform .18s ease;
+    }
+
+    .ticket-sort-button.is-ascending img {
+      transform: rotate(180deg);
     }
 
     .ticket-aberto {
@@ -913,6 +949,13 @@
       }
 
       @@media (max-width: 992px) {
+        .ticket-sort-button {
+          top: .35rem;
+          left: 4.35rem;
+          width: 1.35rem;
+          height: 1.35rem;
+        }
+
         .ticket-card {
           min-height: 5.5rem;
           padding: 0.75rem 1rem;
@@ -959,6 +1002,12 @@
       }
 
       @@media (max-width: 768px) {
+        .ticket-sort-button {
+          left: 3.8rem;
+          width: 1.25rem;
+          height: 1.25rem;
+        }
+
         .ticket-card {
           min-height: 5rem;
           border-radius: 1.5rem;
@@ -1039,6 +1088,14 @@
         @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
 
         <div class="content-wrapper">
+            <button type="button"
+                    id="btnOrdenarChamados"
+                    class="ticket-sort-button"
+                    aria-label="Alterar ordem dos chamados"
+                    title="Mais recentes primeiro">
+                <img src="~/images/logoseta.png" alt="" aria-hidden="true" loading="lazy">
+            </button>
+
             <div class="row mt-3">
                 <div class="col-12 col-xl-7 mb-3">
                     <div id="chamados-container">
@@ -1073,7 +1130,7 @@
                             </div>
                         }
 
-                        <div class="d-flex align-items-center mt-3">
+                        <div class="d-flex align-items-center mt-3 chamados-actions">
                             @if (Model.PodeCriarChamado)
                             {
                                 <button type="button" id="btnNovoChamado"

@@ -10,6 +10,7 @@ let candidatosVinculoTimer = null;
 let usuarioPodeAcessarVinculosChamado = false;
 let editorFechamentoTimer = null;
 let ticketLogoClickTimer = null;
+const CHAMADOS_ORDEM_STORAGE_PREFIX = "callstation.home.ordemChamados";
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
     { id: "editPrazoResposta", nome: "Prazo resposta" },
@@ -142,6 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     inicializarDropTarefas();
+    inicializarOrdenacaoChamados();
     inicializarBotoesEdicao();
     inicializarSelectsLongos();
     inicializarCoresCamposChamado();
@@ -338,12 +340,14 @@ async function criarNovoChamado() {
     chamadoDiv.appendChild(spanOuter);
     chamadoDiv.appendChild(spanNumero);
 
-    const buttonDiv = container.querySelector(".d-flex.align-items-center");
+    const buttonDiv = container.querySelector(".chamados-actions");
     if (buttonDiv) {
         container.insertBefore(chamadoDiv, buttonDiv);
     } else {
         container.appendChild(chamadoDiv);
     }
+
+    aplicarOrdenacaoChamados(obterOrdemChamadosSalva());
 
     cronometrosAtivos.push(spanCronometro);
     atualizarCronometros();
@@ -374,6 +378,82 @@ async function criarNovoChamado() {
         console.error("Erro na requisição de criação:", error);
         mostrarToast("Falha ao criar chamado: " + error.message);
     }
+}
+
+function inicializarOrdenacaoChamados() {
+    const botao = document.getElementById("btnOrdenarChamados");
+    if (!botao) return;
+
+    const ordemInicial = "desc";
+    localStorage.setItem(obterChaveOrdenacaoChamados(), ordemInicial);
+    aplicarOrdenacaoChamados(ordemInicial);
+    atualizarBotaoOrdenacaoChamados(ordemInicial);
+
+    botao.addEventListener("click", () => {
+        const ordemAtual = botao.dataset.ordemChamados === "asc" ? "asc" : "desc";
+        const novaOrdem = ordemAtual === "desc" ? "asc" : "desc";
+
+        localStorage.setItem(obterChaveOrdenacaoChamados(), novaOrdem);
+        aplicarOrdenacaoChamados(novaOrdem);
+        atualizarBotaoOrdenacaoChamados(novaOrdem);
+    });
+}
+
+function obterChaveOrdenacaoChamados() {
+    const grupoId = document.getElementById("grupoIdAtual")?.value || "global";
+    return `${CHAMADOS_ORDEM_STORAGE_PREFIX}.${grupoId}`;
+}
+
+function obterOrdemChamadosSalva() {
+    const ordem = localStorage.getItem(obterChaveOrdenacaoChamados());
+    return ordem === "asc" ? "asc" : "desc";
+}
+
+function aplicarOrdenacaoChamados(ordem) {
+    const container = document.getElementById("chamados-container");
+    if (!container) return;
+
+    const referencia = container.querySelector(".chamados-actions");
+    const cards = [...container.querySelectorAll(":scope > .ticket-card")];
+    if (cards.length < 2) return;
+
+    cards
+        .sort((a, b) => {
+            const dataA = obterDataCriacaoCardChamado(a);
+            const dataB = obterDataCriacaoCardChamado(b);
+            const comparacaoData = ordem === "asc" ? dataA - dataB : dataB - dataA;
+            if (comparacaoData !== 0) return comparacaoData;
+
+            const idA = Number(a.dataset.id || 0);
+            const idB = Number(b.dataset.id || 0);
+            return ordem === "asc" ? idA - idB : idB - idA;
+        })
+        .forEach(card => {
+            if (referencia) {
+                container.insertBefore(card, referencia);
+            } else {
+                container.appendChild(card);
+            }
+        });
+}
+
+function obterDataCriacaoCardChamado(card) {
+    const valor = card.querySelector(".cronometro")?.dataset.criadoEm || "";
+    const data = Date.parse(valor);
+    return Number.isFinite(data) ? data : 0;
+}
+
+function atualizarBotaoOrdenacaoChamados(ordem) {
+    const botao = document.getElementById("btnOrdenarChamados");
+    if (!botao) return;
+
+    const ascendente = ordem === "asc";
+    botao.dataset.ordemChamados = ascendente ? "asc" : "desc";
+    botao.classList.toggle("is-ascending", ascendente);
+    botao.title = ascendente ? "Mais antigos primeiro" : "Mais recentes primeiro";
+    botao.setAttribute("aria-label", ascendente
+        ? "Chamados em ordem do mais antigo para o mais recente"
+        : "Chamados em ordem do mais recente para o mais antigo");
 }
 
 function atualizarCronometros() {
