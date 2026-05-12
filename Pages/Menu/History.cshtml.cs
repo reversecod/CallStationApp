@@ -1113,6 +1113,16 @@ public class HistoryModel : PageModel
         if (!string.IsNullOrWhiteSpace(solucao) && solucao.Length > 500)
             return new JsonResult(new { success = false, message = "Solução deve ter no máximo 500 caracteres." });
 
+        PrioridadeChamado? prioridade = null;
+        if (camposEditados.Contains("prioridade") && !TryParseNullableEnum(request.Prioridade, out prioridade))
+            return new JsonResult(new { success = false, message = "Prioridade inválida." });
+        CriticidadeChamado? criticidade = null;
+        if (camposEditados.Contains("criticidade") && !TryParseNullableEnum(request.Criticidade, out criticidade))
+            return new JsonResult(new { success = false, message = "Criticidade inválida." });
+        UrgenciaChamado? urgencia = null;
+        if (camposEditados.Contains("urgencia") && !TryParseNullableEnum(request.Urgencia, out urgencia))
+            return new JsonResult(new { success = false, message = "Urgência inválida." });
+
         var setorNome = camposEditados.Contains("setor") ? await ObterNomeSetorValidadoAsync(GrupoId, request.SetorId) : null;
         if (request.SetorId.HasValue && setorNome == null)
             return new JsonResult(new { success = false, message = "Setor inválido." });
@@ -1158,6 +1168,12 @@ public class HistoryModel : PageModel
                         alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Descricao", chamado.Descricao, string.IsNullOrWhiteSpace(descricao) ? null : descricao, agora, valor => chamado.Descricao = valor);
                     if (camposEditados.Contains("solucao"))
                         alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Solucao", chamado.Solucao, string.IsNullOrWhiteSpace(solucao) ? null : solucao, agora, valor => chamado.Solucao = valor);
+                    if (camposEditados.Contains("prioridade"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Prioridade", chamado.Prioridade?.ToString(), prioridade?.ToString(), agora, valor => chamado.Prioridade = string.IsNullOrWhiteSpace(valor) ? null : Enum.Parse<PrioridadeChamado>(valor), FormatarPrioridadeAuditoria(chamado.Prioridade), FormatarPrioridadeAuditoria(prioridade));
+                    if (camposEditados.Contains("criticidade"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Criticidade", chamado.Criticidade?.ToString(), criticidade?.ToString(), agora, valor => chamado.Criticidade = string.IsNullOrWhiteSpace(valor) ? null : Enum.Parse<CriticidadeChamado>(valor), FormatarCriticidadeAuditoria(chamado.Criticidade), FormatarCriticidadeAuditoria(criticidade));
+                    if (camposEditados.Contains("urgencia"))
+                        alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Urgencia", chamado.Urgencia?.ToString(), urgencia?.ToString(), agora, valor => chamado.Urgencia = string.IsNullOrWhiteSpace(valor) ? null : Enum.Parse<UrgenciaChamado>(valor), FormatarUrgenciaAuditoria(chamado.Urgencia), FormatarUrgenciaAuditoria(urgencia));
                     if (camposEditados.Contains("setor"))
                         alterou |= RegistrarAlteracaoCampoSeMudou(chamado, usuarioId.Value, "Setor", chamado.SetorId?.ToString(CultureInfo.InvariantCulture), request.SetorId?.ToString(CultureInfo.InvariantCulture), agora, valor => chamado.SetorId = string.IsNullOrWhiteSpace(valor) ? null : int.Parse(valor, CultureInfo.InvariantCulture), setorAnterior, setorNome);
                     if (camposEditados.Contains("tipoProblema"))
@@ -1633,6 +1649,51 @@ public class HistoryModel : PageModel
         return texto.Length > 500 ? texto[..500] : texto;
     }
 
+    private static string? FormatarPrioridadeAuditoria(PrioridadeChamado? prioridade) => prioridade switch
+    {
+        PrioridadeChamado.Media => "Média",
+        PrioridadeChamado.Critica => "Crítica",
+        PrioridadeChamado.Baixa => "Baixa",
+        PrioridadeChamado.Alta => "Alta",
+        _ => null
+    };
+
+    private static string? FormatarCriticidadeAuditoria(CriticidadeChamado? criticidade) => criticidade switch
+    {
+        CriticidadeChamado.Media => "Média",
+        CriticidadeChamado.Critico => "Crítico",
+        CriticidadeChamado.Baixa => "Baixa",
+        CriticidadeChamado.Alta => "Alta",
+        _ => null
+    };
+
+    private static string? FormatarUrgenciaAuditoria(UrgenciaChamado? urgencia) => urgencia switch
+    {
+        UrgenciaChamado.NaoUrgente => "Não urgente",
+        UrgenciaChamado.PoucaUrgencia => "Pouca urgência",
+        UrgenciaChamado.Urgente => "Urgente",
+        UrgenciaChamado.Emergencia => "Emergência",
+        _ => null
+    };
+
+    private static bool TryParseNullableEnum<TEnum>(string? valor, out TEnum? resultado) where TEnum : struct
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            resultado = null;
+            return true;
+        }
+
+        if (Enum.TryParse<TEnum>(valor.Trim(), out var valorEnum))
+        {
+            resultado = valorEnum;
+            return true;
+        }
+
+        resultado = null;
+        return false;
+    }
+
     private async Task<object> ObterOpcoesEdicaoHistoricoAsync(int grupoId, int? tipoId, int? categoriaId)
     {
         return new
@@ -1724,7 +1785,7 @@ public class HistoryModel : PageModel
 
     private async Task<Dictionary<string, object>> ObterUltimaAuditoriaCamposAsync(int chamadoId)
     {
-        var campos = new[] { "Titulo", "Descricao", "Solucao", "Setor", "TipoProblema", "Categoria", "Subcategoria" };
+        var campos = new[] { "Titulo", "Descricao", "Solucao", "Prioridade", "Criticidade", "Urgencia", "Setor", "TipoProblema", "Categoria", "Subcategoria" };
         var registros = await (
             from historico in _context.HistoricoAlteracoesChamado.AsNoTracking()
             join usuario in _context.Usuarios.AsNoTracking() on historico.UsuarioId equals usuario.Id
@@ -2009,6 +2070,9 @@ public class HistoryModel : PageModel
         public int? OcorrenciaTipoId { get; set; }
         public int? OcorrenciaCategoriaId { get; set; }
         public int? OcorrenciaSubcategoriaId { get; set; }
+        public string? Prioridade { get; set; }
+        public string? Criticidade { get; set; }
+        public string? Urgencia { get; set; }
         public string? Descricao { get; set; }
         public string? Solucao { get; set; }
         public List<string> CamposEditados { get; set; } = new();

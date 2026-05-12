@@ -559,6 +559,43 @@
             white-space:pre-wrap;
         }
 
+        .nivel-badge {
+            display:inline-flex;
+            align-items:center;
+            width:max-content;
+            max-width:100%;
+            border-radius:999px;
+            padding:.22rem .65rem;
+            font-size:.82rem;
+            font-weight:700;
+            border:1px solid transparent;
+            white-space:normal;
+        }
+
+        .nivel-baixo {
+            background:#dcfce7;
+            color:#166534;
+            border-color:#bbf7d0;
+        }
+
+        .nivel-medio {
+            background:#fef3c7;
+            color:#92400e;
+            border-color:#fde68a;
+        }
+
+        .nivel-alto {
+            background:#ffedd5;
+            color:#c2410c;
+            border-color:#fed7aa;
+        }
+
+        .nivel-grave {
+            background:#fee2e2;
+            color:#b91c1c;
+            border-color:#fecaca;
+        }
+
         .detail-comments {
             display:flex;
             flex-direction:column;
@@ -1502,9 +1539,9 @@
                     ${renderizarDetalhe("Tipo de problema", dados.tipoProblema || "Não registrado", false, camposPendentes.has("tipoProblema"), dados, "tipoProblema")}
                     ${renderizarDetalhe("Categoria", dados.categoria || "Não registrado", false, camposPendentes.has("categoria"), dados, "categoria")}
                     ${renderizarDetalhe("Subcategoria", dados.subcategoria || "Não registrado", false, camposPendentes.has("subcategoria"), dados, "subcategoria")}
-                    ${renderizarDetalhe("Prioridade", formatarValorDetalhe(dados.prioridade), false, camposPendentes.has("prioridade"))}
-                    ${renderizarDetalhe("Criticidade", formatarValorDetalhe(dados.criticidade), false, camposPendentes.has("criticidade"))}
-                    ${renderizarDetalhe("Urgência", formatarValorDetalhe(dados.urgencia), false, camposPendentes.has("urgencia"))}
+                    ${renderizarDetalhe("Prioridade", formatarValorDetalhe(dados.prioridade), false, camposPendentes.has("prioridade"), dados, "prioridade")}
+                    ${renderizarDetalhe("Criticidade", formatarValorDetalhe(dados.criticidade), false, camposPendentes.has("criticidade"), dados, "criticidade")}
+                    ${renderizarDetalhe("Urgência", formatarValorDetalhe(dados.urgencia), false, camposPendentes.has("urgencia"), dados, "urgencia")}
                     ${renderizarDetalhe("Data de abertura", formatDateTimeLocal(dados.dataCriacao))}
                     ${renderizarDetalhe("Data de finalização", formatDateTimeLocal(dados.dataFinalizacao))}
                     ${renderizarDetalhe("Prazo de resposta", formatDateTimeLocal(dados.prazoResposta))}
@@ -1565,6 +1602,10 @@
             if (campo === "categoria") {
                 document.getElementById("editHistoricoCategoriaId")?.addEventListener("change", carregarSubcategoriasHistorico);
             }
+
+            valor.querySelectorAll("[data-select-nivel-historico]").forEach(select => {
+                select.addEventListener("change", () => atualizarClasseNivelSelect(select));
+            });
         }
 
         function renderizarControleInlineHistorico(campo, dados) {
@@ -1580,6 +1621,30 @@
             }
             if (campo === "setor") {
                 return renderizarSelectInlineHistorico("editHistoricoSetorId", opcoes.setores || [], dados.setorId);
+            }
+            if (campo === "prioridade") {
+                return renderizarSelectNivelHistorico("editHistoricoPrioridade", dados.prioridade, [
+                    { valor: "Baixa", nome: "Baixa" },
+                    { valor: "Media", nome: "Média" },
+                    { valor: "Alta", nome: "Alta" },
+                    { valor: "Critica", nome: "Crítica" }
+                ]);
+            }
+            if (campo === "criticidade") {
+                return renderizarSelectNivelHistorico("editHistoricoCriticidade", dados.criticidade, [
+                    { valor: "Baixa", nome: "Baixa" },
+                    { valor: "Media", nome: "Média" },
+                    { valor: "Alta", nome: "Alta" },
+                    { valor: "Critico", nome: "Crítico" }
+                ]);
+            }
+            if (campo === "urgencia") {
+                return renderizarSelectNivelHistorico("editHistoricoUrgencia", dados.urgencia, [
+                    { valor: "NaoUrgente", nome: "Não urgente" },
+                    { valor: "PoucaUrgencia", nome: "Pouca urgência" },
+                    { valor: "Urgente", nome: "Urgente" },
+                    { valor: "Emergencia", nome: "Emergência" }
+                ]);
             }
             if (campo === "tipoProblema") {
                 return renderizarSelectInlineHistorico("editHistoricoTipoId", opcoes.tipos || [], dados.ocorrenciaTipoId);
@@ -1599,6 +1664,15 @@
                 <select class="form-select" id="${id}">
                     <option value="">Não registrado</option>
                     ${(opcoes || []).map(opcao => `<option value="${Number(opcao.id || 0)}" ${Number(opcao.id || 0) === Number(selecionado || 0) ? "selected" : ""}>${escapeHtml(opcao.nome || "")}</option>`).join("")}
+                </select>
+            `;
+        }
+
+        function renderizarSelectNivelHistorico(id, selecionado, opcoes) {
+            return `
+                <select class="form-select ${obterClasseNivelCampo("", selecionado)}" id="${escapeHtml(id)}" data-select-nivel-historico>
+                    <option value="">Não registrado</option>
+                    ${opcoes.map(opcao => `<option value="${escapeHtml(opcao.valor)}" ${opcao.valor === selecionado ? "selected" : ""}>${escapeHtml(opcao.nome)}</option>`).join("")}
                 </select>
             `;
         }
@@ -1646,6 +1720,9 @@
                     chamadoId: detalhesChamadoAtualId,
                     titulo: document.getElementById("editHistoricoTitulo")?.value ?? null,
                     setorId: campoEstaEditando("setor") ? toNullableNumber(document.getElementById("editHistoricoSetorId")?.value) : null,
+                    prioridade: campoEstaEditando("prioridade") ? document.getElementById("editHistoricoPrioridade")?.value || null : null,
+                    criticidade: campoEstaEditando("criticidade") ? document.getElementById("editHistoricoCriticidade")?.value || null : null,
+                    urgencia: campoEstaEditando("urgencia") ? document.getElementById("editHistoricoUrgencia")?.value || null : null,
                     ocorrenciaTipoId: campoEstaEditando("tipoProblema") ? toNullableNumber(document.getElementById("editHistoricoTipoId")?.value) : null,
                     ocorrenciaCategoriaId: campoEstaEditando("categoria") ? toNullableNumber(document.getElementById("editHistoricoCategoriaId")?.value) : null,
                     ocorrenciaSubcategoriaId: campoEstaEditando("subcategoria") ? toNullableNumber(document.getElementById("editHistoricoSubcategoriaId")?.value) : null,
@@ -1685,16 +1762,36 @@
         function renderizarDetalhe(label, valor, completo = false, pendente = false, dados = null, campo = null) {
             const editavel = !!dados?.podeEditarHistorico && !!campo;
             const auditoria = editavel ? renderizarAuditoriaCampo(campoParaAuditoria(campo), dados.auditoriaCampos) : "";
+            const classeNivel = obterClasseNivelCampo(campo, campo ? dados?.[campo] : null);
+            const valorHtml = classeNivel
+                ? `<span class="nivel-badge ${classeNivel}">${escapeHtml(valor || "-")}</span>`
+                : escapeHtml(valor || "-");
             return `
                 <div class="detail-block ${completo ? "mt-3" : ""}" ${campo ? `data-campo-historico="${escapeHtml(campo)}"` : ""}>
                     <div class="detail-label-row">
                         <span class="detail-label">${escapeHtml(label)}${pendente ? '<span class="detail-field-pending" title="Informação pendente"></span>' : ''}</span>
                         ${editavel ? `<button type="button" class="detail-edit-button" data-editar-campo-historico="${escapeHtml(campo)}" aria-label="Editar ${escapeHtml(label)}"><i class="bi bi-pencil"></i></button>` : ""}
                     </div>
-                    <div class="detail-value" data-detail-value>${escapeHtml(valor || "-")}</div>
+                    <div class="detail-value" data-detail-value>${valorHtml}</div>
                     ${auditoria}
                 </div>
             `;
+        }
+
+        function obterClasseNivelCampo(campo, valor) {
+            if (!valor) return "";
+            const normalizado = String(valor).toLowerCase();
+            if (normalizado === "baixa" || normalizado === "naourgente") return "nivel-baixo";
+            if (normalizado === "media" || normalizado === "poucaurgencia") return "nivel-medio";
+            if (normalizado === "alta" || normalizado === "urgente") return "nivel-alto";
+            if (normalizado === "critica" || normalizado === "critico" || normalizado === "emergencia") return "nivel-grave";
+            return "";
+        }
+
+        function atualizarClasseNivelSelect(select) {
+            select.classList.remove("nivel-baixo", "nivel-medio", "nivel-alto", "nivel-grave");
+            const classe = obterClasseNivelCampo("", select.value);
+            if (classe) select.classList.add(classe);
         }
 
         function campoParaAuditoria(campo) {
@@ -1702,6 +1799,9 @@
                 titulo: "Titulo",
                 descricao: "Descricao",
                 solucao: "Solucao",
+                prioridade: "Prioridade",
+                criticidade: "Criticidade",
+                urgencia: "Urgencia",
                 setor: "Setor",
                 tipoProblema: "TipoProblema",
                 categoria: "Categoria",
@@ -1848,8 +1948,12 @@
 
         function formatarValorDetalhe(valor) {
             if (!valor) return "Não registrado";
+            if (valor === "Media") return "Média";
+            if (valor === "Critica") return "Crítica";
+            if (valor === "Critico") return "Crítico";
             if (valor === "NaoUrgente") return "Não urgente";
             if (valor === "PoucaUrgencia") return "Pouca urgência";
+            if (valor === "Emergencia") return "Emergência";
             return valor;
         }
 

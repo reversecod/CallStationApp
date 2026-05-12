@@ -144,6 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
     inicializarDropTarefas();
     inicializarBotoesEdicao();
     inicializarSelectsLongos();
+    inicializarCoresCamposChamado();
     inicializarCamposDataHoraChamado();
     inicializarLimpezaSelecaoChamado();
     inicializarPreviewImagemChamado();
@@ -809,6 +810,7 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editCriticidade", data.criticidade);
     setValueIfExists("editUrgencia", data.urgencia);
     setValueIfExists("editStatus", data.status ?? "Aberto");
+    atualizarCoresCamposChamado();
 
     setDateValueIfExists("editDataFinalizacao", data.dataFinalizacao);
     setDateValueIfExists("editPrazoResposta", data.prazoResposta);
@@ -879,6 +881,59 @@ function inicializarBotoesEdicao() {
             await carregarSubcategorias(this.value, null);
         });
     }
+}
+
+function inicializarCoresCamposChamado() {
+    ["editPrioridade", "editCriticidade", "editUrgencia", "editStatus"].forEach(id => {
+        document.getElementById(id)?.addEventListener("change", atualizarCoresCamposChamado);
+    });
+
+    atualizarCoresCamposChamado();
+}
+
+function atualizarCoresCamposChamado() {
+    aplicarClasseNivelSelect(document.getElementById("editPrioridade"));
+    aplicarClasseNivelSelect(document.getElementById("editCriticidade"));
+    aplicarClasseNivelSelect(document.getElementById("editUrgencia"));
+    aplicarClasseStatusSelect(document.getElementById("editStatus"));
+}
+
+function aplicarClasseNivelSelect(select) {
+    if (!select) return;
+
+    limparClassesContextoSelect(select);
+    const classe = obterClasseNivel(select.value);
+    if (classe) select.classList.add(classe);
+}
+
+function aplicarClasseStatusSelect(select) {
+    if (!select) return;
+
+    limparClassesContextoSelect(select);
+    const classe = obterClasseStatusSelect(select.value);
+    if (classe) select.classList.add(classe);
+}
+
+function limparClassesContextoSelect(select) {
+    select.classList.remove("nivel-baixo", "nivel-medio", "nivel-alto", "nivel-grave", "status-baixo", "status-medio", "status-alto", "status-grave", "status-neutro");
+}
+
+function obterClasseNivel(valor) {
+    const normalizado = (valor || "").toLowerCase();
+    if (normalizado === "baixa" || normalizado === "naourgente") return "nivel-baixo";
+    if (normalizado === "media" || normalizado === "poucaurgencia") return "nivel-medio";
+    if (normalizado === "alta" || normalizado === "urgente") return "nivel-alto";
+    if (normalizado === "critica" || normalizado === "critico" || normalizado === "emergencia") return "nivel-grave";
+    return "";
+}
+
+function obterClasseStatusSelect(valor) {
+    const normalizado = (valor || "").toLowerCase();
+    if (normalizado === "aberto" || normalizado === "concluido" || normalizado === "fechado") return "status-baixo";
+    if (normalizado === "emandamento" || normalizado === "reaberto") return "status-neutro";
+    if (normalizado === "pendente") return "status-medio";
+    if (normalizado === "cancelado" || normalizado === "excluido") return "status-grave";
+    return "";
 }
 
 function inicializarSelectsLongos() {
