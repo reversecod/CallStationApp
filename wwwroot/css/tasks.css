@@ -71,11 +71,13 @@ main {
     overflow-y: hidden;
     padding: 1rem;
     background: #fff;
+    min-height: 0;
 }
 
 .task-list {
     flex: 0 0 18rem;
     max-height: calc(100vh - 7.5rem);
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: #101820;
@@ -187,8 +189,10 @@ main {
 }
 
 .task-cards {
+    flex: 1 1 auto;
     min-height: 2.5rem;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: .45rem .55rem;
     display: flex;
     flex-direction: column;
@@ -200,6 +204,7 @@ main {
 }
 
 .task-card {
+    flex: 0 0 auto;
     border-radius: 8px;
     background: #242933;
     color: #e5e7eb;
@@ -632,6 +637,11 @@ main {
 
     .board {
         min-height: 70vh;
+        overflow-y: hidden;
+    }
+
+    .task-list {
+        max-height: 70vh;
     }
 
     #modalCartao .modal-body {
