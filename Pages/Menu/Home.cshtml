@@ -643,6 +643,12 @@
         color: #0f172a;
       }
 
+      .modal-linked-call-scroll {
+        max-height: min(60vh, calc(20 * 2.75rem));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+
       .chamado-actions-row {
         display: flex;
         flex-wrap: wrap;
@@ -1371,7 +1377,7 @@
                 <div class="modal-body">
                     <input type="hidden" id="vinculosChamadoId" />
                     <select id="selectVinculosChamado" class="form-select d-none" multiple size="10"></select>
-                    <div id="listaVinculosChamado" class="linked-call-list">
+                    <div id="listaVinculosChamado" class="linked-call-list modal-linked-call-scroll">
                         <div class="text-muted small">Carregando vínculos...</div>
                     </div>
                 </div>
