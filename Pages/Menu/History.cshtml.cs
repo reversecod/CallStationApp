@@ -37,11 +37,15 @@ public class HistoryModel : PageModel
 
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly IWebHostEnvironment _environment;
+    private readonly ILogger<HistoryModel> _logger;
 
-    public HistoryModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService)
+    public HistoryModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, IWebHostEnvironment environment, ILogger<HistoryModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
+        _environment = environment;
+        _logger = logger;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -781,6 +785,8 @@ public class HistoryModel : PageModel
             comentario.autor,
             comentario.texto,
             dataComentario = ParaDataHoraRegionalIso(comentario.dataComentario),
+            podeEditar = comentario.usuarioId == usuarioId.Value,
+            podeExcluir = comentario.usuarioId == usuarioId.Value,
             anexoUrl = string.IsNullOrWhiteSpace(comentario.anexo)
                 ? null
                 : Url.Page("/Menu/Home", "AnexoComentarioChamado", new
@@ -866,6 +872,146 @@ public class HistoryModel : PageModel
         catch (Exception)
         {
             return new JsonResult(new { success = false, message = "Não foi possível atualizar a visualização dos comentários." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostEditarComentarioAsync([FromBody] EditarComentarioHistoricoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0 || request.ComentarioId <= 0)
+            return new JsonResult(new { success = false, message = "Comentário inválido." });
+
+        var mensagem = (request.Mensagem ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(mensagem))
+            return new JsonResult(new { success = false, message = "Informe o comentário." });
+        if (mensagem.Length > LimiteCaracteresComentario)
+            return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var comentario = await _context.ComentariosChamados
+                        .FirstOrDefaultAsync(c => c.Id == request.ComentarioId && c.ChamadoId == request.ChamadoId);
+
+                    if (comentario == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Comentário não encontrado." });
+                    if (comentario.UsuarioId != usuarioId.Value)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você só pode editar comentários próprios." });
+
+                    if (string.Equals(comentario.Mensagem, mensagem, StringComparison.Ordinal))
+                        return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Nenhuma alteração feita." } });
+
+                    var mensagemAnterior = comentario.Mensagem;
+                    comentario.Mensagem = mensagem;
+                    _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+                    {
+                        ChamadoId = resultadoAcesso.Chamado!.Id,
+                        GrupoId = resultadoAcesso.Chamado.GrupoId,
+                        UsuarioId = usuarioId.Value,
+                        CampoAlterado = "Comentario",
+                        ValorAnterior = mensagemAnterior,
+                        ValorAlterado = mensagem,
+                        TipoAlteracao = "ComentarioHistoricoEditado",
+                        DataAlteracao = DateTime.UtcNow
+                    });
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Comentário atualizado com sucesso." } });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao editar comentário {ComentarioId} do histórico do chamado {ChamadoId}.", request.ComentarioId, request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível editar o comentário." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostExcluirComentarioAsync([FromBody] ExcluirComentarioHistoricoRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0 || request.ComentarioId <= 0)
+            return new JsonResult(new { success = false, message = "Comentário inválido." });
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        string? anexoRemover = null;
+
+        try
+        {
+            var resultado = await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var comentario = await _context.ComentariosChamados
+                        .FirstOrDefaultAsync(c => c.Id == request.ComentarioId && c.ChamadoId == request.ChamadoId);
+
+                    if (comentario == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Comentário não encontrado." });
+                    if (comentario.UsuarioId != usuarioId.Value)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você só pode excluir comentários próprios." });
+
+                    anexoRemover = comentario.AnexoComentario;
+                    _context.ComentariosChamados.Remove(comentario);
+                    _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+                    {
+                        ChamadoId = resultadoAcesso.Chamado!.Id,
+                        GrupoId = resultadoAcesso.Chamado.GrupoId,
+                        UsuarioId = usuarioId.Value,
+                        CampoAlterado = "Comentario",
+                        ValorAnterior = comentario.Mensagem,
+                        TipoAlteracao = "ComentarioHistoricoExcluido",
+                        DataAlteracao = DateTime.UtcNow
+                    });
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Comentário excluído com sucesso." } });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+
+            RemoverAnexoComentarioSeExistir(anexoRemover);
+            return resultado;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir comentário {ComentarioId} do histórico do chamado {ChamadoId}.", request.ComentarioId, request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível excluir o comentário." });
         }
     }
 
@@ -1649,6 +1795,25 @@ public class HistoryModel : PageModel
         return texto.Length > 500 ? texto[..500] : texto;
     }
 
+    private void RemoverAnexoComentarioSeExistir(string? nomeArquivo)
+    {
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return;
+
+        var caminho = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios", nomeArquivo);
+        if (!System.IO.File.Exists(caminho))
+            return;
+
+        try
+        {
+            System.IO.File.Delete(caminho);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Não foi possível remover o anexo do comentário {Arquivo}.", nomeArquivo);
+        }
+    }
+
     private static string? FormatarPrioridadeAuditoria(PrioridadeChamado? prioridade) => prioridade switch
     {
         PrioridadeChamado.Media => "Média",
@@ -2054,6 +2219,19 @@ public class HistoryModel : PageModel
     {
         public int ChamadoId { get; set; }
         public string? Mensagem { get; set; }
+    }
+
+    public class EditarComentarioHistoricoRequest
+    {
+        public int ChamadoId { get; set; }
+        public int ComentarioId { get; set; }
+        public string? Mensagem { get; set; }
+    }
+
+    public class ExcluirComentarioHistoricoRequest
+    {
+        public int ChamadoId { get; set; }
+        public int ComentarioId { get; set; }
     }
 
     public class AlterarStatusHistoricoRequest

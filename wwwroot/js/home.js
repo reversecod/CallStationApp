@@ -990,6 +990,7 @@ function inicializarLimpezaSelecaoChamado() {
 
 function inicializarComentariosChamado() {
     document.getElementById("btnEnviarComentarioChamado")?.addEventListener("click", enviarComentarioChamado);
+    document.getElementById("listaComentariosChamado")?.addEventListener("click", tratarAcaoComentarioChamado);
 }
 
 function inicializarVinculosChamado() {
@@ -1533,17 +1534,135 @@ function renderizarComentariosChamadoPaginado(dados, anexar = false) {
 
 function renderizarComentarioChamadoPaginado(comentario) {
     const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
+    const acoes = comentario.podeEditar || comentario.podeExcluir
+        ? `
+            <div class="comment-actions ms-auto d-flex gap-1">
+                ${comentario.podeEditar ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-editar-comentario-chamado="${Number(comentario.id || 0)}" aria-label="Editar comentário"><i class="bi bi-pencil"></i></button>` : ""}
+                ${comentario.podeExcluir ? `<button type="button" class="btn btn-sm btn-outline-danger" data-excluir-comentario-chamado="${Number(comentario.id || 0)}" aria-label="Excluir comentário"><i class="bi bi-trash"></i></button>` : ""}
+            </div>
+        `
+        : "";
 
     return `
-        <div class="comment-card">
+        <div class="comment-card" data-comentario-chamado-id="${Number(comentario.id || 0)}">
             <div class="comment-meta">
                 <span class="comment-author">${escapeHtml(comentario.autor || "Nao registrado")}</span>
                 <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
+                ${acoes}
             </div>
             <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
             ${anexo}
         </div>
     `;
+}
+
+async function tratarAcaoComentarioChamado(event) {
+    const btnEditar = event.target.closest("[data-editar-comentario-chamado]");
+    if (btnEditar) {
+        ativarEdicaoComentarioChamado(btnEditar);
+        return;
+    }
+
+    const btnSalvar = event.target.closest("[data-salvar-comentario-chamado]");
+    if (btnSalvar) {
+        await salvarEdicaoComentarioChamado(btnSalvar);
+        return;
+    }
+
+    const btnCancelar = event.target.closest("[data-cancelar-comentario-chamado]");
+    if (btnCancelar) {
+        cancelarEdicaoComentarioChamado(btnCancelar);
+        return;
+    }
+
+    const btnExcluir = event.target.closest("[data-excluir-comentario-chamado]");
+    if (btnExcluir) {
+        await excluirComentarioChamado(btnExcluir);
+    }
+}
+
+function ativarEdicaoComentarioChamado(botao) {
+    const card = botao.closest("[data-comentario-chamado-id]");
+    const texto = card?.querySelector(".comment-text");
+    if (!card || !texto || card.dataset.editando === "true") return;
+
+    const valorAtual = texto.textContent || "";
+    card.dataset.editando = "true";
+    card.dataset.textoOriginal = valorAtual;
+    texto.innerHTML = `
+        <textarea class="form-control form-control-sm mb-2" rows="3" maxlength="250" data-texto-edicao-comentario>${escapeHtml(valorAtual)}</textarea>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-primary" data-salvar-comentario-chamado>Salvar</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-cancelar-comentario-chamado>Cancelar</button>
+        </div>
+    `;
+    texto.querySelector("[data-texto-edicao-comentario]")?.focus();
+}
+
+function cancelarEdicaoComentarioChamado(botao) {
+    const card = botao.closest("[data-comentario-chamado-id]");
+    const texto = card?.querySelector(".comment-text");
+    if (!card || !texto) return;
+
+    texto.textContent = card.dataset.textoOriginal || "";
+    delete card.dataset.editando;
+    delete card.dataset.textoOriginal;
+}
+
+async function salvarEdicaoComentarioChamado(botao) {
+    const card = botao.closest("[data-comentario-chamado-id]");
+    const comentarioId = Number(card?.dataset.comentarioChamadoId || 0);
+    const chamadoId = Number(document.getElementById("comentariosChamadoId")?.value || 0);
+    const mensagem = (card?.querySelector("[data-texto-edicao-comentario]")?.value || "").trim();
+
+    if (!chamadoId || !comentarioId || !mensagem) {
+        mostrarToast("Informe o comentário.");
+        return;
+    }
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const data = await fetchJson(`?handler=EditarComentarioChamado&grupoId=${encodeURIComponent(grupoId)}`, {
+            chamadoId,
+            comentarioId,
+            mensagem
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível editar o comentário.");
+            return;
+        }
+
+        mostrarToast(data.dados?.message || "Comentário atualizado com sucesso.", "success");
+        await carregarComentariosChamado(chamadoId, 1, false);
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível editar o comentário.");
+    }
+}
+
+async function excluirComentarioChamado(botao) {
+    const comentarioId = Number(botao.dataset.excluirComentarioChamado || 0);
+    const chamadoId = Number(document.getElementById("comentariosChamadoId")?.value || 0);
+    if (!chamadoId || !comentarioId) return;
+    if (!confirm("Excluir este comentário?")) return;
+
+    try {
+        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
+        const data = await fetchJson(`?handler=ExcluirComentarioChamado&grupoId=${encodeURIComponent(grupoId)}`, {
+            chamadoId,
+            comentarioId
+        });
+
+        if (!data.success) {
+            mostrarToast(data.message || "Não foi possível excluir o comentário.");
+            return;
+        }
+
+        mostrarToast(data.dados?.message || "Comentário excluído com sucesso.", "success");
+        await carregarComentariosChamado(chamadoId, 1, false);
+    } catch (error) {
+        mostrarToast(error.message || "Não foi possível excluir o comentário.");
+    }
 }
 
 function cancelarEdicaoChamado() {

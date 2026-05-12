@@ -1229,6 +1229,31 @@
             }
         });
 
+        listaComentarios?.addEventListener("click", async event => {
+            const btnEditar = event.target.closest("[data-editar-comentario-historico]");
+            if (btnEditar) {
+                ativarEdicaoComentarioHistorico(btnEditar);
+                return;
+            }
+
+            const btnSalvar = event.target.closest("[data-salvar-comentario-historico]");
+            if (btnSalvar) {
+                await salvarEdicaoComentarioHistorico(btnSalvar);
+                return;
+            }
+
+            const btnCancelar = event.target.closest("[data-cancelar-comentario-historico]");
+            if (btnCancelar) {
+                cancelarEdicaoComentarioHistorico(btnCancelar);
+                return;
+            }
+
+            const btnExcluir = event.target.closest("[data-excluir-comentario-historico]");
+            if (btnExcluir) {
+                await excluirComentarioHistorico(btnExcluir);
+            }
+        });
+
         btnSalvarStatus?.addEventListener("click", async () => {
             const chamadoId = Number(statusChamadoIdInput?.value);
             const status = selectNovoStatus?.value || "";
@@ -2048,19 +2073,110 @@
 
         function renderizarComentarioHistorico(comentario) {
             const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
+            const acoes = comentario.podeEditar || comentario.podeExcluir
+                ? `
+                    <div class="comment-actions ms-auto d-flex gap-1">
+                        ${comentario.podeEditar ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-editar-comentario-historico="${Number(comentario.id || 0)}" aria-label="Editar comentário"><i class="bi bi-pencil"></i></button>` : ""}
+                        ${comentario.podeExcluir ? `<button type="button" class="btn btn-sm btn-outline-danger" data-excluir-comentario-historico="${Number(comentario.id || 0)}" aria-label="Excluir comentário"><i class="bi bi-trash"></i></button>` : ""}
+                    </div>
+                `
+                : "";
 
             return `
                 <div class="comment-item">
-                    <div class="comment-card">
+                    <div class="comment-card" data-comentario-historico-id="${Number(comentario.id || 0)}">
                         <div class="comment-meta">
                             <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
                             <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
+                            ${acoes}
                         </div>
                         <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
                         ${anexo}
                     </div>
                 </div>
             `;
+        }
+
+        function ativarEdicaoComentarioHistorico(botao) {
+            const card = botao.closest("[data-comentario-historico-id]");
+            const texto = card?.querySelector(".comment-text");
+            if (!card || !texto || card.dataset.editando === "true") return;
+
+            const valorAtual = texto.textContent || "";
+            card.dataset.editando = "true";
+            card.dataset.textoOriginal = valorAtual;
+            texto.innerHTML = `
+                <textarea class="form-control form-control-sm mb-2" rows="3" maxlength="250" data-texto-edicao-comentario>${escapeHtml(valorAtual)}</textarea>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary" data-salvar-comentario-historico>Salvar</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-cancelar-comentario-historico>Cancelar</button>
+                </div>
+            `;
+            texto.querySelector("[data-texto-edicao-comentario]")?.focus();
+        }
+
+        function cancelarEdicaoComentarioHistorico(botao) {
+            const card = botao.closest("[data-comentario-historico-id]");
+            const texto = card?.querySelector(".comment-text");
+            if (!card || !texto) return;
+
+            texto.textContent = card.dataset.textoOriginal || "";
+            delete card.dataset.editando;
+            delete card.dataset.textoOriginal;
+        }
+
+        async function salvarEdicaoComentarioHistorico(botao) {
+            const card = botao.closest("[data-comentario-historico-id]");
+            const comentarioId = Number(card?.dataset.comentarioHistoricoId || 0);
+            const chamadoId = Number(comentariosChamadoIdInput?.value || 0);
+            const mensagem = (card?.querySelector("[data-texto-edicao-comentario]")?.value || "").trim();
+
+            if (!chamadoId || !comentarioId || !mensagem) {
+                mostrarToast("Informe o comentário.");
+                return;
+            }
+
+            try {
+                const data = await fetchJson(`?handler=EditarComentario&grupoId=${encodeURIComponent(historyGrupoId)}`, {
+                    chamadoId,
+                    comentarioId,
+                    mensagem
+                });
+
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível editar o comentário.");
+                    return;
+                }
+
+                mostrarToast(data.dados?.message || "Comentário atualizado com sucesso.", "success");
+                await carregarComentarios(chamadoId, false, 1, false);
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível editar o comentário.");
+            }
+        }
+
+        async function excluirComentarioHistorico(botao) {
+            const comentarioId = Number(botao.dataset.excluirComentarioHistorico || 0);
+            const chamadoId = Number(comentariosChamadoIdInput?.value || 0);
+            if (!chamadoId || !comentarioId) return;
+            if (!confirm("Excluir este comentário?")) return;
+
+            try {
+                const data = await fetchJson(`?handler=ExcluirComentario&grupoId=${encodeURIComponent(historyGrupoId)}`, {
+                    chamadoId,
+                    comentarioId
+                });
+
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível excluir o comentário.");
+                    return;
+                }
+
+                mostrarToast(data.dados?.message || "Comentário excluído com sucesso.", "success");
+                await carregarComentarios(chamadoId, false, 1, false);
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível excluir o comentário.");
+            }
         }
 
         function montarPreviewAnexoComentario(anexoUrl) {

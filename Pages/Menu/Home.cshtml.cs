@@ -1485,6 +1485,8 @@ public class HomeModel : PageModel
             autor = comentario.Autor,
             texto = comentario.Texto,
             dataComentario = ParaDataHoraRegionalIso(comentario.DataComentario),
+            podeEditar = comentario.UsuarioId == idUsuario.Value,
+            podeExcluir = comentario.UsuarioId == idUsuario.Value,
             anexoUrl = string.IsNullOrWhiteSpace(comentario.AnexoComentario)
                 ? null
                 : Url.Page("/Menu/Home", "AnexoComentarioChamado", new
@@ -1608,6 +1610,150 @@ public class HomeModel : PageModel
 
             _logger.LogError(ex, "Erro ao adicionar comentario ao chamado {ChamadoId}.", request.ChamadoId);
             return new JsonResult(new { success = false, message = "Não foi possível adicionar o comentário." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostEditarComentarioChamadoAsync([FromBody] EditarComentarioChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0 || request.ComentarioId <= 0)
+            return new JsonResult(new { success = false, message = "Comentário inválido." });
+
+        var mensagem = (request.Mensagem ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(mensagem))
+            return new JsonResult(new { success = false, message = "Informe o comentário." });
+        if (mensagem.Length > LimiteCaracteresComentario)
+            return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarComentariosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar comentários." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var comentario = await _context.ComentariosChamados
+                        .FirstOrDefaultAsync(c => c.Id == request.ComentarioId && c.ChamadoId == request.ChamadoId);
+
+                    if (comentario == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Comentário não encontrado." });
+                    if (comentario.UsuarioId != idUsuario.Value)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você só pode editar comentários próprios." });
+
+                    if (string.Equals(comentario.Mensagem, mensagem, StringComparison.Ordinal))
+                        return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Nenhuma alteração feita." } });
+
+                    var mensagemAnterior = comentario.Mensagem;
+                    comentario.Mensagem = mensagem;
+                    _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+                    {
+                        ChamadoId = acesso.Chamado!.Id,
+                        GrupoId = acesso.Chamado.GrupoId,
+                        UsuarioId = idUsuario.Value,
+                        CampoAlterado = "Comentario",
+                        ValorAnterior = mensagemAnterior,
+                        ValorAlterado = mensagem,
+                        TipoAlteracao = "ComentarioEditado",
+                        DataAlteracao = DateTime.UtcNow
+                    });
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Comentário atualizado com sucesso." } });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao editar comentário {ComentarioId} do chamado {ChamadoId}.", request.ComentarioId, request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível editar o comentário." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostExcluirComentarioChamadoAsync([FromBody] ExcluirComentarioChamadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.ChamadoId <= 0 || request.ComentarioId <= 0)
+            return new JsonResult(new { success = false, message = "Comentário inválido." });
+
+        var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, request.ChamadoId);
+        if (!acesso.Success)
+            return new JsonResult(new { success = false, message = acesso.Message });
+        if (!PodeAcessarComentariosChamado(acesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para acessar comentários." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        string? anexoRemover = null;
+
+        try
+        {
+            var resultado = await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var comentario = await _context.ComentariosChamados
+                        .FirstOrDefaultAsync(c => c.Id == request.ComentarioId && c.ChamadoId == request.ChamadoId);
+
+                    if (comentario == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Comentário não encontrado." });
+                    if (comentario.UsuarioId != idUsuario.Value)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você só pode excluir comentários próprios." });
+
+                    anexoRemover = comentario.AnexoComentario;
+                    _context.ComentariosChamados.Remove(comentario);
+                    _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+                    {
+                        ChamadoId = acesso.Chamado!.Id,
+                        GrupoId = acesso.Chamado.GrupoId,
+                        UsuarioId = idUsuario.Value,
+                        CampoAlterado = "Comentario",
+                        ValorAnterior = comentario.Mensagem,
+                        TipoAlteracao = "ComentarioExcluido",
+                        DataAlteracao = DateTime.UtcNow
+                    });
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Comentário excluído com sucesso." } });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+
+            RemoverAnexoComentarioSeExistir(anexoRemover);
+            return resultado;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao excluir comentário {ComentarioId} do chamado {ChamadoId}.", request.ComentarioId, request.ChamadoId);
+            return new JsonResult(new { success = false, message = "Não foi possível excluir o comentário." });
         }
     }
 
@@ -2299,6 +2445,25 @@ public class HomeModel : PageModel
         };
     }
 
+    private void RemoverAnexoComentarioSeExistir(string? nomeArquivo)
+    {
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return;
+
+        var caminho = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios", nomeArquivo);
+        if (!System.IO.File.Exists(caminho))
+            return;
+
+        try
+        {
+            System.IO.File.Delete(caminho);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Não foi possível remover o anexo do comentário {Arquivo}.", nomeArquivo);
+        }
+    }
+
     private static async Task<bool> AssinaturaArquivoPermitidaAsync(IFormFile arquivo, string extensao)
     {
         var buffer = new byte[12];
@@ -2669,6 +2834,19 @@ public class HomeModel : PageModel
         public int ChamadoId { get; set; }
         public string? Mensagem { get; set; }
         public IFormFile? AnexoImagem { get; set; }
+    }
+
+    public class EditarComentarioChamadoRequest
+    {
+        public int ChamadoId { get; set; }
+        public int ComentarioId { get; set; }
+        public string? Mensagem { get; set; }
+    }
+
+    public class ExcluirComentarioChamadoRequest
+    {
+        public int ChamadoId { get; set; }
+        public int ComentarioId { get; set; }
     }
 
     public class MarcarComentariosVisualizadosRequest
