@@ -929,7 +929,6 @@ function atualizarResumoChamado(data) {
 async function preencherFormularioEdicao(data) {
     const msg = document.getElementById("mensagemSelecioneChamado");
     const form = document.getElementById("formEdicaoChamado");
-    const label = document.getElementById("chamadoSelecionadoLabel");
     const textoDataCriacao = document.getElementById("textoDataCriacao");
 
     if (!form) return;
@@ -940,13 +939,6 @@ async function preencherFormularioEdicao(data) {
 
     atualizarResumoChamado(data);
     atualizarIndicadorComentarioBotao(data.id);
-    usuarioPodeAcessarVinculosChamado = !!data.permissoes?.podeAcessarVinculosChamado;
-    document.querySelector(".chamado-vinculos-bar")?.classList.toggle("d-none", !usuarioPodeAcessarVinculosChamado);
-    if (usuarioPodeAcessarVinculosChamado) {
-        await carregarResumoVinculosChamado(data.id);
-    } else {
-        atualizarResumoVinculosChamado([]);
-    }
 
     setValueIfExists("editId", data.id);
     setValueIfExists("editTitulo", data.titulo);
@@ -956,8 +948,6 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editGrupoId", data.grupoId);
     setValueIfExists("editSetorId", data.setorId);
     setValueIfExists("editOcorrenciaTipoId", data.ocorrenciaTipoId);
-    await carregarCategorias(data.ocorrenciaTipoId, data.ocorrenciaCategoriaId);
-    await carregarSubcategorias(getValue("editOcorrenciaCategoriaId"), data.ocorrenciaSubcategoriaId);
 
     if (textoDataCriacao) {
         textoDataCriacao.textContent = data.dataCriacao
@@ -981,6 +971,18 @@ async function preencherFormularioEdicao(data) {
     definirCarregamentoChamado(false);
     form.classList.remove("d-none");
     animarAberturaEditorChamado();
+
+    usuarioPodeAcessarVinculosChamado = !!data.permissoes?.podeAcessarVinculosChamado;
+    document.querySelector(".chamado-vinculos-bar")?.classList.toggle("d-none", !usuarioPodeAcessarVinculosChamado);
+
+    if (usuarioPodeAcessarVinculosChamado) {
+        carregarResumoVinculosChamado(data.id);
+    } else {
+        atualizarResumoVinculosChamado([]);
+    }
+
+    carregarCategorias(data.ocorrenciaTipoId, data.ocorrenciaCategoriaId)
+        .then(() => carregarSubcategorias(getValue("editOcorrenciaCategoriaId"), data.ocorrenciaSubcategoriaId));
 }
 
 function inicializarBotoesEdicao() {
