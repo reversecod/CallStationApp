@@ -315,6 +315,8 @@ async function criarNovoChamado() {
     const chamadoDiv = document.createElement("div");
     chamadoDiv.className = "ticket-card ticket-aberto";
     chamadoDiv.dataset.status = "Aberto";
+    chamadoDiv.role = "button";
+    chamadoDiv.draggable = true;
 
     const img = document.createElement("img");
     img.src = "/images/logoticket.png";
@@ -367,7 +369,19 @@ async function criarNovoChamado() {
             throw new Error(data.message || `Erro HTTP: ${response.status}`);
         }
 
-        location.reload();
+        chamadoDiv.dataset.id = data.id;
+        spanOuter.textContent = "Novo chamado - ";
+        spanOuter.appendChild(spanCronometro);
+        spanNumero.textContent = `#${data.numeroGrupo}`;
+        spanNumero.title = `Chamado #${data.numeroGrupo}`;
+
+        if (data.criadoEm) {
+            spanCronometro.dataset.criadoEm = new Date(data.criadoEm).toISOString();
+        }
+
+        aplicarOrdenacaoChamados(obterOrdemChamadosSalva());
+        await carregarChamado(data.id);
+        focarTituloChamado();
     } catch (error) {
         chamadoDiv.remove();
 
@@ -379,6 +393,16 @@ async function criarNovoChamado() {
         console.error("Erro na requisição de criação:", error);
         mostrarToast("Falha ao criar chamado: " + error.message);
     }
+}
+
+function focarTituloChamado() {
+    const titulo = document.getElementById("editTitulo");
+    if (!titulo || titulo.disabled || titulo.readOnly || titulo.offsetParent === null) return;
+
+    window.requestAnimationFrame(() => {
+        titulo.focus();
+        titulo.select();
+    });
 }
 
 function inicializarOrdenacaoChamados() {
