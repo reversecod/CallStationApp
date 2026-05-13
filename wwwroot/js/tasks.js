@@ -939,6 +939,7 @@ function inserirCardNoBoard(id, payload) {
             <div class="task-title">${escapeHtml(payload.titulo)}</div>
         </div>
         <div class="task-meta">
+            ${renderizarIndicadorChecklistMeta(payload.checklistsConcluidos || 0, payload.checklistsTotal || 0)}
             <span><i class="bi bi-lock"></i> ${payload.compartilharGrupo ? "Grupo" : "Privado"}</span>
         </div>
     `;
@@ -965,6 +966,46 @@ function atualizarCardNoBoard(id, payload) {
     if (titulo) {
         titulo.textContent = payload.titulo;
     }
+
+    if (payload.checklistsTotal !== undefined || payload.checklistsConcluidos !== undefined) {
+        atualizarIndicadorChecklistCard(
+            id,
+            Number(payload.checklistsConcluidos || 0),
+            Number(payload.checklistsTotal || 0));
+    }
+}
+
+function renderizarIndicadorChecklistMeta(concluidos, total) {
+    if (!total) return "";
+
+    return `<span class="task-checklist-progress" data-card-checklist-progress><i class="bi bi-check2-square"></i> ${Number(concluidos || 0)}/${Number(total || 0)}</span>`;
+}
+
+function calcularProgressoChecklists(checklists) {
+    const itens = (checklists || []).flatMap(checklist => checklist.itens || []);
+    return {
+        total: itens.length,
+        concluidos: itens.filter(item => item.concluido).length
+    };
+}
+
+function atualizarIndicadorChecklistCard(cartaoId, concluidos, total) {
+    const card = document.querySelector(`.task-card[data-card-id="${cartaoId}"]`);
+    const meta = card?.querySelector(".task-meta");
+    if (!card || !meta) return;
+
+    const existente = meta.querySelector("[data-card-checklist-progress]");
+    if (!total) {
+        existente?.remove();
+        return;
+    }
+
+    if (existente) {
+        existente.innerHTML = `<i class="bi bi-check2-square"></i> ${Number(concluidos || 0)}/${Number(total || 0)}`;
+        return;
+    }
+
+    meta.insertAdjacentHTML("afterbegin", renderizarIndicadorChecklistMeta(concluidos, total));
 }
 
 function atualizarCorCapaModal() {
@@ -1681,6 +1722,12 @@ function atualizarEtiquetasCard(cartaoId, etiquetas) {
 
 function renderizarChecklistsTarefa(checklists) {
     cartaoAtualEstado.checklists = checklists || [];
+    const progresso = calcularProgressoChecklists(cartaoAtualEstado.checklists);
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (cartaoId) {
+        atualizarIndicadorChecklistCard(cartaoId, progresso.concluidos, progresso.total);
+    }
+
     const container = document.getElementById("listaChecklistsTarefa");
     if (!container) return;
     container.innerHTML = cartaoAtualEstado.checklists.length ? cartaoAtualEstado.checklists.map(checklist => {

@@ -304,6 +304,10 @@ main {
     gap: .25rem;
 }
 
+.task-checklist-progress {
+    font-variant-numeric: tabular-nums;
+}
+
 .btn-add-card,
 .btn-add-list {
     width: calc(100% - 1rem);

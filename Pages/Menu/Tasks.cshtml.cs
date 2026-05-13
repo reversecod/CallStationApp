@@ -2856,6 +2856,30 @@ public class TasksModel : PageModel
                 : new List<EtiquetaTarefaDto>();
         }
 
+        var progressoChecklists = cartaoIds.Count == 0
+            ? new List<BoardChecklistProgressoViewModel>()
+            : await _context.ChecklistItensTarefas
+                .AsNoTracking()
+                .Where(i => cartaoIds.Contains(i.Checklist.CartaoTarefaId))
+                .GroupBy(i => i.Checklist.CartaoTarefaId)
+                .Select(g => new BoardChecklistProgressoViewModel
+                {
+                    CartaoTarefaId = g.Key,
+                    Total = g.Count(),
+                    Concluidos = g.Count(i => i.Concluido)
+                })
+                .ToListAsync();
+
+        var progressoChecklistsPorCartao = progressoChecklists.ToDictionary(p => p.CartaoTarefaId);
+        foreach (var cartao in cartoes)
+        {
+            if (!progressoChecklistsPorCartao.TryGetValue(cartao.Id, out var progresso))
+                continue;
+
+            cartao.ChecklistItensTotal = progresso.Total;
+            cartao.ChecklistItensConcluidos = progresso.Concluidos;
+        }
+
         var cartoesPorColuna = cartoes
             .GroupBy(c => c.ColunaId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -3532,6 +3556,8 @@ public class TasksModel : PageModel
         public DateTime? DataVencimento { get; set; }
         public bool Privado { get; set; }
         public bool Concluido { get; set; }
+        public int ChecklistItensTotal { get; set; }
+        public int ChecklistItensConcluidos { get; set; }
         public List<ChamadoOpcaoViewModel> Chamados { get; set; } = new();
         public List<EtiquetaTarefaDto> Etiquetas { get; set; } = new();
     }
@@ -3566,6 +3592,13 @@ public class TasksModel : PageModel
         public int Id { get; set; }
         public string Nome { get; set; } = string.Empty;
         public string Cor { get; set; } = string.Empty;
+    }
+
+    private class BoardChecklistProgressoViewModel
+    {
+        public int CartaoTarefaId { get; set; }
+        public int Total { get; set; }
+        public int Concluidos { get; set; }
     }
 
     public record EtiquetaTarefaDto(int Id, string Nome, string Cor);

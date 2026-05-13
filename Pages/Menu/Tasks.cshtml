@@ -129,6 +129,12 @@
                                     {
                                         <span><i class="bi bi-ticket-detailed"></i> @string.Join(", ", cartao.Chamados.Select(c => $"#{c.NumeroChamadoGrupo}"))</span>
                                     }
+                                    @if (cartao.ChecklistItensTotal > 0)
+                                    {
+                                        <span class="task-checklist-progress" data-card-checklist-progress>
+                                            <i class="bi bi-check2-square"></i> @cartao.ChecklistItensConcluidos/@cartao.ChecklistItensTotal
+                                        </span>
+                                    }
                                     @if (cartao.DataVencimento.HasValue)
                                     {
                                         <span><i class="bi bi-clock"></i> @cartao.DataVencimento.Value.ToString("dd/MM")</span>
