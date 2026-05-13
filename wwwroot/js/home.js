@@ -154,6 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
     inicializarAtualizacaoAutomaticaHome();
     inicializarComentariosChamado();
     inicializarVinculosChamado();
+    inicializarAjudaCamposChamado();
     atualizarCronometros();
     setInterval(atualizarCronometros, 1000);
     abrirChamadoDaUrl();
@@ -170,6 +171,24 @@ function mostrarToastPendente() {
     sessionStorage.removeItem("toastChamadoMensagem");
     sessionStorage.removeItem("toastChamadoTipo");
     mostrarToast(mensagem, tipo);
+}
+
+function inicializarAjudaCamposChamado() {
+    document.querySelectorAll("#formEdicaoChamado .campo-ajuda-botao").forEach(botao => {
+        botao.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const container = botao.closest(".campo-ajuda-container");
+            const texto = container?.querySelector(".campo-ajuda-texto");
+            if (!texto) return;
+
+            const abrir = texto.classList.contains("d-none");
+            texto.classList.toggle("d-none", !abrir);
+            botao.classList.toggle("is-open", abrir);
+            botao.setAttribute("aria-expanded", abrir ? "true" : "false");
+        });
+    });
 }
 
 function inicializarDropTarefas() {

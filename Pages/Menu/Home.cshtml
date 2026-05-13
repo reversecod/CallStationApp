@@ -515,6 +515,55 @@
         letter-spacing: .02em;
       }
 
+      .campo-ajuda-label {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        margin-bottom: .22rem;
+      }
+
+      .campo-ajuda-label .form-label {
+        margin-bottom: 0;
+      }
+
+      .campo-ajuda-botao {
+        position: relative;
+        width: 1rem;
+        height: 1rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #fff;
+        color: #64748b;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        font-size: .68rem;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .campo-ajuda-texto {
+        border-radius: .7rem;
+        background: #0f172a;
+        color: #fff;
+        margin: .35rem 0 .45rem;
+        padding: .65rem .75rem;
+        font-size: .76rem;
+        font-weight: 600;
+        line-height: 1.35;
+        letter-spacing: 0;
+        text-transform: none;
+        white-space: pre-line;
+        box-shadow: 0 .55rem 1.15rem rgba(15, 23, 42, .2);
+      }
+
+      .campo-ajuda-botao.is-open {
+        background: #0f172a;
+        border-color: #0f172a;
+        color: #fff;
+      }
+
       #formEdicaoChamado .form-control,
       #formEdicaoChamado .form-select {
         border-radius: .95rem;
@@ -1329,7 +1378,16 @@
 
                                 <div class="row">
                                     <div class="col-6 mb-2" id="wrapEditPrioridade">
-                                        <label for="editPrioridade" class="form-label">Prioridade</label>
+                                        <div class="campo-ajuda-container">
+                                            <div class="campo-ajuda-label">
+                                                <label for="editPrioridade" class="form-label">Prioridade</label>
+                                                <button type="button" class="campo-ajuda-botao" aria-label="Ajuda sobre prioridade" aria-expanded="false">?</button>
+                                            </div>
+                                            <div class="campo-ajuda-texto d-none">
+                                                Considerando tudo, qual o peso geral deste chamado?
+                                                A prioridade é sua avaliação final — leva em conta a criticidade, a urgência e qualquer outro fator que você considere relevante (cliente estratégico, compromisso contratual, prazo regulatório). Use-a para indicar ao time a ordem de atenção entre os chamados abertos.
+                                            </div>
+                                        </div>
                                         <select id="editPrioridade" class="form-select">
                                             <option value="">(vazio)</option>
                                             <option value="Baixa">Baixa</option>
@@ -1340,7 +1398,16 @@
                                     </div>
 
                                     <div class="col-6 mb-2" id="wrapEditCriticidade">
-                                        <label for="editCriticidade" class="form-label">Criticidade</label>
+                                        <div class="campo-ajuda-container">
+                                            <div class="campo-ajuda-label">
+                                                <label for="editCriticidade" class="form-label">Criticidade</label>
+                                                <button type="button" class="campo-ajuda-botao" aria-label="Ajuda sobre criticidade" aria-expanded="false">?</button>
+                                            </div>
+                                            <div class="campo-ajuda-texto d-none">
+                                                O quanto esse problema impacta o negócio ou as operações?
+                                                Avalie o tamanho do estrago, quantas pessoas são afetadas, quais processos estão parados ou comprometidos, se há risco de perda de dados ou prejuízo direto.
+                                            </div>
+                                        </div>
                                         <select id="editCriticidade" class="form-select">
                                             <option value="">(vazio)</option>
                                             <option value="Baixa">Baixa</option>
@@ -1353,7 +1420,16 @@
 
                                 <div class="row">
                                     <div class="col-6 mb-2" id="wrapEditUrgencia">
-                                        <label for="editUrgencia" class="form-label">Urgência</label>
+                                        <div class="campo-ajuda-container">
+                                            <div class="campo-ajuda-label">
+                                                <label for="editUrgencia" class="form-label">Urgência</label>
+                                                <button type="button" class="campo-ajuda-botao" aria-label="Ajuda sobre urgência" aria-expanded="false">?</button>
+                                            </div>
+                                            <div class="campo-ajuda-texto d-none">
+                                                O quanto esse problema precisa ser resolvido agora?
+                                                Avalie a pressão de tempo — existe um prazo, um compromisso, uma entrega ou um cliente esperando? O problema piora com o tempo se não for atendido?
+                                            </div>
+                                        </div>
                                         <select id="editUrgencia" class="form-select">
                                             <option value="">(vazio)</option>
                                             <option value="NaoUrgente">Não urgente</option>

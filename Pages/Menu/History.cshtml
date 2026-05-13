@@ -544,6 +544,45 @@
             margin-bottom:.2rem;
         }
 
+        .campo-ajuda-botao {
+            position: relative;
+            width: 1rem;
+            height: 1rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #fff;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-size: .68rem;
+            font-weight: 900;
+            line-height: 1;
+            flex: 0 0 auto;
+        }
+
+        .campo-ajuda-texto {
+            border-radius: .7rem;
+            background: #0f172a;
+            color: #fff;
+            margin: .35rem 0 .45rem;
+            padding: .65rem .75rem;
+            font-size: .76rem;
+            font-weight: 600;
+            line-height: 1.35;
+            letter-spacing: 0;
+            text-transform: none;
+            white-space: pre-line;
+            box-shadow: 0 .55rem 1.15rem rgba(15, 23, 42, .2);
+        }
+
+        .campo-ajuda-botao.is-open {
+            background: #0f172a;
+            border-color: #0f172a;
+            color: #fff;
+        }
+
         .detail-field-pending {
             width:.5rem;
             height:.5rem;
@@ -1086,6 +1125,11 @@
         let activeDirection = null;
         let pesquisaTimer = null;
         let termoPesquisaAtual = "";
+        const ajudaCamposNivel = {
+            criticidade: "O quanto esse problema impacta o negócio ou as operações?\nAvalie o tamanho do estrago, quantas pessoas são afetadas, quais processos estão parados ou comprometidos, se há risco de perda de dados ou prejuízo direto.",
+            urgencia: "O quanto esse problema precisa ser resolvido agora?\nAvalie a pressão de tempo — existe um prazo, um compromisso, uma entrega ou um cliente esperando? O problema piora com o tempo se não for atendido?",
+            prioridade: "Considerando tudo, qual o peso geral deste chamado?\nA prioridade é sua avaliação final — leva em conta a criticidade, a urgência e qualquer outro fator que você considere relevante (cliente estratégico, compromisso contratual, prazo regulatório). Use-a para indicar ao time a ordem de atenção entre os chamados abertos."
+        };
 
         document.addEventListener("click", event => {
             const botao = event.target.closest("[data-preview-image]");
@@ -1556,6 +1600,21 @@
             detalhesConteudo?.querySelectorAll("[data-editar-campo-historico]").forEach(botao => {
                 botao.addEventListener("click", () => ativarEdicaoCampoHistorico(botao.dataset.editarCampoHistorico, dados));
             });
+            detalhesConteudo?.querySelectorAll(".campo-ajuda-botao").forEach(botao => {
+                botao.addEventListener("click", event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const bloco = botao.closest(".detail-block");
+                    const texto = bloco?.querySelector(".campo-ajuda-texto");
+                    if (!texto) return;
+
+                    const abrir = texto.classList.contains("d-none");
+                    texto.classList.toggle("d-none", !abrir);
+                    botao.classList.toggle("is-open", abrir);
+                    botao.setAttribute("aria-expanded", abrir ? "true" : "false");
+                });
+            });
         }
 
         function ativarEdicaoCampoHistorico(campo, dados) {
@@ -1738,16 +1797,26 @@
             const valorHtml = classeNivel
                 ? `<span class="nivel-badge ${classeNivel}">${escapeHtml(valor || "-")}</span>`
                 : escapeHtml(valor || "-");
+            const ajuda = obterAjudaCampoNivel(campo);
             return `
                 <div class="detail-block ${completo ? "mt-3" : ""}" ${campo ? `data-campo-historico="${escapeHtml(campo)}"` : ""}>
                     <div class="detail-label-row">
-                        <span class="detail-label">${escapeHtml(label)}${pendente ? '<span class="detail-field-pending" title="Informação pendente"></span>' : ''}</span>
+                        <span class="detail-label">${escapeHtml(label)}${ajuda ? renderizarBotaoAjudaCampoNivel(campo) : ""}${pendente ? '<span class="detail-field-pending" title="Informação pendente"></span>' : ''}</span>
                         ${editavel ? `<button type="button" class="detail-edit-button" data-editar-campo-historico="${escapeHtml(campo)}" aria-label="Editar ${escapeHtml(label)}"><i class="bi bi-pencil"></i></button>` : ""}
                     </div>
+                    ${ajuda ? `<div class="campo-ajuda-texto d-none">${escapeHtml(ajuda)}</div>` : ""}
                     <div class="detail-value" data-detail-value>${valorHtml}</div>
                     ${auditoria}
                 </div>
             `;
+        }
+
+        function obterAjudaCampoNivel(campo) {
+            return ajudaCamposNivel[campo] || "";
+        }
+
+        function renderizarBotaoAjudaCampoNivel(campo) {
+            return `<button type="button" class="campo-ajuda-botao" aria-label="Ajuda sobre ${escapeHtml(campo)}" aria-expanded="false">?</button>`;
         }
 
         function obterClasseNivelCampo(campo, valor) {
