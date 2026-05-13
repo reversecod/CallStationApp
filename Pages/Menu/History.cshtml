@@ -946,30 +946,6 @@
                 }
                 </div>
 
-                @if (Model.TemPaginaAnterior || Model.TemProximaPagina)
-                {
-                    <div class="d-flex justify-content-between align-items-center pt-2">
-                        @if (Model.TemPaginaAnterior)
-                        {
-                            <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" asp-route-page="@(Model.PaginaAtual - 1)" class="btn btn-outline-secondary btn-sm">Anterior</a>
-                        }
-                        else
-                        {
-                            <span></span>
-                        }
-
-                        <span class="text-muted small">Página @Model.PaginaAtual</span>
-
-                        @if (Model.TemProximaPagina)
-                        {
-                            <a asp-page="/Menu/History" asp-route-grupoId="@Model.GrupoId" asp-route-page="@(Model.PaginaAtual + 1)" class="btn btn-outline-secondary btn-sm">Próxima</a>
-                        }
-                        else
-                        {
-                            <span></span>
-                        }
-                    </div>
-                }
             }
             else
             {
@@ -980,6 +956,7 @@
                         <p class="text-muted mb-0">Quando chamados forem concluídos, fechados ou cancelados, eles aparecerão aqui.</p>
                     </div>
                 </div>
+
             }
         </div>
     </div>
@@ -1117,12 +1094,11 @@
             imagemPreview.src = botao.dataset.previewImage || "";
             imagemPreviewModal.show();
         });
-        let paginaPesquisaAtual = 1;
         let detalhesChamadoAtualId = null;
         let candidatosVinculoTimer = null;
 
         sortButtons.forEach(button => {
-            button.addEventListener("click", () => {
+            button.addEventListener("click", async () => {
                 const field = button.dataset.sortField;
                 const defaultDirection = button.dataset.defaultDir || "asc";
 
@@ -1158,7 +1134,6 @@
             window.clearTimeout(pesquisaTimer);
             pesquisaTimer = window.setTimeout(async () => {
                 termoPesquisaAtual = (inputPesquisa.value || "").trim();
-                paginaPesquisaAtual = 1;
                 await pesquisarHistorico();
             }, 300);
         });
@@ -1166,7 +1141,6 @@
         btnLimparPesquisa?.addEventListener("click", async () => {
             if (inputPesquisa) inputPesquisa.value = "";
             termoPesquisaAtual = "";
-            paginaPesquisaAtual = 1;
             await pesquisarHistorico();
             inputPesquisa?.focus();
         });
@@ -1190,11 +1164,6 @@
                 return;
             }
 
-            const btnPaginaPesquisa = event.target.closest("[data-history-search-page]");
-            if (btnPaginaPesquisa) {
-                paginaPesquisaAtual = Number(btnPaginaPesquisa.dataset.historySearchPage || 1);
-                pesquisarHistorico();
-            }
         });
 
         btnEnviarComentario?.addEventListener("click", async () => {
@@ -1283,19 +1252,18 @@
 
         async function pesquisarHistorico() {
             if (!historyList) return;
-            historyList.innerHTML = '<div class="history-empty"><i class="bi bi-search fs-1 text-secondary"></i><div><h2 class="h4 mt-3">Pesquisando chamados</h2><p class="text-muted mb-0">Aguarde enquanto o histórico é filtrado.</p></div></div>';
-
+            historyList.innerHTML = '<div class="history-empty"><i class="bi bi-search fs-1 text-secondary"></i><div><h2 class="h4 mt-3">Carregando histórico</h2><p class="text-muted mb-0">Aguarde enquanto os chamados são carregados.</p></div></div>';
             try {
-                const response = await fetch(`?handler=PesquisarChamados&grupoId=${encodeURIComponent(historyGrupoId)}&termo=${encodeURIComponent(termoPesquisaAtual)}&page=${encodeURIComponent(paginaPesquisaAtual)}`);
+                const response = await fetch(`?handler=PesquisarChamados&grupoId=${encodeURIComponent(historyGrupoId)}&termo=${encodeURIComponent(termoPesquisaAtual)}`);
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || "Não foi possível pesquisar chamados.");
+                    throw new Error(data.message || "Não foi possível carregar os chamados.");
                 }
 
                 renderizarHistoricoPesquisa(data.dados || {});
             } catch (error) {
-                historyList.innerHTML = `<div class="history-empty"><i class="bi bi-exclamation-triangle fs-1 text-danger"></i><div><h2 class="h4 mt-3">Pesquisa indisponível</h2><p class="text-muted mb-0">${escapeHtml(error.message || "Não foi possível pesquisar chamados.")}</p></div></div>`;
+                historyList.innerHTML = `<div class="history-empty"><i class="bi bi-exclamation-triangle fs-1 text-danger"></i><div><h2 class="h4 mt-3">Histórico indisponível</h2><p class="text-muted mb-0">${escapeHtml(error.message || "Não foi possível carregar os chamados.")}</p></div></div>`;
             }
         }
 
@@ -1316,12 +1284,10 @@
                 return;
             }
 
-            historyList.innerHTML = `
-                <div id="historyCardsContainer">
-                    ${chamados.map((chamado, index) => renderizarCardHistorico(chamado, index)).join("")}
-                </div>
-                ${renderizarPaginacaoPesquisa(dados)}
-            `;
+            historyList.innerHTML = '<div id="historyCardsContainer"></div>';
+            const containerAtual = document.getElementById("historyCardsContainer");
+            containerAtual?.insertAdjacentHTML("beforeend", chamados.map((chamado, index) =>
+                renderizarCardHistorico(chamado, index)).join(""));
             aplicarOrdenacaoAtual();
         }
 
@@ -1416,25 +1382,6 @@
                         <div class="history-label">Status atual</div>
                         <div class="history-value" data-status-texto title="${escapeHtml(statusTexto)}">${escapeHtml(statusTexto)}</div>
                     </div>
-                </div>
-            `;
-        }
-
-        function renderizarPaginacaoPesquisa(dados) {
-            if (!dados.temPaginaAnterior && !dados.temProximaPagina) return "";
-
-            const anterior = dados.temPaginaAnterior
-                ? `<button type="button" class="btn btn-outline-secondary btn-sm" data-history-search-page="${Number(dados.pagina || 1) - 1}">Anterior</button>`
-                : "<span></span>";
-            const proxima = dados.temProximaPagina
-                ? `<button type="button" class="btn btn-outline-secondary btn-sm" data-history-search-page="${Number(dados.pagina || 1) + 1}">Próxima</button>`
-                : "<span></span>";
-
-            return `
-                <div class="d-flex justify-content-between align-items-center pt-2">
-                    ${anterior}
-                    <span class="text-muted small">Página ${escapeHtml(dados.pagina || 1)}</span>
-                    ${proxima}
                 </div>
             `;
         }

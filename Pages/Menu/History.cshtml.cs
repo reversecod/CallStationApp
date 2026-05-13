@@ -12,7 +12,6 @@ namespace CallStationApp.Pages.Menu;
 [Authorize]
 public class HistoryModel : PageModel
 {
-    private const int TamanhoPagina = 20;
     private const int TamanhoPaginaComentarios = 30;
     private const int LimiteCaracteresComentario = 250;
     private const int TamanhoMinimoPesquisa = 2;
@@ -51,9 +50,6 @@ public class HistoryModel : PageModel
     [BindProperty(SupportsGet = true)]
     public int GrupoId { get; set; }
 
-    [BindProperty(SupportsGet = true, Name = "page")]
-    public int PaginaAtual { get; set; } = 1;
-
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public bool UsuarioLogadoEhAdministrador { get; set; }
@@ -62,9 +58,6 @@ public class HistoryModel : PageModel
     public bool UsuarioLogadoPodeAlterarStatusHistorico { get; set; }
     public Grupo? GrupoAtual { get; set; }
     public List<HistoricoChamadoVm> Chamados { get; set; } = new();
-    public bool TemPaginaAnterior => PaginaAtual > 1;
-    public bool TemProximaPagina { get; set; }
-
     public async Task<IActionResult> OnGetAsync()
     {
         var usuarioId = GetUsuarioLogadoId();
@@ -143,8 +136,6 @@ public class HistoryModel : PageModel
         var chamadosPagina = await queryComVisibilidade
             .OrderBy(x => x.Chamado.NumeroChamadoGrupo)
             .ThenBy(x => x.Chamado.Id)
-            .Skip((Math.Max(PaginaAtual, 1) - 1) * TamanhoPagina)
-            .Take(TamanhoPagina + 1)
             .Select(x => new
             {
                 x.Chamado.Id,
@@ -287,10 +278,6 @@ public class HistoryModel : PageModel
                 };
             })
             .ToList();
-
-        TemProximaPagina = Chamados.Count > TamanhoPagina;
-        if (TemProximaPagina)
-            Chamados.RemoveAt(Chamados.Count - 1);
 
         if (Chamados.Count > 0)
         {
@@ -457,7 +444,7 @@ public class HistoryModel : PageModel
         });
     }
 
-    public async Task<IActionResult> OnGetPesquisarChamadosAsync(string? termo, int page = 1)
+    public async Task<IActionResult> OnGetPesquisarChamadosAsync(string? termo)
     {
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
@@ -479,7 +466,7 @@ public class HistoryModel : PageModel
                 EF.Functions.Like(x.Chamado.Solucao ?? string.Empty, padrao, "\\"));
         }
 
-        var resultado = await ObterPaginaHistoricoAsync(query, usuarioId.Value, Math.Max(page, 1));
+        var resultado = await ObterPaginaHistoricoAsync(query, usuarioId.Value);
 
         return new JsonResult(new
         {
@@ -507,9 +494,6 @@ public class HistoryModel : PageModel
                     chamado.TemInformacoesPendentes,
                     chamado.TemComentariosNaoLidos
                 }),
-                pagina = Math.Max(page, 1),
-                resultado.TemProximaPagina,
-                temPaginaAnterior = Math.Max(page, 1) > 1,
                 pesquisando = !string.IsNullOrWhiteSpace(termoNormalizado)
             }
         });
@@ -1430,13 +1414,11 @@ public class HistoryModel : PageModel
         return query;
     }
 
-    private async Task<HistoricoPaginaResult> ObterPaginaHistoricoAsync(IQueryable<ChamadoHistoricoConsultaItem> queryComVisibilidade, int usuarioId, int pagina)
+    private async Task<HistoricoPaginaResult> ObterPaginaHistoricoAsync(IQueryable<ChamadoHistoricoConsultaItem> queryComVisibilidade, int usuarioId)
     {
         var chamadosPagina = await queryComVisibilidade
             .OrderBy(x => x.Chamado.NumeroChamadoGrupo)
             .ThenBy(x => x.Chamado.Id)
-            .Skip((Math.Max(pagina, 1) - 1) * TamanhoPagina)
-            .Take(TamanhoPagina + 1)
             .Select(x => new
             {
                 x.Chamado.Id,
@@ -1580,10 +1562,6 @@ public class HistoryModel : PageModel
             })
             .ToList();
 
-        var temProximaPagina = chamados.Count > TamanhoPagina;
-        if (temProximaPagina)
-            chamados.RemoveAt(chamados.Count - 1);
-
         if (chamados.Count > 0)
         {
             var chamadosIds = chamados.Select(c => c.Id).ToList();
@@ -1610,8 +1588,7 @@ public class HistoryModel : PageModel
 
         return new HistoricoPaginaResult
         {
-            Chamados = chamados,
-            TemProximaPagina = temProximaPagina
+            Chamados = chamados
         };
     }
 
@@ -2271,7 +2248,6 @@ public class HistoryModel : PageModel
     private sealed class HistoricoPaginaResult
     {
         public List<HistoricoChamadoVm> Chamados { get; set; } = new();
-        public bool TemProximaPagina { get; set; }
     }
 
     private sealed class ChamadoVinculoDto
