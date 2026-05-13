@@ -215,7 +215,7 @@
     .ticket-sort-button {
       position: absolute;
       top: .55rem;
-      left: 5.55rem;
+      left: var(--ticket-sort-left, 5.95rem);
       width: 1.45rem;
       height: 1.45rem;
       display: inline-flex;
@@ -951,7 +951,7 @@
       @@media (max-width: 992px) {
         .ticket-sort-button {
           top: .35rem;
-          left: 4.35rem;
+          left: var(--ticket-sort-left, 4.65rem);
           width: 1.35rem;
           height: 1.35rem;
         }
@@ -1003,7 +1003,7 @@
 
       @@media (max-width: 768px) {
         .ticket-sort-button {
-          left: 3.8rem;
+          left: var(--ticket-sort-left, 4.05rem);
           width: 1.25rem;
           height: 1.25rem;
         }

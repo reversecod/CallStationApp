@@ -384,6 +384,9 @@ function inicializarOrdenacaoChamados() {
     const botao = document.getElementById("btnOrdenarChamados");
     if (!botao) return;
 
+    atualizarPosicaoBotaoOrdenacaoChamados();
+    window.addEventListener("resize", atualizarPosicaoBotaoOrdenacaoChamados);
+
     const ordemInicial = "desc";
     localStorage.setItem(obterChaveOrdenacaoChamados(), ordemInicial);
     aplicarOrdenacaoChamados(ordemInicial);
@@ -396,6 +399,27 @@ function inicializarOrdenacaoChamados() {
         localStorage.setItem(obterChaveOrdenacaoChamados(), novaOrdem);
         aplicarOrdenacaoChamados(novaOrdem);
         atualizarBotaoOrdenacaoChamados(novaOrdem);
+    });
+}
+
+function atualizarPosicaoBotaoOrdenacaoChamados() {
+    const botao = document.getElementById("btnOrdenarChamados");
+    const botaoNovoChamado = document.getElementById("btnNovoChamado");
+    const wrapper = document.querySelector(".content-wrapper");
+
+    if (!botao || !botaoNovoChamado || !wrapper) return;
+
+    window.requestAnimationFrame(() => {
+        const novoRect = botaoNovoChamado.getBoundingClientRect();
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const botaoRect = botao.getBoundingClientRect();
+        const larguraBotaoOrdenacao = botaoRect.width || botao.offsetWidth || 0;
+
+        if (!novoRect.width || !larguraBotaoOrdenacao) return;
+
+        const centroBotaoNovoChamado = novoRect.left - wrapperRect.left + (novoRect.width / 2);
+        const posicaoEsquerda = centroBotaoNovoChamado - (larguraBotaoOrdenacao / 2);
+        botao.style.setProperty("--ticket-sort-left", `${Math.max(0, posicaoEsquerda)}px`);
     });
 }
 
@@ -524,7 +548,6 @@ async function carregarChamado(id) {
         }
 
         await preencherFormularioEdicao(data);
-        aplicarPermissoesChamado(data.permissoes ?? {});
     } catch (error) {
         console.error("Erro ao carregar chamado:", error);
         mostrarToast("Erro ao carregar chamado: " + error.message);
@@ -855,9 +878,9 @@ async function preencherFormularioEdicao(data) {
 
     if (!form) return;
 
-    if (msg) msg.classList.add("d-none");
-    form.classList.remove("d-none");
-    animarAberturaEditorChamado();
+    if (msg) msg.classList.remove("d-none");
+    form.classList.add("d-none");
+    aplicarPermissoesChamado(data.permissoes ?? {});
 
     atualizarResumoChamado(data);
     atualizarIndicadorComentarioBotao(data.id);
@@ -897,6 +920,10 @@ async function preencherFormularioEdicao(data) {
     setDateValueIfExists("editPrazoConclusao", data.prazoConclusao);
 
     setCheckedIfExists("editPublico", data.publico);
+
+    if (msg) msg.classList.add("d-none");
+    form.classList.remove("d-none");
+    animarAberturaEditorChamado();
 }
 
 function inicializarBotoesEdicao() {
