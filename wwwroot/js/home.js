@@ -10,6 +10,7 @@ let candidatosVinculoTimer = null;
 let usuarioPodeAcessarVinculosChamado = false;
 let editorFechamentoTimer = null;
 let ticketLogoClickTimer = null;
+let chamadoCarregamentoAtual = 0;
 const CHAMADOS_ORDEM_STORAGE_PREFIX = "callstation.home.ordemChamados";
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
@@ -524,12 +525,15 @@ function getAgoraServidorMs() {
 
 async function carregarChamado(id) {
     chamadoSelecionadoId = id;
+    const carregamentoId = ++chamadoCarregamentoAtual;
 
     const grupoId = document.getElementById("grupoIdAtual")?.value;
     if (!grupoId) {
         mostrarToast("Grupo atual não encontrado.");
         return;
     }
+
+    definirCarregamentoChamado(true);
 
     try {
         const response = await fetch(`?handler=CarregarChamado&id=${encodeURIComponent(id)}&grupoId=${encodeURIComponent(grupoId)}`, {
@@ -542,15 +546,43 @@ async function carregarChamado(id) {
 
         const data = await response.json();
 
+        if (carregamentoId !== chamadoCarregamentoAtual) {
+            return;
+        }
+
         if (data.success === false) {
+            definirCarregamentoChamado(false, true);
             mostrarToast(data.message || "Não foi possível carregar o chamado.");
             return;
         }
 
         await preencherFormularioEdicao(data);
     } catch (error) {
+        if (carregamentoId !== chamadoCarregamentoAtual) {
+            return;
+        }
+
+        definirCarregamentoChamado(false, true);
         console.error("Erro ao carregar chamado:", error);
         mostrarToast("Erro ao carregar chamado: " + error.message);
+    }
+}
+
+function definirCarregamentoChamado(carregando, mostrarMensagemSelecao = false) {
+    const msg = document.getElementById("mensagemSelecioneChamado");
+    const form = document.getElementById("formEdicaoChamado");
+    const loading = document.getElementById("carregandoChamado");
+
+    loading?.classList.toggle("d-none", !carregando);
+
+    if (carregando) {
+        msg?.classList.add("d-none");
+        form?.classList.add("d-none");
+        return;
+    }
+
+    if (mostrarMensagemSelecao) {
+        msg?.classList.remove("d-none");
     }
 }
 
@@ -922,6 +954,7 @@ async function preencherFormularioEdicao(data) {
     setCheckedIfExists("editPublico", data.publico);
 
     if (msg) msg.classList.add("d-none");
+    definirCarregamentoChamado(false);
     form.classList.remove("d-none");
     animarAberturaEditorChamado();
 }

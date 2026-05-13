@@ -464,6 +464,35 @@
         padding: 1rem 1.05rem 1.1rem;
       }
 
+      .chamado-carregando {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        min-height: 7rem;
+        color: #64748b;
+        font-size: .92rem;
+        font-weight: 700;
+      }
+
+      .chamado-carregando-spinner {
+        width: 1.35rem;
+        height: 1.35rem;
+        border: .16rem solid rgba(59, 130, 246, .18);
+        border-top-color: #2563eb;
+        border-radius: 999px;
+        animation: chamadoCarregandoGirar .72s linear infinite;
+      }
+
+      @@keyframes chamadoCarregandoGirar {
+        to { transform: rotate(360deg); }
+      }
+
+      @@media (prefers-reduced-motion: reduce) {
+        .chamado-carregando-spinner {
+          animation: none;
+        }
+      }
+
       #formEdicaoChamado {
         margin-top: .65rem !important;
       }
@@ -1210,6 +1239,11 @@
 
                             <div id="mensagemSelecioneChamado" class="text-muted">
                                 Selecione um chamado na lista ao lado para visualizar e editar.
+                            </div>
+
+                            <div id="carregandoChamado" class="chamado-carregando d-none" aria-live="polite">
+                                <span class="chamado-carregando-spinner" aria-hidden="true"></span>
+                                <span>Carregando chamado...</span>
                             </div>
 
                             <form id="formEdicaoChamado" class="mt-3 d-none">
