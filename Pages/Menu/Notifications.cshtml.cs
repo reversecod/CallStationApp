@@ -131,7 +131,6 @@ public class NotificationsModel : PageModel
             .AsNoTracking()
             .Where(c =>
                 c.DestinatarioUsuarioId == idUsuario.Value &&
-                c.GrupoId == GrupoId &&
                 c.Status == StatusConviteGrupo.Pendente)
             .Select(c => c.Id)
             .ToListAsync();
@@ -140,7 +139,7 @@ public class NotificationsModel : PageModel
 
         Notificacoes = await _context.Notificacoes
             .AsNoTracking()
-            .Where(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId)
+            .Where(n => n.UsuarioId == idUsuario.Value)
             .OrderByDescending(n => n.DataCriacao)
             .Select(n => new NotificacaoViewModel
             {
@@ -203,16 +202,9 @@ public class NotificationsModel : PageModel
         if (idUsuario == null)
             return Unauthorized();
 
-        if (grupoId <= 0)
-            return new JsonResult(new { success = false, message = "Grupo inválido." });
-
-        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, grupoId);
-        if (contextoMembro == null)
-            return Forbid();
-
         var totalNaoLidas = await _context.Notificacoes
             .AsNoTracking()
-            .CountAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == grupoId && !n.Lida);
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
 
         return new JsonResult(new
         {
@@ -232,35 +224,8 @@ public class NotificationsModel : PageModel
             };
         }
 
-        if (GrupoId <= 0)
-            return new JsonResult(new { success = false, message = "Grupo inválido." });
-
-        var contextoMembro = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, GrupoId);
-        if (contextoMembro == null)
-        {
-            if (!await GrupoEstaAtivoAsync(GrupoId))
-            {
-                return new JsonResult(new { success = false, message = "Este grupo não está mais disponível." })
-                {
-                    StatusCode = StatusCodes.Status403Forbidden
-                };
-            }
-
-            var possuiNotificacaoNoGrupo = await _context.Notificacoes
-                .AsNoTracking()
-                .AnyAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId);
-
-            if (!possuiNotificacaoNoGrupo)
-            {
-                return new JsonResult(new { success = false, message = "Você não pertence a este grupo." })
-                {
-                    StatusCode = StatusCodes.Status403Forbidden
-                };
-            }
-        }
-
         var notificacoes = await _context.Notificacoes
-            .Where(n => n.UsuarioId == idUsuario.Value && n.GrupoId == GrupoId && !n.Lida)
+            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
             .ToListAsync();
 
         if (!notificacoes.Any())
@@ -313,8 +278,7 @@ public class NotificationsModel : PageModel
         var notificacao = await _context.Notificacoes
             .FirstOrDefaultAsync(n =>
                 n.Id == request.NotificacaoId &&
-                n.UsuarioId == idUsuario.Value &&
-                n.GrupoId == GrupoId);
+                n.UsuarioId == idUsuario.Value);
 
         if (notificacao == null)
         {
@@ -370,7 +334,7 @@ public class NotificationsModel : PageModel
 
         var totalNaoLidas = await _context.Notificacoes
             .AsNoTracking()
-            .CountAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId && !n.Lida);
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
 
         return new JsonResult(new
         {
@@ -468,7 +432,7 @@ public class NotificationsModel : PageModel
 
         var totalNaoLidas = await _context.Notificacoes
             .AsNoTracking()
-            .CountAsync(n => n.UsuarioId == idUsuario.Value && n.GrupoId == notificacao.GrupoId && !n.Lida);
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
 
         return new JsonResult(new
         {
