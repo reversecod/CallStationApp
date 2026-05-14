@@ -84,6 +84,7 @@ public class HomeModel : PageModel
         public StatusChamado Status { get; set; }
         public DateTime DataCriacao { get; set; }
         public bool TemComentariosNaoLidos { get; set; }
+        public bool TemComentarios { get; set; }
     }
 
     public async Task<IActionResult> OnGetAsync()
@@ -184,8 +185,20 @@ public class HomeModel : PageModel
                 .ToListAsync();
 
             var chamadosComComentariosNaoLidosSet = chamadosComComentariosNaoLidos.ToHashSet();
+
+            var chamadosComComentarios = await _context.ComentariosChamados
+                .AsNoTracking()
+                .Where(c => chamadosIds.Contains(c.ChamadoId))
+                .Select(c => c.ChamadoId)
+                .Distinct()
+                .ToListAsync();
+
+            var chamadosComComentariosSet = chamadosComComentarios.ToHashSet();
             foreach (var chamado in Chamados)
+            {
                 chamado.TemComentariosNaoLidos = chamadosComComentariosNaoLidosSet.Contains(chamado.Id);
+                chamado.TemComentarios = chamadosComComentariosSet.Contains(chamado.Id);
+            }
         }
 
         SetoresDisponiveis = await ObterSetoresDisponiveisAsync(GrupoId);
@@ -301,6 +314,10 @@ public class HomeModel : PageModel
         var podeEditarPrazoConclusao = (config?.ExibirPrazoConclusaoModal ?? true) &&
             GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.PrazoConclusao, idUsuario.Value, chamado.CriadorChamadoId);
 
+        var temComentarios = await _context.ComentariosChamados
+            .AsNoTracking()
+            .AnyAsync(c => c.ChamadoId == chamado.Id);
+
         return new JsonResult(new
         {
             success = true,
@@ -319,6 +336,7 @@ public class HomeModel : PageModel
             criticidade = chamado.Criticidade?.ToString(),
             urgencia = chamado.Urgencia?.ToString(),
             status = chamado.Status.ToString(),
+            temComentarios,
             dataCriacao = ParaDataHoraRegionalIso(chamado.DataCriacao),
             dataFinalizacao = ParaDataHoraRegionalIso(chamado.DataFinalizacao),
             prazoResposta = ParaDataHoraRegionalIso(chamado.PrazoResposta),

@@ -334,6 +334,7 @@ async function criarNovoChamado() {
     const chamadoDiv = document.createElement("div");
     chamadoDiv.className = "ticket-card ticket-aberto";
     chamadoDiv.dataset.status = "Aberto";
+    chamadoDiv.dataset.temComentarios = "false";
     chamadoDiv.role = "button";
     chamadoDiv.draggable = true;
 
@@ -957,6 +958,10 @@ async function preencherFormularioEdicao(data) {
     aplicarPermissoesChamado(data.permissoes ?? {});
 
     atualizarResumoChamado(data);
+    const cardChamado = document.querySelector(`.ticket-card[data-id="${data.id}"]`);
+    if (cardChamado) {
+        cardChamado.dataset.temComentarios = data.temComentarios ? "true" : "false";
+    }
     atualizarIndicadorComentarioBotao(data.id);
 
     setValueIfExists("editId", data.id);
@@ -1567,6 +1572,7 @@ async function enviarComentarioChamado() {
         if (textoInput) textoInput.value = "";
         if (anexoInput) anexoInput.value = "";
         mostrarToast(data.dados?.message || "Comentário adicionado com sucesso.", "success");
+        atualizarEstadoComentarioRegistrado(chamadoId, true);
         await carregarComentariosChamado(chamadoId, 1, false);
     } catch (error) {
         mostrarToast(error.message || "Não foi possível adicionar o comentário.");
@@ -1607,9 +1613,21 @@ function removerIndicadorComentario(chamadoId) {
     }
 }
 
+function atualizarEstadoComentarioRegistrado(chamadoId, temComentarios) {
+    const card = document.querySelector(`.ticket-card[data-id="${chamadoId}"]`);
+    if (card) {
+        card.dataset.temComentarios = temComentarios ? "true" : "false";
+    }
+
+    if (Number(chamadoSelecionadoId) === Number(chamadoId)) {
+        atualizarIndicadorComentarioBotao(chamadoId);
+    }
+}
+
 function atualizarIndicadorComentarioBotao(chamadoId) {
     const botao = document.getElementById("btnAbrirComentariosChamado");
     const indicador = document.getElementById("comentariosChamadoIndicador");
+    const indicadorRegistrado = document.getElementById("comentariosChamadoRegistradoIndicador");
 
     if (!botao || !indicador) return;
 
@@ -1617,13 +1635,19 @@ function atualizarIndicadorComentarioBotao(chamadoId) {
         ? document.querySelector(`.ticket-card[data-id="${chamadoId}"]`)
         : null;
     const temNovoComentario = !!card?.querySelector("[data-comment-badge]");
+    const temComentarios = card?.dataset.temComentarios === "true";
 
     indicador.classList.toggle("d-none", !temNovoComentario);
+    indicadorRegistrado?.classList.toggle("d-none", !temComentarios || temNovoComentario);
     botao.setAttribute(
         "aria-label",
         temNovoComentario ? "Abrir comentários. Há novos comentários." : "Abrir comentários"
     );
-    botao.title = temNovoComentario ? "Há novos comentários" : "";
+    botao.title = temNovoComentario
+        ? "Há novos comentários"
+        : temComentarios
+            ? "Este chamado possui comentários"
+            : "";
 }
 
 function renderizarComentariosChamado(comentarios) {
@@ -1690,9 +1714,12 @@ function renderizarComentariosChamadoPaginado(dados, anexar = false) {
     if (!comentarios.length) {
         if (!anexar) {
             lista.innerHTML = '<div class="text-muted small">Nenhum comentario registrado para este chamado.</div>';
+            atualizarEstadoComentarioRegistrado(dados.chamadoId, false);
         }
         return;
     }
+
+    atualizarEstadoComentarioRegistrado(dados.chamadoId, true);
 
     lista.querySelector("[data-load-older-comments]")?.remove();
 

@@ -361,6 +361,7 @@
         }
 
         .ticket-comment-button {
+            position:relative;
             width:1.7rem;
             height:1.7rem;
             border:0;
@@ -394,6 +395,17 @@
             height:.62rem;
             border-radius:999px;
             background:#dc3545;
+            border:2px solid rgba(255,255,255,.9);
+        }
+
+        .ticket-comment-has-comments {
+            position:absolute;
+            right:-.08rem;
+            bottom:-.12rem;
+            width:.58rem;
+            height:.58rem;
+            border-radius:999px;
+            background:#22c55e;
             border:2px solid rgba(255,255,255,.9);
         }
 
@@ -977,6 +989,10 @@
                             {
                                 <span class="ticket-comment-badge" data-comment-badge></span>
                             }
+                            else if (chamado.TemComentarios)
+                            {
+                                <span class="ticket-comment-has-comments" title="Este chamado possui comentários"></span>
+                            }
                             </button>
                         </div>
                     </article>
@@ -1387,7 +1403,7 @@
                             data-chamado-id="${Number(chamado.id || 0)}"
                             aria-label="Abrir comentários">
                             <i class="bi bi-chat-dots"></i>
-                            ${chamado.temComentariosNaoLidos ? '<span class="ticket-comment-badge" data-comment-badge></span>' : ''}
+                            ${chamado.temComentariosNaoLidos ? '<span class="ticket-comment-badge" data-comment-badge></span>' : chamado.temComentarios ? '<span class="ticket-comment-has-comments" title="Este chamado possui comentários"></span>' : ''}
                         </button>
                     </div>
                 </article>
@@ -2203,7 +2219,15 @@
 
         function removerIndicadorComentario(chamadoId) {
             const card = document.querySelector(`.ticket-card[data-chamado-id="${chamadoId}"]`);
+            const botaoComentarios = card?.querySelector(".btn-abrir-comentarios");
             card?.querySelector("[data-comment-badge]")?.remove();
+
+            if (botaoComentarios && !botaoComentarios.querySelector(".ticket-comment-has-comments")) {
+                const indicador = document.createElement("span");
+                indicador.className = "ticket-comment-has-comments";
+                indicador.title = "Este chamado possui comentários";
+                botaoComentarios.appendChild(indicador);
+            }
         }
 
         function abrirStatus(chamadoId, statusAtual) {

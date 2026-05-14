@@ -297,9 +297,19 @@ public class HistoryModel : PageModel
                 .ToListAsync();
 
             var chamadosComComentariosNaoLidosSet = chamadosComComentariosNaoLidos.ToHashSet();
+
+            var chamadosComComentarios = await _context.ComentariosChamados
+                .AsNoTracking()
+                .Where(c => chamadosIds.Contains(c.ChamadoId))
+                .Select(c => c.ChamadoId)
+                .Distinct()
+                .ToListAsync();
+
+            var chamadosComComentariosSet = chamadosComComentarios.ToHashSet();
             foreach (var chamado in Chamados)
             {
                 chamado.TemComentariosNaoLidos = chamadosComComentariosNaoLidosSet.Contains(chamado.Id);
+                chamado.TemComentarios = chamadosComComentariosSet.Contains(chamado.Id);
             }
         }
 
@@ -492,7 +502,8 @@ public class HistoryModel : PageModel
                     chamado.Setor,
                     chamado.TipoProblema,
                     chamado.TemInformacoesPendentes,
-                    chamado.TemComentariosNaoLidos
+                    chamado.TemComentariosNaoLidos,
+                    chamado.TemComentarios
                 }),
                 pesquisando = !string.IsNullOrWhiteSpace(termoNormalizado)
             }
@@ -1580,9 +1591,19 @@ public class HistoryModel : PageModel
                 .ToListAsync();
 
             var chamadosComComentariosNaoLidosSet = chamadosComComentariosNaoLidos.ToHashSet();
+
+            var chamadosComComentarios = await _context.ComentariosChamados
+                .AsNoTracking()
+                .Where(c => chamadosIds.Contains(c.ChamadoId))
+                .Select(c => c.ChamadoId)
+                .Distinct()
+                .ToListAsync();
+
+            var chamadosComComentariosSet = chamadosComComentarios.ToHashSet();
             foreach (var chamado in chamados)
             {
                 chamado.TemComentariosNaoLidos = chamadosComComentariosNaoLidosSet.Contains(chamado.Id);
+                chamado.TemComentarios = chamadosComComentariosSet.Contains(chamado.Id);
             }
         }
 
@@ -2172,6 +2193,7 @@ public class HistoryModel : PageModel
         public string Setor { get; set; } = string.Empty;
         public string TipoProblema { get; set; } = string.Empty;
         public bool TemComentariosNaoLidos { get; set; }
+        public bool TemComentarios { get; set; }
         public bool TemInformacoesPendentes { get; set; }
         public TimeSpan? TempoResolucao =>
             DataFinal.HasValue && DataFinal.Value >= DataCriacao
