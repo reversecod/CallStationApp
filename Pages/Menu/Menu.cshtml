@@ -212,6 +212,22 @@
                 color: #94a3b8;
             }
 
+            .notificacao-grupo-label {
+                display: inline-flex;
+                align-items: center;
+                max-width: 100%;
+                border-radius: 999px;
+                padding: .14rem .5rem;
+                background: var(--notificacao-grupo-color, #6c757d);
+                color: var(--notificacao-grupo-text, #fff);
+                font-size: inherit;
+                font-weight: 700;
+                line-height: 1.15;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
             .notificacoes-lista {
                 display: flex;
                 flex-direction: column;
@@ -522,6 +538,37 @@
             return data.toLocaleString('pt-BR');
         }
 
+        function obterCorGrupoNotificacao(value) {
+            const normalized = String(value ?? "").trim().toLowerCase();
+            const colors = {
+                "0": "#e5e7eb",
+                "1": "#ef4444",
+                "2": "#f97316",
+                "3": "#eab308",
+                "4": "#22c55e",
+                "5": "#3b82f6",
+                "6": "#a855f7",
+                "7": "#ec4899",
+                "8": "#1f2937",
+                branco: "#e5e7eb",
+                vermelho: "#ef4444",
+                laranja: "#f97316",
+                amarelo: "#eab308",
+                verde: "#22c55e",
+                azul: "#3b82f6",
+                roxo: "#a855f7",
+                rosa: "#ec4899",
+                preto: "#1f2937"
+            };
+
+            return colors[normalized] || "#6c757d";
+        }
+
+        function obterCorTextoGrupoNotificacao(value) {
+            const normalized = String(value ?? "").trim().toLowerCase();
+            return normalized === "0" || normalized === "branco" ? "#212529" : "#fff";
+        }
+
         function exibirErroNotificacoes(mensagem) {
             listaNotificacoes.innerHTML = "";
             const erro = document.createElement("div");
@@ -564,8 +611,20 @@
                 mensagem.textContent = n.mensagem || "";
 
                 const grupo = document.createElement("div");
-                grupo.className = "small text-muted mb-2";
-                grupo.textContent = n.nomeGrupo ? `Grupo: ${n.nomeGrupo}` : "";
+                grupo.className = "small mb-2";
+
+                if (n.nomeGrupo) {
+                    const grupoPrefixo = document.createElement("span");
+                    grupoPrefixo.className = "text-muted me-1";
+                    grupoPrefixo.textContent = "Grupo:";
+
+                    const grupoLabel = document.createElement("span");
+                    grupoLabel.className = "notificacao-grupo-label";
+                    grupoLabel.style.setProperty("--notificacao-grupo-color", obterCorGrupoNotificacao(n.etiquetaCor));
+                    grupoLabel.style.setProperty("--notificacao-grupo-text", obterCorTextoGrupoNotificacao(n.etiquetaCor));
+                    grupoLabel.textContent = n.nomeGrupo;
+                    grupo.append(grupoPrefixo, grupoLabel);
+                }
 
                 const link = document.createElement("a");
                 const urlBase = n.grupoId ? `/Menu/Notifications?grupoId=${encodeURIComponent(n.grupoId)}` : "?handler=AbrirNotificacoes";

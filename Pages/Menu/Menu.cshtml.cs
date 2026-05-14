@@ -270,6 +270,7 @@ public class MenuModel : PageModel
                 titulo = n.Titulo,
                 mensagem = n.Mensagem,
                 nomeGrupo = n.Grupo != null ? n.Grupo.Nome : string.Empty,
+                etiquetaCor = n.Grupo != null ? n.Grupo.EtiquetaCor.ToString() : string.Empty,
                 lida = n.Lida,
                 dataCriacao = n.DataCriacao,
                 grupoId = n.GrupoId,

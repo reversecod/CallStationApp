@@ -48,6 +48,7 @@ public class NotificationsModel : PageModel
         public string Tipo { get; set; } = string.Empty;
         public string Titulo { get; set; } = string.Empty;
         public string NomeGrupo { get; set; } = string.Empty;
+        public string EtiquetaCor { get; set; } = string.Empty;
         public string Mensagem { get; set; } = string.Empty;
         public string MensagemModal { get; set; } = string.Empty;
         public bool Lida { get; set; }
@@ -75,6 +76,39 @@ public class NotificationsModel : PageModel
     public class AbrirNotificacaoRequest
     {
         public int NotificacaoId { get; set; }
+    }
+
+    public async Task<IActionResult> OnGetNaoLidasAsync(int grupoId)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var notificacoes = await _context.Notificacoes
+            .AsNoTracking()
+            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
+            .OrderByDescending(n => n.DataCriacao)
+            .Select(n => new
+            {
+                n.Id,
+                Tipo = n.Tipo.ToString(),
+                n.Titulo,
+                n.Mensagem,
+                NomeGrupo = n.Grupo != null ? n.Grupo.Nome : string.Empty,
+                EtiquetaCor = n.Grupo != null ? n.Grupo.EtiquetaCor.ToString() : string.Empty,
+                DataCriacaoTexto = ParaDataHoraRegionalDisplay(n.DataCriacao)
+            })
+            .ToListAsync();
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = new
+            {
+                totalNaoLidas = notificacoes.Count,
+                notificacoes
+            }
+        });
     }
 
     public async Task<IActionResult> OnGetAsync()
@@ -147,6 +181,7 @@ public class NotificationsModel : PageModel
                 Tipo = n.Tipo.ToString(),
                 Titulo = n.Titulo,
                 NomeGrupo = n.Grupo != null ? n.Grupo.Nome : string.Empty,
+                EtiquetaCor = n.Grupo != null ? n.Grupo.EtiquetaCor.ToString() : string.Empty,
                 Mensagem = n.Mensagem,
                 Lida = n.Lida,
                 DataCriacao = n.DataCriacao,
@@ -346,6 +381,76 @@ public class NotificationsModel : PageModel
             message = notificacao.Lida
                 ? "Notificacao marcada como lida."
                 : "Notificacao marcada como não lida."
+        });
+    }
+
+    public async Task<IActionResult> OnPostMarcarComoLidaAsync([FromBody] AlterarLeituraNotificacaoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+        {
+            return new JsonResult(new { success = false, message = "Usuário não autenticado." })
+            {
+                StatusCode = StatusCodes.Status401Unauthorized
+            };
+        }
+
+        if (request == null || request.NotificacaoId <= 0)
+        {
+            return new JsonResult(new { success = false, message = "Notificacao inválida." })
+            {
+                StatusCode = StatusCodes.Status400BadRequest
+            };
+        }
+
+        var notificacao = await _context.Notificacoes
+            .FirstOrDefaultAsync(n =>
+                n.Id == request.NotificacaoId &&
+                n.UsuarioId == idUsuario.Value);
+
+        if (notificacao == null)
+        {
+            return new JsonResult(new { success = false, message = "Notificacao não encontrada." })
+            {
+                StatusCode = StatusCodes.Status404NotFound
+            };
+        }
+
+        if (!notificacao.Lida)
+        {
+            notificacao.Lida = true;
+            notificacao.DataLeitura = DateTime.UtcNow;
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        var totalNaoLidas = await _context.Notificacoes
+            .AsNoTracking()
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
+
+        return new JsonResult(new
+        {
+            success = true,
+            lida = true,
+            dataLeitura = notificacao.DataLeitura,
+            dataLeituraTexto = ParaDataHoraRegionalDisplay(notificacao.DataLeitura),
+            totalNaoLidas,
+            message = "Notificacao marcada como lida."
         });
     }
 

@@ -7,6 +7,26 @@
     var fotoUsuario = !string.IsNullOrWhiteSpace(Model.UsuarioLogado?.FotoUsuario)
         ? Model.UsuarioLogado!.FotoUsuario
         : "/images/default-user.png";
+
+    string CorGrupoCss(string? cor) => (cor ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "0" or "branco" => "#e5e7eb",
+        "1" or "vermelho" => "#ef4444",
+        "2" or "laranja" => "#f97316",
+        "3" or "amarelo" => "#eab308",
+        "4" or "verde" => "#22c55e",
+        "5" or "azul" => "#3b82f6",
+        "6" or "roxo" => "#a855f7",
+        "7" or "rosa" => "#ec4899",
+        "8" or "preto" => "#1f2937",
+        _ => "#6c757d"
+    };
+
+    string CorTextoGrupoCss(string? cor)
+    {
+        var corNormalizada = (cor ?? string.Empty).Trim().ToLowerInvariant();
+        return corNormalizada is "0" or "branco" ? "#212529" : "#fff";
+    }
 }
 
 <!DOCTYPE html>
@@ -76,6 +96,22 @@
 
         .notificacao-mensagem {
             color: #475569;
+        }
+
+        .notificacao-grupo-label {
+            display: inline-flex;
+            align-items: center;
+            max-width: 100%;
+            border-radius: 999px;
+            padding: .16rem .55rem;
+            background: var(--notificacao-grupo-color, #6c757d);
+            color: var(--notificacao-grupo-text, #fff);
+            font-size: inherit;
+            font-weight: 700;
+            line-height: 1.15;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .notificacao-resumo {
@@ -283,9 +319,12 @@
                                     <h2 class="h5 mb-1">@notificacao.Titulo</h2>
                                     @if (!string.IsNullOrWhiteSpace(notificacao.NomeGrupo))
                                     {
-                                        <div class="small text-muted">
-                                            <i class="bi bi-people me-1" aria-hidden="true"></i>
-                                            Grupo: @notificacao.NomeGrupo
+                                        <div class="small mt-1">
+                                            <span class="text-muted me-1">Grupo:</span>
+                                            <span class="notificacao-grupo-label"
+                                                  style="--notificacao-grupo-color: @CorGrupoCss(notificacao.EtiquetaCor); --notificacao-grupo-text: @CorTextoGrupoCss(notificacao.EtiquetaCor);">
+                                                @notificacao.NomeGrupo
+                                            </span>
                                         </div>
                                     }
                                 </div>
@@ -309,7 +348,10 @@
                                     <button type="button"
                                             class="btn btn-sm btn-outline-secondary btn-ler-mensagem"
                                             data-titulo="@notificacao.Titulo"
-                                            data-mensagem="@notificacao.MensagemModal">
+                                            data-mensagem="@notificacao.MensagemModal"
+                                            data-grupo-nome="@notificacao.NomeGrupo"
+                                            data-grupo-cor="@CorGrupoCss(notificacao.EtiquetaCor)"
+                                            data-grupo-texto="@CorTextoGrupoCss(notificacao.EtiquetaCor)">
                                         <i class="bi bi-envelope-open me-1"></i>
                                         Ler mensagem
                                     </button>
@@ -381,6 +423,7 @@
                 </div>
                 <div class="modal-body">
                     <h6 id="modalMensagemTitulo" class="mb-3"></h6>
+                    <div id="modalMensagemGrupo" class="mb-2"></div>
                     <p id="modalMensagemConteudo" class="mb-0 text-break"></p>
                 </div>
             </div>
@@ -405,6 +448,7 @@
             const badgeNotificacaoTopo = document.querySelector('.badge-notificacao');
             const modalMensagemElement = document.getElementById('modalMensagemNotificacao');
             const modalMensagemTitulo = document.getElementById('modalMensagemTitulo');
+            const modalMensagemGrupo = document.getElementById('modalMensagemGrupo');
             const modalMensagemConteudo = document.getElementById('modalMensagemConteudo');
             const modalMensagem = modalMensagemElement ? bootstrap.Modal.getOrCreateInstance(modalMensagemElement) : null;
 
@@ -683,7 +727,25 @@
                         return;
                     }
 
+                    const nomeGrupo = this.dataset.grupoNome || '';
+                    const corGrupo = this.dataset.grupoCor || '#6c757d';
+                    const corTextoGrupo = this.dataset.grupoTexto || '#fff';
                     modalMensagemTitulo.textContent = this.dataset.titulo || 'Mensagem';
+                    if (modalMensagemGrupo) {
+                        modalMensagemGrupo.textContent = '';
+                        if (nomeGrupo) {
+                            const grupoPrefixo = document.createElement('span');
+                            grupoPrefixo.className = 'text-muted me-1';
+                            grupoPrefixo.textContent = 'Grupo:';
+
+                            const grupoLabel = document.createElement('span');
+                            grupoLabel.className = 'notificacao-grupo-label';
+                            grupoLabel.style.setProperty('--notificacao-grupo-color', corGrupo);
+                            grupoLabel.style.setProperty('--notificacao-grupo-text', corTextoGrupo);
+                            grupoLabel.textContent = nomeGrupo;
+                            modalMensagemGrupo.append(grupoPrefixo, grupoLabel);
+                        }
+                    }
                     modalMensagemConteudo.textContent = this.dataset.mensagem || 'Sem conteúdo.';
                     modalMensagem.show();
                 });

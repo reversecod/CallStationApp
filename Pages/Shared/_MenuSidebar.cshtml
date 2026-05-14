@@ -1,4 +1,5 @@
 ﻿@using CallStationApp.Models
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @model dynamic
 @{
     var activeMenu = ViewData["ActiveMenu"] as string ?? string.Empty;
@@ -81,6 +82,73 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
+    }
+
+    .sidebar-notification-list {
+        display: grid;
+        gap: .75rem;
+        max-height: min(62vh, 32rem);
+        overflow-y: auto;
+        padding-right: .25rem;
+    }
+
+    .sidebar-notification-item {
+        border: 1px solid #e5e7eb;
+        border-radius: .75rem;
+        padding: .85rem;
+        background: #f8fafc;
+    }
+
+    .sidebar-notification-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        align-items: center;
+        color: #64748b;
+        font-size: .78rem;
+    }
+
+    .sidebar-notification-group-label {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        border-radius: 999px;
+        padding: .12rem .5rem;
+        background: var(--sidebar-notification-group-color, #6c757d);
+        color: var(--sidebar-notification-group-text, #fff);
+        font-size: inherit;
+        font-weight: 700;
+        line-height: 1.15;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .sidebar-notification-title {
+        color: #0f172a;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .sidebar-notification-message {
+        color: #475569;
+        font-size: .88rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .sidebar-notification-action {
+        border-radius: 999px;
+        padding: .35rem .75rem;
+        font-size: .78rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .sidebar-notification-unread {
+        border: 0;
+        background: #dc3545;
+        color: #fff;
     }
 
     .recent-group-button {
@@ -201,6 +269,10 @@
 <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar"
      data-sidebar-grupo-id="@grupoId"
      data-sidebar-contador-url="@Url.Page("/Menu/Notifications", "ContarNaoLidas", new { grupoId })"
+     data-sidebar-notificacoes-url="@Url.Page("/Menu/Notifications", "NaoLidas", new { grupoId })"
+     data-sidebar-abrir-notificacao-url="@Url.Page("/Menu/Notifications", "AbrirNotificacao", new { grupoId })"
+     data-sidebar-marcar-lida-url="@Url.Page("/Menu/Notifications", "MarcarComoLida", new { grupoId })"
+     data-sidebar-notificacoes-page-url="@Url.Page("/Menu/Notifications", new { grupoId })"
      data-sidebar-grupos-url="@Url.Page("/Menu/Menu", "ListarGruposRecentes")"
      data-sidebar-acessar-grupo-url="@Url.Page("/Menu/Menu", "AcessarGrupo")">
     <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
@@ -287,6 +359,7 @@
             <li>
                 <a asp-page="/Menu/Notifications"
                    asp-route-grupoId="@grupoId"
+                   id="sidebarAbrirNotificacoes"
                    class="dropdown-item d-flex align-items-center gap-2">
                     <i class="bi bi-bell" aria-hidden="true"></i>
                     <span>Notificações</span>
@@ -299,6 +372,28 @@
             <li><hr class="dropdown-divider" /></li>
             <li><a class="dropdown-item text-danger" asp-page="/Logout">Sair</a></li>
         </ul>
+    </div>
+</div>
+
+<div class="modal fade" id="modalSidebarNotificacoes" tabindex="-1" aria-labelledby="modalSidebarNotificacoesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalSidebarNotificacoesLabel">Notificações não lidas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="listaSidebarNotificacoes" class="sidebar-notification-list">
+                    <div class="text-muted small">Carregando notificações...</div>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+                <a class="btn btn-primary" id="btnAbrirTelaNotificacoesSidebar" href="@Url.Page("/Menu/Notifications", new { grupoId })">
+                    Abrir tela de notificações
+                </a>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -318,6 +413,10 @@
     </div>
 </div>
 
+<input type="hidden"
+       id="requestVerificationTokenSidebar"
+       value="@(Antiforgery.GetAndStoreTokens(Context).RequestToken)" />
+
 <script>
     (function () {
         const sidebar = document.querySelector(".sidebar[data-sidebar-grupo-id]");
@@ -327,9 +426,15 @@
 
         const badge = document.getElementById("sidebarNotificacoesBadge");
         const perfilNotificacaoIcone = document.getElementById("sidebarPerfilNotificacaoIcone");
+        const linkNotificacoes = document.getElementById("sidebarAbrirNotificacoes");
+        const modalNotificacoesElement = document.getElementById("modalSidebarNotificacoes");
+        const listaNotificacoes = document.getElementById("listaSidebarNotificacoes");
+        const btnAbrirTelaNotificacoes = document.getElementById("btnAbrirTelaNotificacoesSidebar");
+        const tokenSidebar = document.getElementById("requestVerificationTokenSidebar")?.value || "";
         const listaOrganizacoes = document.getElementById("listaOrganizacoesRecentes");
         const modalOrganizacoes = document.getElementById("modalOrganizacoesRecentes");
         let organizacoesCarregadas = false;
+        let notificacoesAlteradas = false;
 
         function escapeSidebarHtml(value) {
             return String(value ?? "")
@@ -420,6 +525,160 @@
             }
         }
 
+        async function enviarSidebarJson(url, body) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "RequestVerificationToken": tokenSidebar
+                },
+                body: JSON.stringify(body || {})
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || "Não foi possível concluir a ação.");
+            }
+            return data;
+        }
+
+        function atualizarIndicadorNotificacoes(total) {
+            const valor = Number(total || 0);
+            if (valor > 0) {
+                if (badge) {
+                    badge.textContent = valor > 9 ? "9+" : String(valor);
+                    badge.classList.remove("d-none");
+                }
+                perfilNotificacaoIcone?.classList.remove("d-none");
+                return;
+            }
+
+            if (badge) {
+                badge.textContent = "0";
+                badge.classList.add("d-none");
+            }
+            perfilNotificacaoIcone?.classList.add("d-none");
+        }
+
+        function renderizarNotificacoesSidebar(notificacoes) {
+            if (!listaNotificacoes) {
+                return;
+            }
+
+            if (!notificacoes.length) {
+                listaNotificacoes.innerHTML = `
+                    <div class="text-center text-muted p-4">
+                        <i class="bi bi-bell-slash fs-2 d-block mb-2"></i>
+                        Nenhuma notificação não lida.
+                    </div>`;
+                return;
+            }
+
+            listaNotificacoes.innerHTML = notificacoes.map(notificacao => {
+                const corGrupo = getSidebarGroupColor(notificacao.etiquetaCor);
+                const corTextoGrupo = getSidebarGroupTextColor(notificacao.etiquetaCor);
+
+                return `
+                <div class="sidebar-notification-item" data-sidebar-notificacao-id="${Number(notificacao.id || 0)}">
+                    <div class="sidebar-notification-meta mb-1">
+                        <span>${escapeSidebarHtml(notificacao.tipo || "Notificação")}</span>
+                        ${notificacao.nomeGrupo ? `<span>Grupo:</span><span class="sidebar-notification-group-label" style="--sidebar-notification-group-color: ${escapeSidebarHtml(corGrupo)}; --sidebar-notification-group-text: ${escapeSidebarHtml(corTextoGrupo)};">${escapeSidebarHtml(notificacao.nomeGrupo)}</span>` : ""}
+                        <span>${escapeSidebarHtml(notificacao.dataCriacaoTexto || "")}</span>
+                    </div>
+                    <div class="sidebar-notification-title mb-1">${escapeSidebarHtml(notificacao.titulo || "Notificação")}</div>
+                    <div class="sidebar-notification-message mb-3">${escapeSidebarHtml(notificacao.mensagem || "")}</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-primary sidebar-notification-action" data-sidebar-ir-notificacao="${Number(notificacao.id || 0)}">
+                            Ir até
+                        </button>
+                        <button type="button" class="btn btn-sm sidebar-notification-action sidebar-notification-unread" data-sidebar-marcar-lida="${Number(notificacao.id || 0)}">
+                            Não lida
+                        </button>
+                    </div>
+                </div>
+            `;
+            }).join("");
+
+            listaNotificacoes.querySelectorAll("[data-sidebar-ir-notificacao]").forEach(botao => {
+                botao.addEventListener("click", () => abrirNotificacaoSidebar(Number(botao.dataset.sidebarIrNotificacao || 0)));
+            });
+
+            listaNotificacoes.querySelectorAll("[data-sidebar-marcar-lida]").forEach(botao => {
+                botao.addEventListener("click", () => marcarNotificacaoSidebarComoLida(Number(botao.dataset.sidebarMarcarLida || 0)));
+            });
+        }
+
+        async function carregarNotificacoesSidebar() {
+            const url = sidebar.dataset.sidebarNotificacoesUrl;
+            if (!url || !listaNotificacoes) {
+                return;
+            }
+
+            listaNotificacoes.innerHTML = '<div class="text-muted small">Carregando notificações...</div>';
+
+            try {
+                const response = await fetch(url, { headers: { "Accept": "application/json" } });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Não foi possível carregar as notificações.");
+                }
+
+                const notificacoes = data.dados?.notificacoes || [];
+                renderizarNotificacoesSidebar(notificacoes);
+                atualizarIndicadorNotificacoes(data.dados?.totalNaoLidas || notificacoes.length);
+            } catch (error) {
+                listaNotificacoes.innerHTML = `<div class="text-danger small">${escapeSidebarHtml(error.message || "Não foi possível carregar as notificações.")}</div>`;
+            }
+        }
+
+        function abrirModalNotificacoesSidebar() {
+            const modalNotificacoes = modalNotificacoesElement && window.bootstrap
+                ? bootstrap.Modal.getOrCreateInstance(modalNotificacoesElement)
+                : null;
+
+            if (!modalNotificacoes) {
+                window.location.href = sidebar.dataset.sidebarNotificacoesPageUrl || linkNotificacoes?.href || "/Menu/Notifications";
+                return;
+            }
+
+            carregarNotificacoesSidebar();
+            modalNotificacoes.show();
+        }
+
+        async function abrirNotificacaoSidebar(notificacaoId) {
+            const url = sidebar.dataset.sidebarAbrirNotificacaoUrl;
+            if (!url || !notificacaoId) {
+                return;
+            }
+
+            try {
+                const data = await enviarSidebarJson(url, { notificacaoId });
+                window.location.href = data.destino || sidebar.dataset.sidebarNotificacoesPageUrl || linkNotificacoes?.href || "/Menu/Notifications";
+            } catch (error) {
+                alert(error.message || "Não foi possível abrir a notificação.");
+            }
+        }
+
+        async function marcarNotificacaoSidebarComoLida(notificacaoId) {
+            const url = sidebar.dataset.sidebarMarcarLidaUrl;
+            if (!url || !notificacaoId) {
+                return;
+            }
+
+            try {
+                const data = await enviarSidebarJson(url, { notificacaoId });
+                notificacoesAlteradas = true;
+                listaNotificacoes?.querySelector(`[data-sidebar-notificacao-id="${notificacaoId}"]`)?.remove();
+                atualizarIndicadorNotificacoes(data.totalNaoLidas || 0);
+
+                if (!listaNotificacoes?.querySelector("[data-sidebar-notificacao-id]")) {
+                    renderizarNotificacoesSidebar([]);
+                }
+            } catch (error) {
+                alert(error.message || "Não foi possível marcar a notificação como lida.");
+            }
+        }
+
         async function carregarOrganizacoesRecentes() {
             if (!listaOrganizacoes || organizacoesCarregadas) {
                 return;
@@ -485,6 +744,31 @@
 
         if (modalOrganizacoes) {
             modalOrganizacoes.addEventListener("show.bs.modal", carregarOrganizacoesRecentes);
+        }
+
+        if (btnAbrirTelaNotificacoes && sidebar.dataset.sidebarNotificacoesPageUrl) {
+            btnAbrirTelaNotificacoes.href = sidebar.dataset.sidebarNotificacoesPageUrl;
+        }
+
+        if (linkNotificacoes) {
+            linkNotificacoes.addEventListener("click", event => {
+                event.preventDefault();
+                abrirModalNotificacoesSidebar();
+            });
+        }
+
+        perfilNotificacaoIcone?.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            abrirModalNotificacoesSidebar();
+        });
+
+        if (modalNotificacoesElement) {
+            modalNotificacoesElement.addEventListener("hidden.bs.modal", () => {
+                if (notificacoesAlteradas) {
+                    window.location.reload();
+                }
+            });
         }
     })();
 </script>
