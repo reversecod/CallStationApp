@@ -578,6 +578,7 @@ async function carregarChamado(id) {
     }
 
     definirCarregamentoChamado(true);
+    rolarParaEditorChamado();
 
     try {
         const response = await fetch(`?handler=CarregarChamado&id=${encodeURIComponent(id)}&grupoId=${encodeURIComponent(grupoId)}`, {
@@ -610,6 +611,42 @@ async function carregarChamado(id) {
         console.error("Erro ao carregar chamado:", error);
         mostrarToast("Erro ao carregar chamado: " + error.message);
     }
+}
+
+function rolarParaEditorChamado() {
+    const editor = document.getElementById("formEdicaoChamado")?.closest(".chamado-editor-card");
+    if (!editor) return;
+
+    const reduzirMovimento = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const destino = Math.max(0, editor.getBoundingClientRect().top + window.scrollY - 96);
+
+    if (reduzirMovimento) {
+        window.scrollTo({ top: destino, left: 0, behavior: "auto" });
+        return;
+    }
+
+    rolarPaginaSuave(destino, 145);
+}
+
+function rolarPaginaSuave(destino, duracaoMs) {
+    const inicio = window.scrollY;
+    const distancia = destino - inicio;
+
+    if (Math.abs(distancia) < 8) return;
+
+    const inicioTempo = performance.now();
+    const suavizar = progresso => 1 - Math.pow(1 - progresso, 3);
+
+    function animarScroll(agora) {
+        const progresso = Math.min((agora - inicioTempo) / duracaoMs, 1);
+        window.scrollTo(0, inicio + distancia * suavizar(progresso));
+
+        if (progresso < 1) {
+            requestAnimationFrame(animarScroll);
+        }
+    }
+
+    requestAnimationFrame(animarScroll);
 }
 
 function definirCarregamentoChamado(carregando, mostrarMensagemSelecao = false) {
