@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Html
 @{
     ViewData["Title"] = "Grupo";
+    ViewData["ActiveMenu"] = "Group";
 }
 
 <!DOCTYPE html>
@@ -124,11 +125,9 @@
 </head>
 <body>
 <main>
-    <div class="d-flex flex-column flex-shrink-0 p-3 bg-body-tertiary sidebar">
-        <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
-            <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
-        </a>
-        <hr />
+    @await Html.PartialAsync("_MenuSidebar", Model, ViewData)
+
+    <div class="d-none" aria-hidden="true">
         <ul class="nav nav-pills flex-column mb-auto">
             <li class="nav-item">
                 <div class="sidebar-group-label" style="--sidebar-group-color: @CorCss(Model.GrupoAtual.EtiquetaCor); --sidebar-group-text: @CorTextoCss(Model.GrupoAtual.EtiquetaCor)" title="@Model.GrupoAtual.Nome" aria-label="Grupo atual: @Model.GrupoAtual.Nome">

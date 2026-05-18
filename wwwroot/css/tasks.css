@@ -44,6 +44,11 @@ main {
     display: flex;
     flex-direction: column;
     background: #fff;
+    transition: margin-left .22s ease;
+}
+
+body.sidebar-collapsed .tasks-content {
+    margin-left: 5.25rem;
 }
 
 .tasks-header {

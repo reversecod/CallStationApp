@@ -42,6 +42,8 @@ public class GroupModel : PageModel
     public GrupoConfiguracao Configuracao { get; set; } = null!;
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
+    public bool UsuarioLogadoEhAdministrador { get; set; }
+    public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Administracao;
     public List<ItemVm> Setores { get; set; } = new();
     public List<ItemVm> TiposOcorrencia { get; set; } = new();
     public List<CategoriaVm> Categorias { get; set; } = new();
@@ -772,6 +774,8 @@ public class GroupModel : PageModel
     {
         GrupoAtual = await _context.Grupos.AsNoTracking().FirstAsync(g => g.Id == GrupoId);
         Configuracao = await ObterOuCriarConfigAsync(usuarioId);
+        UsuarioLogadoEhAdministrador = true;
+        UsuarioLogadoPermissao = PermissaoUsuario.Administracao;
 
         var usuario = await _context.Usuarios.AsNoTracking()
             .Where(u => u.Id == usuarioId)
