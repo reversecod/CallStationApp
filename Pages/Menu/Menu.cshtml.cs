@@ -343,7 +343,7 @@ public class MenuModel : PageModel
         if (idUsuario == null)
             return Unauthorized();
 
-        var grupos = await _context.UsuariosGrupos
+        var gruposBase = await _context.UsuariosGrupos
             .AsNoTracking()
             .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
             .OrderByDescending(ug => ug.GrupoFixado)
@@ -362,6 +362,46 @@ public class MenuModel : PageModel
                 ordemFixada = ug.OrdemGrupoFixado
             })
             .ToListAsync();
+
+        var gruposIds = gruposBase.Select(g => g.id).ToList();
+        var chamadosAtivosPorGrupo = gruposIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await (
+                from chamado in _context.Chamados.AsNoTracking()
+                join usuarioGrupo in _context.UsuariosGrupos.AsNoTracking()
+                    on chamado.GrupoId equals usuarioGrupo.GrupoId
+                where usuarioGrupo.UsuarioId == idUsuario.Value &&
+                      usuarioGrupo.Ativo &&
+                      gruposIds.Contains(chamado.GrupoId) &&
+                      (chamado.Status == StatusChamado.Aberto ||
+                       chamado.Status == StatusChamado.EmAndamento ||
+                       chamado.Status == StatusChamado.Pendente) &&
+                      (
+                          usuarioGrupo.Permissao == PermissaoUsuario.Administracao ||
+                          usuarioGrupo.Permissao == PermissaoUsuario.Tecnico ||
+                          (usuarioGrupo.Permissao == PermissaoUsuario.Colaborador &&
+                              (chamado.Publico || chamado.CriadorChamadoId == idUsuario.Value)) ||
+                          (usuarioGrupo.Permissao == PermissaoUsuario.Nenhuma && chamado.Publico)
+                      )
+                group chamado by chamado.GrupoId into grupo
+                select new
+                {
+                    GrupoId = grupo.Key,
+                    Total = grupo.Count()
+                })
+                .ToDictionaryAsync(x => x.GrupoId, x => x.Total);
+
+        var grupos = gruposBase.Select(grupo => new
+        {
+            grupo.id,
+            grupo.nome,
+            grupo.etiquetaCor,
+            grupo.dataUltimoAcesso,
+            grupo.permissao,
+            grupo.fixado,
+            grupo.ordemFixada,
+            chamadosAtivos = chamadosAtivosPorGrupo.GetValueOrDefault(grupo.id)
+        }).ToList();
 
         return new JsonResult(new
         {
