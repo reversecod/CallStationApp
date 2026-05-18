@@ -85,6 +85,21 @@
         .catalog-scroll table { margin-bottom: 0; }
         .catalog-action-cell { white-space: nowrap; width: 1%; }
         .color-dot { width:1rem; height:1rem; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.12); }
+        .grupo-foto-config {
+            width: 5.4rem;
+            height: 5.4rem;
+            border: 1px solid #dbe3ec;
+            border-radius: 1rem;
+            background: #f8fafc;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            font-size: 1.7rem;
+            font-weight: 800;
+        }
+        .grupo-foto-config img { display:block; width:100%; height:100%; object-fit:cover; }
         .nav-tabs .nav-link { color:#495057; }
         .nav-tabs .nav-link.active { font-weight:600; }
         .danger-zone { border:1px solid #f1aeb5; background:#fff5f5; border-radius:.9rem; padding:1rem; }
@@ -187,6 +202,7 @@
 
         <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
         <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
+        <input type="hidden" id="alterarFotoGrupoUrl" value="@Url.Page("/Menu/Group", "AlterarFotoGrupo", new { grupoId = Model.GrupoId })" />
         <div id="feedbackGrupo" class="alert d-none" role="alert"></div>
 
         <ul class="nav nav-tabs mb-3" id="grupoTabs" role="tablist">
@@ -222,6 +238,31 @@
                                     <option value="@cor" selected="@(Model.GrupoAtual.EtiquetaCor.ToString() == cor)">@cor</option>
                                 }
                             </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="geralFotoGrupo">Foto do grupo</label>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="grupo-foto-config" id="previewFotoGrupoConfig" aria-hidden="true">
+                                    @if (!string.IsNullOrWhiteSpace(Model.GrupoAtual.FotoGrupo))
+                                    {
+                                        <img src="@Model.GrupoAtual.FotoGrupo" alt="Foto atual do grupo">
+                                    }
+                                    else
+                                    {
+                                        <span>@Model.GrupoAtual.Nome.FirstOrDefault()</span>
+                                    }
+                                </div>
+                                <div class="flex-grow-1">
+                                    <input type="file"
+                                           class="form-control"
+                                           id="geralFotoGrupo"
+                                           accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                                    <div class="form-text">JPG, PNG ou WEBP. Limite de 2 MB.</div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary" id="btnSalvarFotoGrupo">
+                                    <i class="bi bi-image me-1"></i>Alterar imagem
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="d-flex justify-content-end mt-3">
@@ -343,9 +384,13 @@
 <script>
 const grupoId = document.getElementById("grupoIdAtual").value;
 const token = document.getElementById("requestVerificationToken").value;
+const alterarFotoGrupoUrl = document.getElementById("alterarFotoGrupoUrl")?.value || "";
 const feedback = document.getElementById("feedbackGrupo");
 const grupoTabStorageKey = `grupo:${grupoId}:abaAtiva`;
 const nomeGrupoAtual = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.GrupoAtual.Nome));
+const inputFotoGrupo = document.getElementById("geralFotoGrupo");
+const previewFotoGrupoConfig = document.getElementById("previewFotoGrupoConfig");
+const btnSalvarFotoGrupo = document.getElementById("btnSalvarFotoGrupo");
 
 restaurarAbaGrupo();
 document.querySelectorAll("#grupoTabs [data-bs-toggle='tab']").forEach(tab => {
@@ -372,6 +417,58 @@ function restaurarAbaGrupo() {
     const trigger = document.querySelector(`#grupoTabs [data-bs-target='${CSS.escape(target)}']`);
     if (trigger) bootstrap.Tab.getOrCreateInstance(trigger).show();
 }
+
+function atualizarPreviewFotoGrupo(input, preview, fallback) {
+    const arquivo = input?.files?.[0];
+    if (!preview) return;
+
+    if (!arquivo || !arquivo.type.startsWith("image/")) {
+        preview.textContent = fallback || "G";
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = event => {
+        preview.innerHTML = `<img src="${event.target.result}" alt="Prévia da foto do grupo">`;
+    };
+    reader.readAsDataURL(arquivo);
+}
+
+inputFotoGrupo?.addEventListener("change", () => atualizarPreviewFotoGrupo(inputFotoGrupo, previewFotoGrupoConfig, nomeGrupoAtual?.charAt(0) || "G"));
+
+btnSalvarFotoGrupo?.addEventListener("click", async () => {
+    const arquivo = inputFotoGrupo?.files?.[0];
+    if (!arquivo) {
+        showFeedback("danger", "Selecione uma imagem para o grupo.");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("fotoGrupo", arquivo);
+
+    btnSalvarFotoGrupo.disabled = true;
+    try {
+        const response = await fetch(alterarFotoGrupoUrl, {
+            method: "POST",
+            headers: { "RequestVerificationToken": token },
+            body: formData
+        });
+        const data = await response.json().catch(() => ({ success:false, message:"Erro inesperado." }));
+        if (!response.ok || !data.success) throw new Error(data.message || "Não foi possível alterar a foto.");
+
+        showFeedback("success", data.message || "Foto do grupo atualizada.");
+        if (previewFotoGrupoConfig && data.dados?.fotoGrupo) {
+            previewFotoGrupoConfig.innerHTML = `<img src="${data.dados.fotoGrupo}" alt="Foto atual do grupo">`;
+        }
+        inputFotoGrupo.value = "";
+        sessionStorage.setItem(grupoTabStorageKey, getAbaGrupoAtiva());
+    } catch (error) {
+        showFeedback("danger", error.message || "Não foi possível alterar a foto.");
+    } finally {
+        btnSalvarFotoGrupo.disabled = false;
+    }
+});
+
 async function post(handler, body) {
     const response = await fetch(`/Menu/Group?handler=${handler}&grupoId=${grupoId}`, {
         method: "POST",

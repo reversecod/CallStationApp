@@ -12,11 +12,20 @@ public class MenuModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly ILogger<MenuModel> _logger;
+    private readonly IWebHostEnvironment _environment;
+    private static readonly HashSet<string> ExtensoesFotoGrupoPermitidas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp"
+    };
 
-    public MenuModel(AppDbContext context, ILogger<MenuModel> logger)
+    public MenuModel(AppDbContext context, ILogger<MenuModel> logger, IWebHostEnvironment environment)
     {
         _context = context;
         _logger = logger;
+        _environment = environment;
     }
 
     public Usuario? UsuarioLogado { get; set; }
@@ -143,7 +152,8 @@ public class MenuModel : PageModel
     public async Task<IActionResult> OnPostCriarGrupoAsync(
         [FromForm] string nome,
         [FromForm] string? descricao,
-        [FromForm] string? etiquetaCor)
+        [FromForm] string? etiquetaCor,
+        [FromForm] IFormFile? fotoGrupo)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
@@ -181,7 +191,17 @@ public class MenuModel : PageModel
             corConvertida = corEnum;
         }
 
+        if (fotoGrupo is { Length: > 0 } && !FotoGrupoValida(fotoGrupo))
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Envie uma imagem JPG, PNG ou WEBP com no máximo 2 MB."
+            });
+        }
+
         var strategy = _context.Database.CreateExecutionStrategy();
+        string? caminhoFotoSalva = null;
 
         try
         {
@@ -192,11 +212,16 @@ public class MenuModel : PageModel
                 try
                 {
                     var usuario = UsuarioLogado ?? await _context.Usuarios.FirstAsync(u => u.Id == idUsuario.Value);
+                    if (fotoGrupo is { Length: > 0 })
+                    {
+                        caminhoFotoSalva = await SalvarFotoGrupoAsync(fotoGrupo, idUsuario.Value);
+                    }
 
                     var novoGrupo = new Grupo
                     {
                         Nome = nome,
                         DescricaoGrupo = descricao,
+                        FotoGrupo = caminhoFotoSalva,
                         EtiquetaCor = corConvertida,
                         CriadorId = idUsuario.Value,
                         Usuario = usuario,
@@ -235,6 +260,7 @@ public class MenuModel : PageModel
                 catch
                 {
                     await transaction.RollbackAsync();
+                    RemoverFotoGrupoSeExistir(caminhoFotoSalva);
                     throw;
                 }
             });
@@ -250,6 +276,7 @@ public class MenuModel : PageModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao criar grupo para o usuario {UsuarioId}.", idUsuario.Value);
+            RemoverFotoGrupoSeExistir(caminhoFotoSalva);
             return new JsonResult(new
             {
                 success = false,
@@ -528,6 +555,41 @@ public class MenuModel : PageModel
         var mensagem = ex.InnerException?.Message ?? ex.Message;
         return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<string> SalvarFotoGrupoAsync(IFormFile arquivo, int usuarioId)
+    {
+        var extensao = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
+        var pasta = Path.Combine(_environment.WebRootPath, "uploads", "grupos");
+        Directory.CreateDirectory(pasta);
+
+        var nomeArquivo = $"grupo-{usuarioId}-{Guid.NewGuid():N}{extensao}";
+        var caminho = Path.Combine(pasta, nomeArquivo);
+
+        await using var stream = new FileStream(caminho, FileMode.Create);
+        await arquivo.CopyToAsync(stream);
+
+        return $"/uploads/grupos/{nomeArquivo}";
+    }
+
+    private static bool FotoGrupoValida(IFormFile arquivo)
+    {
+        var extensao = Path.GetExtension(arquivo.FileName);
+        return arquivo.Length <= 2 * 1024 * 1024 && ExtensoesFotoGrupoPermitidas.Contains(extensao);
+    }
+
+    private void RemoverFotoGrupoSeExistir(string? caminhoRelativo)
+    {
+        if (string.IsNullOrWhiteSpace(caminhoRelativo))
+            return;
+
+        var nomeArquivo = Path.GetFileName(caminhoRelativo);
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return;
+
+        var caminho = Path.Combine(_environment.WebRootPath, "uploads", "grupos", nomeArquivo);
+        if (System.IO.File.Exists(caminho))
+            System.IO.File.Delete(caminho);
     }
 
     private async Task NormalizarOrdemGruposFixadosAsync(int usuarioId)

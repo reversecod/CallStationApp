@@ -17,13 +17,22 @@ public class GroupModel : PageModel
     private readonly GrupoAuthorizationService _auth;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<GroupModel> _logger;
+    private readonly IWebHostEnvironment _environment;
+    private static readonly HashSet<string> ExtensoesFotoGrupoPermitidas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp"
+    };
 
-    public GroupModel(AppDbContext context, GrupoAuthorizationService auth, IMemoryCache memoryCache, ILogger<GroupModel> logger)
+    public GroupModel(AppDbContext context, GrupoAuthorizationService auth, IMemoryCache memoryCache, ILogger<GroupModel> logger, IWebHostEnvironment environment)
     {
         _context = context;
         _auth = auth;
         _memoryCache = memoryCache;
         _logger = logger;
+        _environment = environment;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -147,6 +156,68 @@ public class GroupModel : PageModel
         await _context.SaveChangesAsync();
 
         return new JsonResult(new { success = true, message = "Regras salvas." });
+    }
+
+    public async Task<IActionResult> OnPostAlterarFotoGrupoAsync([FromForm] IFormFile? fotoGrupo)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
+        if (bloqueio != null)
+            return bloqueio;
+
+        if (fotoGrupo is not { Length: > 0 })
+            return BadRequest(new { success = false, message = "Selecione uma imagem para o grupo." });
+
+        if (!FotoGrupoValida(fotoGrupo))
+            return BadRequest(new { success = false, message = "Envie uma imagem JPG, PNG ou WEBP com no máximo 2 MB." });
+
+        var grupo = await _context.Grupos.FirstOrDefaultAsync(g => g.Id == GrupoId);
+        if (grupo == null)
+            return NotFound(new { success = false, message = "Grupo não encontrado." });
+
+        string? novaFoto = null;
+        var fotoAnterior = grupo.FotoGrupo;
+
+        try
+        {
+            novaFoto = await SalvarFotoGrupoAsync(fotoGrupo, GrupoId);
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Foto", fotoAnterior, novaFoto);
+                    grupo.FotoGrupo = novaFoto;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+
+            RemoverFotoGrupoSeExistir(fotoAnterior);
+
+            return new JsonResult(new
+            {
+                success = true,
+                message = "Foto do grupo atualizada.",
+                dados = new { fotoGrupo = novaFoto }
+            });
+        }
+        catch (Exception ex)
+        {
+            RemoverFotoGrupoSeExistir(novaFoto);
+            _logger.LogError(ex, "Erro ao alterar foto do grupo {GrupoId}.", GrupoId);
+            return StatusCode(500, new { success = false, message = "Não foi possível alterar a foto do grupo." });
+        }
     }
 
     public async Task<IActionResult> OnPostSalvarSlaAsync([FromBody] SalvarSlaRequest request)
@@ -929,6 +1000,41 @@ public class GroupModel : PageModel
         var mensagem = ex.InnerException?.Message ?? ex.Message;
         return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<string> SalvarFotoGrupoAsync(IFormFile arquivo, int grupoId)
+    {
+        var extensao = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
+        var pasta = Path.Combine(_environment.WebRootPath, "uploads", "grupos");
+        Directory.CreateDirectory(pasta);
+
+        var nomeArquivo = $"grupo-{grupoId}-{Guid.NewGuid():N}{extensao}";
+        var caminho = Path.Combine(pasta, nomeArquivo);
+
+        await using var stream = new FileStream(caminho, FileMode.Create);
+        await arquivo.CopyToAsync(stream);
+
+        return $"/uploads/grupos/{nomeArquivo}";
+    }
+
+    private static bool FotoGrupoValida(IFormFile arquivo)
+    {
+        var extensao = Path.GetExtension(arquivo.FileName);
+        return arquivo.Length <= 2 * 1024 * 1024 && ExtensoesFotoGrupoPermitidas.Contains(extensao);
+    }
+
+    private void RemoverFotoGrupoSeExistir(string? caminhoRelativo)
+    {
+        if (string.IsNullOrWhiteSpace(caminhoRelativo))
+            return;
+
+        var nomeArquivo = Path.GetFileName(caminhoRelativo);
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return;
+
+        var caminho = Path.Combine(_environment.WebRootPath, "uploads", "grupos", nomeArquivo);
+        if (System.IO.File.Exists(caminho))
+            System.IO.File.Delete(caminho);
     }
 
     private static string Limpar(string? valor) => (valor ?? string.Empty).Trim();
