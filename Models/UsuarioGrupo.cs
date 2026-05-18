@@ -30,6 +30,12 @@ namespace CallStationApp.Models
         [Column("data_ultimo_acesso")]
         public DateTime? DataUltimoAcesso { get; set; }
 
+        [Column("grupo_fixado")]
+        public bool GrupoFixado { get; set; }
+
+        [Column("ordem_grupo_fixado")]
+        public int? OrdemGrupoFixado { get; set; }
+
         [Required]
         [Column("ativo")]
         public bool Ativo { get; set; } = true;

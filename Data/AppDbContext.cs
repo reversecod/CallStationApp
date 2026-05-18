@@ -345,6 +345,14 @@ namespace CallStationApp.Data
                     .HasColumnName("data_ultimo_acesso")
                     .HasColumnType("datetime");
 
+                entity.Property(ug => ug.GrupoFixado)
+                    .HasColumnName("grupo_fixado")
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                entity.Property(ug => ug.OrdemGrupoFixado)
+                    .HasColumnName("ordem_grupo_fixado");
+
                 entity.Property(ug => ug.Ativo)
                     .HasColumnName("ativo")
                     .HasColumnType("boolean")
@@ -370,6 +378,9 @@ namespace CallStationApp.Data
 
                 entity.HasIndex(ug => new { ug.UsuarioId, ug.Ativo, ug.DataUltimoAcesso })
                     .HasDatabaseName("idx_ug_usuario_ativo_ultimo_acesso");
+
+                entity.HasIndex(ug => new { ug.UsuarioId, ug.Ativo, ug.GrupoFixado, ug.OrdemGrupoFixado })
+                    .HasDatabaseName("idx_ug_usuario_fixados_ordem");
 
                 entity.HasIndex(ug => new { ug.UsuarioId, ug.GrupoId, ug.Ativo })
                     .HasDatabaseName("idx_ug_usuario_grupo_ativo");

@@ -49,6 +49,8 @@ public class MenuModel : PageModel
                 ug.Permissao,
                 ug.DataAdicao,
                 ug.DataUltimoAcesso,
+                ug.GrupoFixado,
+                ug.OrdemGrupoFixado,
                 Grupo = new
                 {
                     ug.Grupo!.Nome,
@@ -120,6 +122,8 @@ public class MenuModel : PageModel
                     Permissao = ug.Permissao,
                     DataEntrada = ug.DataAdicao,
                     DataUltimoAcesso = ug.DataUltimoAcesso,
+                    GrupoFixado = ug.GrupoFixado,
+                    OrdemGrupoFixado = ug.OrdemGrupoFixado,
                     TotalChamados = chamadoInfo?.TotalChamados ?? 0,
                     ChamadosAbertos = chamadoInfo?.ChamadosAbertos ?? 0,
                     TotalMembros = membroInfo?.TotalMembros ?? 0,
@@ -127,7 +131,9 @@ public class MenuModel : PageModel
                     CriadorId = ug.Grupo.CriadorId
                 };
             })
-            .OrderByDescending(g => g.CriadorId == idUsuario.Value)
+            .OrderByDescending(g => g.GrupoFixado)
+            .ThenBy(g => g.GrupoFixado ? g.OrdemGrupoFixado ?? int.MaxValue : int.MaxValue)
+            .ThenByDescending(g => g.CriadorId == idUsuario.Value)
             .ThenBy(g => g.Nome)
             .ToList();
 
@@ -340,16 +346,20 @@ public class MenuModel : PageModel
         var grupos = await _context.UsuariosGrupos
             .AsNoTracking()
             .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo)
-            .OrderByDescending(ug => ug.DataUltimoAcesso ?? ug.DataAdicao)
+            .OrderByDescending(ug => ug.GrupoFixado)
+            .ThenBy(ug => ug.GrupoFixado ? ug.OrdemGrupoFixado ?? int.MaxValue : int.MaxValue)
+            .ThenByDescending(ug => ug.DataUltimoAcesso ?? ug.DataAdicao)
             .ThenBy(ug => ug.Grupo.Nome)
-            .Take(12)
+            .Take(20)
             .Select(ug => new
             {
                 id = ug.GrupoId,
                 nome = ug.Grupo.Nome,
                 etiquetaCor = ug.Grupo.EtiquetaCor,
                 dataUltimoAcesso = ug.DataUltimoAcesso ?? ug.DataAdicao,
-                permissao = ug.Permissao.ToString()
+                permissao = ug.Permissao.ToString(),
+                fixado = ug.GrupoFixado,
+                ordemFixada = ug.OrdemGrupoFixado
             })
             .ToListAsync();
 
@@ -357,6 +367,56 @@ public class MenuModel : PageModel
         {
             success = true,
             dados = new { grupos }
+        });
+    }
+
+    public async Task<IActionResult> OnPostAlternarGrupoFixadoAsync([FromBody] GrupoFixadoRequest request)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        if (request == null || request.GrupoId <= 0)
+            return BadRequest(new { success = false, message = "Grupo inválido." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync<IActionResult>(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var vinculo = await _context.UsuariosGrupos
+                    .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == request.GrupoId && ug.Ativo);
+
+                if (vinculo == null)
+                    return NotFound(new { success = false, message = "Organização não encontrada para este usuário." });
+
+                if (vinculo.GrupoFixado)
+                {
+                    vinculo.GrupoFixado = false;
+                    vinculo.OrdemGrupoFixado = null;
+                }
+                else
+                {
+                    var proximaOrdem = await _context.UsuariosGrupos
+                        .Where(ug => ug.UsuarioId == idUsuario.Value && ug.Ativo && ug.GrupoFixado)
+                        .MaxAsync(ug => (int?)ug.OrdemGrupoFixado) ?? 0;
+
+                    vinculo.GrupoFixado = true;
+                    vinculo.OrdemGrupoFixado = proximaOrdem + 1;
+                }
+
+                await _context.SaveChangesAsync();
+                await NormalizarOrdemGruposFixadosAsync(idUsuario.Value);
+                await transaction.CommitAsync();
+
+                return new JsonResult(new { success = true, message = vinculo.GrupoFixado ? "Organização fixada." : "Organização desafixada." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         });
     }
 
@@ -429,6 +489,26 @@ public class MenuModel : PageModel
         return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
+
+    private async Task NormalizarOrdemGruposFixadosAsync(int usuarioId)
+    {
+        var fixados = await _context.UsuariosGrupos
+            .Where(ug => ug.UsuarioId == usuarioId && ug.Ativo && ug.GrupoFixado)
+            .OrderBy(ug => ug.OrdemGrupoFixado ?? int.MaxValue)
+            .ThenBy(ug => ug.Grupo.Nome)
+            .ToListAsync();
+
+        for (var i = 0; i < fixados.Count; i++)
+            fixados[i].OrdemGrupoFixado = i + 1;
+
+        await _context.SaveChangesAsync();
+    }
+
+    public class GrupoFixadoRequest
+    {
+        public int GrupoId { get; set; }
+    }
+
 }
 
 public class GrupoViewModel
@@ -441,6 +521,8 @@ public class GrupoViewModel
     public PermissaoUsuario Permissao { get; set; }
     public DateTime DataEntrada { get; set; }
     public DateTime? DataUltimoAcesso { get; set; }
+    public bool GrupoFixado { get; set; }
+    public int? OrdemGrupoFixado { get; set; }
     public int TotalChamados { get; set; }
     public int ChamadosAbertos { get; set; }
     public int TotalMembros { get; set; }

@@ -41,6 +41,8 @@ CREATE TABLE Usuarios_grupos (
         NOT NULL DEFAULT 'Nenhuma',
     data_adicao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     data_ultimo_acesso DATETIME NULL,
+    grupo_fixado BOOLEAN NOT NULL DEFAULT FALSE,
+    ordem_grupo_fixado INT NULL,
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
     data_remocao DATETIME NULL,
     removido_por_usuario_id INT NULL,
@@ -58,6 +60,9 @@ CREATE INDEX idx_ug_usuario_grupo_ativo
 
 CREATE INDEX idx_ug_usuario_ativo_ultimo_acesso
     ON Usuarios_grupos (usuario_id, ativo, data_ultimo_acesso);
+
+CREATE INDEX idx_ug_usuario_fixados_ordem
+    ON Usuarios_grupos (usuario_id, ativo, grupo_fixado, ordem_grupo_fixado);
 
 CREATE INDEX idx_ug_grupo_ativo_permissao
     ON Usuarios_grupos (grupo_id, ativo, permissao);

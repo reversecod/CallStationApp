@@ -173,6 +173,42 @@
         text-align: left;
     }
 
+    .recent-group-main {
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: .38rem;
+    }
+
+    .recent-group-actions {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: .18rem;
+    }
+
+    .recent-group-icon-button {
+        border: 0;
+        background: transparent;
+        color: var(--recent-group-text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        line-height: 1;
+        opacity: .9;
+    }
+
+    .recent-group-icon-button:hover,
+    .recent-group-icon-button:focus-visible {
+        opacity: 1;
+        outline: none;
+    }
+
+    .recent-group-icon-button.is-pinned {
+        color: var(--recent-group-text);
+    }
+
     .recent-group-button:hover {
         filter: brightness(.96);
     }
@@ -274,7 +310,8 @@
      data-sidebar-marcar-lida-url="@Url.Page("/Menu/Notifications", "MarcarComoLida", new { grupoId })"
      data-sidebar-notificacoes-page-url="@Url.Page("/Menu/Notifications", new { grupoId })"
      data-sidebar-grupos-url="@Url.Page("/Menu/Menu", "ListarGruposRecentes")"
-     data-sidebar-acessar-grupo-url="@Url.Page("/Menu/Menu", "AcessarGrupo")">
+     data-sidebar-acessar-grupo-url="@Url.Page("/Menu/Menu", "AcessarGrupo")"
+     data-sidebar-fixar-grupo-url="@Url.Page("/Menu/Menu", "AlternarGrupoFixado")">
     <a asp-page="/Menu/Menu" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
         <img src="~/images/logocompletopreto.png" alt="Logo" class="logo-img me-2" loading="lazy">
     </a>
@@ -712,8 +749,15 @@
                             class="recent-group-button"
                             data-grupo-id="${escapeSidebarHtml(grupo.id)}"
                             style="--recent-group-color: ${escapeSidebarHtml(getSidebarGroupColor(grupo.etiquetaCor))}; --recent-group-text: ${escapeSidebarHtml(getSidebarGroupTextColor(grupo.etiquetaCor))}">
-                        <span class="recent-group-button-name">${escapeSidebarHtml(grupo.nome)}</span>
-                        <span class="recent-group-button-access">Último acesso: ${escapeSidebarHtml(formatSidebarDateTime(grupo.dataUltimoAcesso))}</span>
+                        <span class="recent-group-main">
+                            <span class="recent-group-button-name">${escapeSidebarHtml(grupo.nome)}</span>
+                        </span>
+                        <span class="recent-group-actions">
+                            <span class="recent-group-button-access">Último acesso: ${escapeSidebarHtml(formatSidebarDateTime(grupo.dataUltimoAcesso))}</span>
+                            <span role="button" tabindex="0" class="recent-group-icon-button ${grupo.fixado ? "is-pinned" : ""}" data-fixar-grupo="${escapeSidebarHtml(grupo.id)}" title="${grupo.fixado ? "Desafixar organização" : "Fixar organização"}" aria-label="${grupo.fixado ? "Desafixar organização" : "Fixar organização"}">
+                                <i class="bi ${grupo.fixado ? "bi-pin-angle-fill" : "bi-pin-angle"}"></i>
+                            </span>
+                        </span>
                     </button>
                 `).join("");
 
@@ -729,9 +773,40 @@
                     });
                 });
 
+                listaOrganizacoes.querySelectorAll("[data-fixar-grupo]").forEach(botao => {
+                    botao.addEventListener("click", event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        alternarGrupoFixado(Number(botao.dataset.fixarGrupo || 0));
+                    });
+                    botao.addEventListener("keydown", event => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        alternarGrupoFixado(Number(botao.dataset.fixarGrupo || 0));
+                    });
+                });
+
                 organizacoesCarregadas = true;
             } catch {
                 listaOrganizacoes.innerHTML = '<div class="text-danger small">Não foi possível carregar as organizações.</div>';
+            }
+        }
+
+        async function recarregarOrganizacoesRecentes() {
+            organizacoesCarregadas = false;
+            await carregarOrganizacoesRecentes();
+        }
+
+        async function alternarGrupoFixado(grupoId) {
+            const url = sidebar.dataset.sidebarFixarGrupoUrl;
+            if (!url || !grupoId) return;
+
+            try {
+                await enviarSidebarJson(url, { grupoId });
+                await recarregarOrganizacoesRecentes();
+            } catch (error) {
+                alert(error.message || "Não foi possível atualizar a organização fixada.");
             }
         }
 

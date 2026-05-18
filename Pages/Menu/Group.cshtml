@@ -358,6 +358,7 @@ document.querySelectorAll("#grupoTabs [data-bs-toggle='tab']").forEach(tab => {
 function showFeedback(type, text) {
     feedback.className = `alert alert-${type}`;
     feedback.textContent = text;
+    feedback.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function getAbaGrupoAtiva() {
@@ -517,7 +518,9 @@ function excluirCatalogo(btn) {
 
     if (!handler) return;
     if (confirm(`Excluir ${nome}? A acao sera bloqueada se houver vinculos ou dependencias.`)) {
-        post(handler, { id }).catch(e => showFeedback("danger", e.message));
+        post(handler, { id }).catch(e => {
+            showFeedback("danger", e.message);
+        });
     }
 }
 
