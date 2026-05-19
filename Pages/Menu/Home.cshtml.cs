@@ -65,6 +65,7 @@ public class HomeModel : PageModel
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public Grupo? GrupoAtual { get; set; }
+    public GrupoConfiguracao? Configuracao { get; set; }
     public List<ChamadoListItemViewModel> Chamados { get; set; } = new();
     public List<Setor> SetoresDisponiveis { get; set; } = new();
     public List<OcorrenciaTipo> TiposOcorrenciaDisponiveis { get; set; } = new();
@@ -116,6 +117,10 @@ public class HomeModel : PageModel
 
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
+
+        Configuracao = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GrupoId == GrupoId);
 
         var usuarioLogado = await _context.Usuarios
             .AsNoTracking()

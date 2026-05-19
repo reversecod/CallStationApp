@@ -206,6 +206,36 @@ namespace CallStationApp.Data
                     .HasColumnType("boolean")
                     .HasDefaultValue(true);
 
+                entity.Property(c => c.AparenciaTelaTipo)
+                    .HasColumnName("aparencia_tela_tipo")
+                    .HasColumnType("varchar(20)")
+                    .HasMaxLength(20);
+
+                entity.Property(c => c.AparenciaTelaValor)
+                    .HasColumnName("aparencia_tela_valor")
+                    .HasColumnType("varchar(255)")
+                    .HasMaxLength(255);
+
+                entity.Property(c => c.AparenciaSidebarTipo)
+                    .HasColumnName("aparencia_sidebar_tipo")
+                    .HasColumnType("varchar(20)")
+                    .HasMaxLength(20);
+
+                entity.Property(c => c.AparenciaSidebarValor)
+                    .HasColumnName("aparencia_sidebar_valor")
+                    .HasColumnType("varchar(255)")
+                    .HasMaxLength(255);
+
+                entity.Property(c => c.AparenciaMenuAtivoCor)
+                    .HasColumnName("aparencia_menu_ativo_cor")
+                    .HasColumnType("varchar(7)")
+                    .HasMaxLength(7);
+
+                entity.Property(c => c.AparenciaSidebarTextoFundoCor)
+                    .HasColumnName("aparencia_sidebar_texto_fundo_cor")
+                    .HasColumnType("varchar(7)")
+                    .HasMaxLength(7);
+
                 entity.Property(c => c.DataAtualizacao)
                     .HasColumnName("data_atualizacao")
                     .HasColumnType("datetime")

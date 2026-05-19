@@ -24,6 +24,7 @@ public class MembersModel : PageModel
     public int GrupoId { get; set; }
 
     public Grupo? GrupoAtual { get; set; }
+    public GrupoConfiguracao? Configuracao { get; set; }
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public int UsuarioLogadoId { get; set; }
@@ -58,6 +59,10 @@ public class MembersModel : PageModel
 
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
+
+        Configuracao = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GrupoId == GrupoId);
 
         var usuarioLogado = await _context.Usuarios
             .AsNoTracking()

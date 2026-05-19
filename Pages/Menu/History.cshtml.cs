@@ -57,6 +57,7 @@ public class HistoryModel : PageModel
     public bool UsuarioLogadoPodeComentarHistorico { get; set; }
     public bool UsuarioLogadoPodeAlterarStatusHistorico { get; set; }
     public Grupo? GrupoAtual { get; set; }
+    public GrupoConfiguracao? Configuracao { get; set; }
     public List<HistoricoChamadoVm> Chamados { get; set; } = new();
     public async Task<IActionResult> OnGetAsync()
     {
@@ -85,6 +86,10 @@ public class HistoryModel : PageModel
 
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
+
+        Configuracao = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GrupoId == GrupoId);
 
         var usuario = await _context.Usuarios
             .AsNoTracking()

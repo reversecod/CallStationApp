@@ -19,12 +19,25 @@
             : PermissaoUsuario.Colaborador;
     var usuarioLogadoTemPermissaoOperacional = permissaoUsuarioLogado != PermissaoUsuario.Nenhuma;
     var grupoAtualObj = modelObject.GetType().GetProperty("GrupoAtual")?.GetValue(modelObject) as Grupo;
+    var grupoConfiguracaoObj = modelObject.GetType().GetProperty("Configuracao")?.GetValue(modelObject) as GrupoConfiguracao;
     var nomeGrupoAtual = grupoAtualObj?.Nome ?? "Grupo";
     var inicialGrupoAtual = string.IsNullOrWhiteSpace(nomeGrupoAtual)
         ? "G"
         : nomeGrupoAtual.Trim()[0].ToString().ToUpperInvariant();
     var corGrupoAtual = grupoAtualObj is not null ? CorCss(grupoAtualObj.EtiquetaCor) : "#6c757d";
     var corTextoGrupoAtual = grupoAtualObj?.EtiquetaCor == EtiquetaCor.branco || grupoAtualObj is null ? "#212529" : "#fff";
+    var fundoTelaCss = AparenciaBackgroundCss(grupoConfiguracaoObj?.AparenciaTelaTipo, grupoConfiguracaoObj?.AparenciaTelaValor);
+    var fundoSidebarCss = AparenciaBackgroundCss(grupoConfiguracaoObj?.AparenciaSidebarTipo, grupoConfiguracaoObj?.AparenciaSidebarValor);
+    var corMenuAtivo = EhCorHex(grupoConfiguracaoObj?.AparenciaMenuAtivoCor ?? string.Empty)
+        ? grupoConfiguracaoObj!.AparenciaMenuAtivoCor!
+        : "#0d6efd";
+    var corTextoMenuAtivo = CorTextoContraste(corMenuAtivo);
+    var corFundoTextoSidebar = EhCorHex(grupoConfiguracaoObj?.AparenciaSidebarTextoFundoCor ?? string.Empty)
+        ? grupoConfiguracaoObj!.AparenciaSidebarTextoFundoCor!
+        : null;
+    var temFundoTela = !string.IsNullOrWhiteSpace(fundoTelaCss);
+    var temFundoSidebar = !string.IsNullOrWhiteSpace(fundoSidebarCss);
+    var temFundoTextoSidebar = !string.IsNullOrWhiteSpace(corFundoTextoSidebar);
 
     string ActiveClass(string menu) =>
         string.Equals(activeMenu, menu, StringComparison.OrdinalIgnoreCase)
@@ -43,6 +56,51 @@
         EtiquetaCor.preto => "#1f2937",
         _ => "#f8f9fa"
     };
+
+    string? AparenciaBackgroundCss(string? tipo, string? valor)
+    {
+        var tipoNormalizado = (tipo ?? "padrao").Trim().ToLowerInvariant();
+        var valorNormalizado = (valor ?? string.Empty).Trim();
+        if (tipoNormalizado == "cor" && EhCorHex(valorNormalizado))
+            return valorNormalizado;
+
+        if (tipoNormalizado == "upload" &&
+            valorNormalizado.StartsWith("/uploads/grupos/backgrounds/", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"url('{Url.Content(valorNormalizado)}')";
+        }
+
+        if (tipoNormalizado == "preset")
+        {
+            return valorNormalizado.ToLowerInvariant() switch
+            {
+                "aurora" => "radial-gradient(circle at 18% 18%, rgba(125, 211, 252, .95), transparent 28rem), linear-gradient(135deg, #1d4ed8 0%, #7c3aed 48%, #db2777 100%)",
+                "oceano" => "radial-gradient(circle at 80% 14%, rgba(103, 232, 249, .9), transparent 24rem), linear-gradient(135deg, #083344 0%, #0f766e 48%, #38bdf8 100%)",
+                "grafite" => "radial-gradient(circle at 22% 18%, rgba(148, 163, 184, .34), transparent 20rem), linear-gradient(135deg, #020617 0%, #334155 56%, #111827 100%)",
+                "folha" => "radial-gradient(circle at 80% 18%, rgba(190, 242, 100, .72), transparent 22rem), linear-gradient(135deg, #14532d 0%, #16a34a 48%, #a3e635 100%)",
+                "nevoa" => "radial-gradient(circle at 20% 12%, rgba(147, 197, 253, .7), transparent 23rem), linear-gradient(135deg, #e0f2fe 0%, #f8fafc 48%, #ddd6fe 100%)",
+                "ameixa" => "radial-gradient(circle at 22% 22%, rgba(244, 114, 182, .72), transparent 22rem), linear-gradient(135deg, #581c87 0%, #be185d 50%, #fb7185 100%)",
+                _ => null
+            };
+        }
+
+        return null;
+    }
+
+    bool EhCorHex(string valor) =>
+        valor.Length == 7 && valor[0] == '#' && valor.Skip(1).All(Uri.IsHexDigit);
+
+    string CorTextoContraste(string cor)
+    {
+        if (!EhCorHex(cor))
+            return "#fff";
+
+        var r = Convert.ToInt32(cor.Substring(1, 2), 16);
+        var g = Convert.ToInt32(cor.Substring(3, 2), 16);
+        var b = Convert.ToInt32(cor.Substring(5, 2), 16);
+        var luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminancia > .62 ? "#111827" : "#fff";
+    }
 }
 
 <script>
@@ -51,6 +109,15 @@
             if (localStorage.getItem("callstation.sidebar.recolhida") === "1") {
                 document.body.classList.add("sidebar-collapsed");
             }
+            if (@temFundoTela.ToString().ToLowerInvariant()) {
+                document.body.classList.add("grupo-aparencia-tela");
+            }
+            if (@temFundoSidebar.ToString().ToLowerInvariant()) {
+                document.body.classList.add("grupo-aparencia-sidebar");
+            }
+            if (@temFundoTextoSidebar.ToString().ToLowerInvariant()) {
+                document.body.classList.add("grupo-aparencia-sidebar-texto-fundo");
+            }
         } catch {
         }
     })();
@@ -58,8 +125,86 @@
 
 <style>
     :root {
+        @if (temFundoTela)
+        {
+            @:--grupo-page-background: @Html.Raw(fundoTelaCss);
+        }
+        @if (temFundoSidebar)
+        {
+            @:--grupo-sidebar-background: @Html.Raw(fundoSidebarCss);
+        }
+    }
+
+    body.grupo-aparencia-tela {
+        background: var(--grupo-page-background) !important;
+        background-attachment: fixed !important;
+        background-position: center !important;
+        background-size: cover !important;
+    }
+
+    body.grupo-aparencia-tela .content-wrapper,
+    body.grupo-aparencia-tela .tasks-content,
+    body.grupo-aparencia-tela .board,
+    body.grupo-aparencia-tela .tasks-header {
+        background: transparent !important;
+    }
+
+    body.grupo-aparencia-sidebar .sidebar {
+        background: var(--grupo-sidebar-background) center / cover no-repeat !important;
+        isolation: isolate;
+    }
+
+    body.grupo-aparencia-sidebar .sidebar > * {
+        position: relative;
+        z-index: 1;
+    }
+
+    body.grupo-aparencia-sidebar .sidebar .nav-link,
+    body.grupo-aparencia-sidebar .sidebar-profile-toggle,
+    body.grupo-aparencia-sidebar .sidebar-collapse-button,
+    body.grupo-aparencia-sidebar .sidebar-expand-button {
+        color: #0f172a;
+    }
+
+    body.grupo-aparencia-sidebar .sidebar hr {
+        opacity: .18;
+    }
+
+    body.grupo-aparencia-sidebar-texto-fundo .sidebar .nav-link:not(.active),
+    body.grupo-aparencia-sidebar-texto-fundo .sidebar-profile-toggle,
+    body.grupo-aparencia-sidebar-texto-fundo .sidebar-collapse-button,
+    body.grupo-aparencia-sidebar-texto-fundo .sidebar-expand-button {
+        border-radius: .85rem;
+        background: var(--grupo-sidebar-text-bg);
+    }
+
+    body.grupo-aparencia-sidebar-texto-fundo .sidebar .nav-link:not(.active) {
+        min-height: 2.35rem;
+        margin: .12rem 0;
+        padding-top: .32rem;
+        padding-bottom: .32rem;
+    }
+
+    body.grupo-aparencia-sidebar-texto-fundo .sidebar-profile-toggle {
+        min-height: 2.95rem;
+        padding: .35rem .55rem;
+    }
+
+    body.sidebar-collapsed.grupo-aparencia-sidebar-texto-fundo .sidebar-profile-toggle {
+        min-width: 3.15rem;
+        min-height: 3.15rem;
+        padding: .35rem;
+    }
+
+    :root {
         --sidebar-expanded-width: 17.5rem;
         --sidebar-collapsed-width: 5.25rem;
+        --grupo-sidebar-active-bg: @corMenuAtivo;
+        --grupo-sidebar-active-text: @corTextoMenuAtivo;
+        @if (temFundoTextoSidebar)
+        {
+            @:--grupo-sidebar-text-bg: @corFundoTextoSidebar;
+        }
     }
 
     .sidebar {
@@ -153,6 +298,11 @@
         transition: justify-content .22s ease, padding .22s ease;
     }
 
+    .sidebar .nav-link.active {
+        background-color: var(--grupo-sidebar-active-bg) !important;
+        color: var(--grupo-sidebar-active-text) !important;
+    }
+
     .sidebar .icon-svg {
         width: 1.12rem;
         height: 1.12rem;
@@ -167,8 +317,8 @@
     }
 
     .sidebar .nav-link.active .icon-svg {
-        color: #111;
-        fill: #111;
+        color: var(--grupo-sidebar-active-text);
+        fill: var(--grupo-sidebar-active-text);
     }
 
     .sidebar .user-img {

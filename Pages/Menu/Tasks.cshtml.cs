@@ -47,6 +47,7 @@ public class TasksModel : PageModel
     public bool UsuarioLogadoEhAdministrador { get; set; }
     public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
     public Grupo? GrupoAtual { get; set; }
+    public GrupoConfiguracao? Configuracao { get; set; }
     public QuadroTarefa Quadro { get; set; } = null!;
     public List<ColunaBoardViewModel> Colunas { get; set; } = new();
     public List<MembroViewModel> Membros { get; set; } = new();
@@ -74,6 +75,10 @@ public class TasksModel : PageModel
         GrupoAtual = await _context.Grupos.AsNoTracking().FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (GrupoAtual == null)
             return RedirectToPage("/Menu/Menu");
+
+        Configuracao = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.GrupoId == GrupoId);
 
         var usuario = await _context.Usuarios
             .AsNoTracking()

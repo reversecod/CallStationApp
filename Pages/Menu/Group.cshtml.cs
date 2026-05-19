@@ -25,6 +25,22 @@ public class GroupModel : PageModel
         ".png",
         ".webp"
     };
+    private static readonly HashSet<string> TiposAparenciaPermitidos = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "padrao",
+        "cor",
+        "preset",
+        "upload"
+    };
+    private static readonly HashSet<string> PresetsAparenciaPermitidos = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "aurora",
+        "oceano",
+        "grafite",
+        "folha",
+        "nevoa",
+        "ameixa"
+    };
 
     public GroupModel(AppDbContext context, GrupoAuthorizationService auth, IMemoryCache memoryCache, ILogger<GroupModel> logger, IWebHostEnvironment environment)
     {
@@ -219,6 +235,137 @@ public class GroupModel : PageModel
             RemoverFotoGrupoSeExistir(novaFoto);
             _logger.LogError(ex, "Erro ao alterar foto do grupo {GrupoId}.", GrupoId);
             return StatusCode(500, new { success = false, message = "Não foi possível alterar a foto do grupo." });
+        }
+    }
+
+    public async Task<IActionResult> OnPostSalvarAparenciaAsync([FromBody] SalvarAparenciaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
+        if (bloqueio != null)
+            return bloqueio;
+
+        var validacao = ValidarAparencia(request.TelaTipo, request.TelaValor, request.SidebarTipo, request.SidebarValor, request.MenuAtivoCor, request.SidebarTextoFundoCor);
+        if (validacao != null)
+            return validacao;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var config = await ObterOuCriarConfigAsync(usuarioId.Value);
+
+                AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaTelaTipo", config.AparenciaTelaTipo, NormalizarTipoAparencia(request.TelaTipo));
+                AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaTelaValor", config.AparenciaTelaValor, NormalizarValorAparencia(request.TelaTipo, request.TelaValor));
+                AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaSidebarTipo", config.AparenciaSidebarTipo, NormalizarTipoAparencia(request.SidebarTipo));
+                AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaSidebarValor", config.AparenciaSidebarValor, NormalizarValorAparencia(request.SidebarTipo, request.SidebarValor));
+                AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaMenuAtivoCor", config.AparenciaMenuAtivoCor, NormalizarCorMenuAtivo(request.MenuAtivoCor));
+                AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaSidebarTextoFundoCor", config.AparenciaSidebarTextoFundoCor, NormalizarCorTextoFundo(request.SidebarTextoFundoCor));
+
+                config.AparenciaTelaTipo = NormalizarTipoAparencia(request.TelaTipo);
+                config.AparenciaTelaValor = NormalizarValorAparencia(request.TelaTipo, request.TelaValor);
+                config.AparenciaSidebarTipo = NormalizarTipoAparencia(request.SidebarTipo);
+                config.AparenciaSidebarValor = NormalizarValorAparencia(request.SidebarTipo, request.SidebarValor);
+                config.AparenciaMenuAtivoCor = NormalizarCorMenuAtivo(request.MenuAtivoCor);
+                config.AparenciaSidebarTextoFundoCor = NormalizarCorTextoFundo(request.SidebarTextoFundoCor);
+                config.AtualizadoPorUsuarioId = usuarioId.Value;
+                config.DataAtualizacao = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (IActionResult)new JsonResult(new { success = true, message = "Aparência salva." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+    }
+
+    public async Task<IActionResult> OnPostUploadAparenciaAsync([FromForm] string? alvo, [FromForm] IFormFile? imagem)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
+        if (bloqueio != null)
+            return bloqueio;
+
+        var alvoNormalizado = (alvo ?? string.Empty).Trim().ToLowerInvariant();
+        if (alvoNormalizado is not ("tela" or "sidebar"))
+            return BadRequest(new { success = false, message = "Área de aparência inválida." });
+
+        if (imagem is not { Length: > 0 })
+            return BadRequest(new { success = false, message = "Selecione uma imagem." });
+
+        if (!ImagemAparenciaValida(imagem) || !await AssinaturaImagemValidaAsync(imagem))
+            return BadRequest(new { success = false, message = "Envie uma imagem válida JPG, PNG ou WEBP com no máximo 3 MB." });
+
+        string? novaImagem = null;
+        string? imagemAnterior = null;
+
+        try
+        {
+            novaImagem = await SalvarImagemAparenciaAsync(imagem, GrupoId);
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var config = await ObterOuCriarConfigAsync(usuarioId.Value);
+
+                    if (alvoNormalizado == "tela")
+                    {
+                        imagemAnterior = config.AparenciaTelaTipo == "upload" ? config.AparenciaTelaValor : null;
+                        AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaTelaTipo", config.AparenciaTelaTipo, "upload");
+                        AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaTelaValor", config.AparenciaTelaValor, novaImagem);
+                        config.AparenciaTelaTipo = "upload";
+                        config.AparenciaTelaValor = novaImagem;
+                    }
+                    else
+                    {
+                        imagemAnterior = config.AparenciaSidebarTipo == "upload" ? config.AparenciaSidebarValor : null;
+                        AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaSidebarTipo", config.AparenciaSidebarTipo, "upload");
+                        AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "AparenciaSidebarValor", config.AparenciaSidebarValor, novaImagem);
+                        config.AparenciaSidebarTipo = "upload";
+                        config.AparenciaSidebarValor = novaImagem;
+                    }
+
+                    config.AtualizadoPorUsuarioId = usuarioId.Value;
+                    config.DataAtualizacao = DateTime.UtcNow;
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+
+            RemoverImagemAparenciaSeExistir(imagemAnterior);
+            return new JsonResult(new
+            {
+                success = true,
+                message = "Imagem de aparência salva.",
+                dados = new { alvo = alvoNormalizado, url = novaImagem }
+            });
+        }
+        catch (Exception ex)
+        {
+            RemoverImagemAparenciaSeExistir(novaImagem);
+            _logger.LogError(ex, "Erro ao salvar imagem de aparência do grupo {GrupoId}.", GrupoId);
+            return StatusCode(500, new { success = false, message = "Não foi possível salvar a imagem de aparência." });
         }
     }
 
@@ -1027,6 +1174,146 @@ public class GroupModel : PageModel
         return arquivo.Length <= 2 * 1024 * 1024 && ExtensoesFotoGrupoPermitidas.Contains(extensao);
     }
 
+    private IActionResult? ValidarAparencia(string? telaTipo, string? telaValor, string? sidebarTipo, string? sidebarValor, string? menuAtivoCor, string? sidebarTextoFundoCor)
+    {
+        var validacaoTela = ValidarAlvoAparencia(telaTipo, telaValor, "tela");
+        if (validacaoTela != null)
+            return validacaoTela;
+
+        var validacaoSidebar = ValidarAlvoAparencia(sidebarTipo, sidebarValor, "barra lateral");
+        if (validacaoSidebar != null)
+            return validacaoSidebar;
+
+        if (!EhCorHexValida(NormalizarCorMenuAtivo(menuAtivoCor)))
+            return BadRequest(new { success = false, message = "Cor do campo selecionado inválida." });
+
+        var corTextoFundo = NormalizarCorTextoFundo(sidebarTextoFundoCor);
+        if (!string.IsNullOrWhiteSpace(corTextoFundo) && !EhCorHexValida(corTextoFundo))
+            return BadRequest(new { success = false, message = "Cor de fundo dos textos inválida." });
+
+        return null;
+    }
+
+    private IActionResult? ValidarAlvoAparencia(string? tipo, string? valor, string nome)
+    {
+        var tipoNormalizado = NormalizarTipoAparencia(tipo);
+        var valorNormalizado = NormalizarValorAparencia(tipo, valor);
+
+        if (!TiposAparenciaPermitidos.Contains(tipoNormalizado))
+            return BadRequest(new { success = false, message = $"Tipo de aparência da {nome} inválido." });
+
+        if (tipoNormalizado == "cor" && !EhCorHexValida(valorNormalizado))
+            return BadRequest(new { success = false, message = $"Cor da {nome} inválida." });
+
+        if (tipoNormalizado == "preset" && !PresetsAparenciaPermitidos.Contains(valorNormalizado ?? string.Empty))
+            return BadRequest(new { success = false, message = $"Imagem pré-definida da {nome} inválida." });
+
+        if (tipoNormalizado == "upload" && !EhCaminhoUploadAparenciaValido(valorNormalizado))
+            return BadRequest(new { success = false, message = $"Imagem da {nome} inválida." });
+
+        return null;
+    }
+
+    private static string NormalizarTipoAparencia(string? tipo)
+    {
+        var tipoNormalizado = (tipo ?? "padrao").Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(tipoNormalizado) ? "padrao" : tipoNormalizado;
+    }
+
+    private static string? NormalizarValorAparencia(string? tipo, string? valor)
+    {
+        var tipoNormalizado = NormalizarTipoAparencia(tipo);
+        var valorNormalizado = (valor ?? string.Empty).Trim();
+        if (tipoNormalizado == "padrao")
+            return null;
+
+        return string.IsNullOrWhiteSpace(valorNormalizado) ? null : valorNormalizado;
+    }
+
+    private static string NormalizarCorMenuAtivo(string? valor) =>
+        EhCorHexValida((valor ?? string.Empty).Trim()) ? valor!.Trim() : "#0d6efd";
+
+    private static string? NormalizarCorTextoFundo(string? valor)
+    {
+        var cor = (valor ?? string.Empty).Trim();
+        return EhCorHexValida(cor) ? cor : null;
+    }
+
+    private static bool EhCorHexValida(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor) || valor.Length != 7 || valor[0] != '#')
+            return false;
+
+        return valor.Skip(1).All(Uri.IsHexDigit);
+    }
+
+    private static bool EhCaminhoUploadAparenciaValido(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return false;
+
+        if (!valor.StartsWith("/uploads/grupos/backgrounds/", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var nomeArquivo = Path.GetFileName(valor);
+        return !string.IsNullOrWhiteSpace(nomeArquivo) &&
+               string.Equals(valor, $"/uploads/grupos/backgrounds/{nomeArquivo}", StringComparison.OrdinalIgnoreCase) &&
+               ExtensoesFotoGrupoPermitidas.Contains(Path.GetExtension(nomeArquivo));
+    }
+
+    private static bool ImagemAparenciaValida(IFormFile arquivo)
+    {
+        var extensao = Path.GetExtension(arquivo.FileName);
+        return arquivo.Length <= 3 * 1024 * 1024 && ExtensoesFotoGrupoPermitidas.Contains(extensao);
+    }
+
+    private static async Task<bool> AssinaturaImagemValidaAsync(IFormFile arquivo)
+    {
+        var buffer = new byte[12];
+        await using var stream = arquivo.OpenReadStream();
+        var bytesLidos = await stream.ReadAsync(buffer);
+        if (bytesLidos < 12)
+            return false;
+
+        var extensao = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
+        return extensao switch
+        {
+            ".jpg" or ".jpeg" => buffer[0] == 0xFF && buffer[1] == 0xD8 && buffer[2] == 0xFF,
+            ".png" => buffer[0] == 0x89 &&
+                      buffer[1] == 0x50 &&
+                      buffer[2] == 0x4E &&
+                      buffer[3] == 0x47 &&
+                      buffer[4] == 0x0D &&
+                      buffer[5] == 0x0A &&
+                      buffer[6] == 0x1A &&
+                      buffer[7] == 0x0A,
+            ".webp" => buffer[0] == 0x52 &&
+                       buffer[1] == 0x49 &&
+                       buffer[2] == 0x46 &&
+                       buffer[3] == 0x46 &&
+                       buffer[8] == 0x57 &&
+                       buffer[9] == 0x45 &&
+                       buffer[10] == 0x42 &&
+                       buffer[11] == 0x50,
+            _ => false
+        };
+    }
+
+    private async Task<string> SalvarImagemAparenciaAsync(IFormFile arquivo, int grupoId)
+    {
+        var extensao = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
+        var pasta = Path.Combine(_environment.WebRootPath, "uploads", "grupos", "backgrounds");
+        Directory.CreateDirectory(pasta);
+
+        var nomeArquivo = $"grupo-bg-{grupoId}-{Guid.NewGuid():N}{extensao}";
+        var caminho = Path.Combine(pasta, nomeArquivo);
+
+        await using var stream = new FileStream(caminho, FileMode.Create);
+        await arquivo.CopyToAsync(stream);
+
+        return $"/uploads/grupos/backgrounds/{nomeArquivo}";
+    }
+
     private void RemoverFotoGrupoSeExistir(string? caminhoRelativo)
     {
         if (string.IsNullOrWhiteSpace(caminhoRelativo))
@@ -1037,6 +1324,23 @@ public class GroupModel : PageModel
             return;
 
         var caminho = Path.Combine(_environment.WebRootPath, "uploads", "grupos", nomeArquivo);
+        if (System.IO.File.Exists(caminho))
+            System.IO.File.Delete(caminho);
+    }
+
+    private void RemoverImagemAparenciaSeExistir(string? caminhoRelativo)
+    {
+        if (string.IsNullOrWhiteSpace(caminhoRelativo) ||
+            !caminhoRelativo.StartsWith("/uploads/grupos/backgrounds/", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var nomeArquivo = Path.GetFileName(caminhoRelativo);
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return;
+
+        var caminho = Path.Combine(_environment.WebRootPath, "uploads", "grupos", "backgrounds", nomeArquivo);
         if (System.IO.File.Exists(caminho))
             System.IO.File.Delete(caminho);
     }
@@ -1082,6 +1386,7 @@ public class GroupModel : PageModel
     }
 
     public record SalvarGeralRequest(string? Nome, string? Descricao, string? Slug, string? EtiquetaCor);
+    public record SalvarAparenciaRequest(string? TelaTipo, string? TelaValor, string? SidebarTipo, string? SidebarValor, string? MenuAtivoCor, string? SidebarTextoFundoCor);
     public record SalvarRegrasRequest(bool ObrigarSetor, bool ObrigarTipoOcorrencia, bool ObrigarCategoria, bool ObrigarSubcategoria, bool PermitirChamadoPublico, bool ExigirSolucaoParaConcluir, int? DiasParaFechamentoAutomatico);
     public record SalvarSlaRequest(bool AutomatizarPendentePorPrazoConclusao, int? HorasAposVencimentoParaPendente, int? HorasAntesPrazoParaAlerta, bool NotificarAdministradoresSla, bool ExibirDataFinalizacaoModal = true, bool ExibirPrazoRespostaModal = true, bool ExibirPrazoConclusaoModal = true);
     public record NomeRequest(string? Nome);

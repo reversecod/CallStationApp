@@ -110,8 +110,99 @@
             box-shadow: inset 0 0 0 2px rgba(255,255,255,.65);
             flex-shrink: 0;
         }
-        .nav-tabs .nav-link { color:#495057; }
-        .nav-tabs .nav-link.active { font-weight:600; }
+        .aparencia-option-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+            gap: .75rem;
+        }
+        .aparencia-option {
+            border: 1px solid #dbe3ec;
+            border-radius: .9rem;
+            background: #fff;
+            padding: .55rem;
+            display: grid;
+            gap: .45rem;
+            text-align: left;
+        }
+        .aparencia-option.is-selected {
+            border-color: var(--aparencia-selected-color, #2563eb);
+            box-shadow: 0 0 0 .18rem color-mix(in srgb, var(--aparencia-selected-color, #2563eb) 24%, transparent);
+        }
+        .aparencia-preview {
+            min-height: 4.2rem;
+            border-radius: .7rem;
+            border: 1px solid rgba(15, 23, 42, .1);
+            background: var(--aparencia-preview-bg, #f8fafc);
+            background-position: center;
+            background-size: cover;
+        }
+        .aparencia-option-title {
+            font-size: .82rem;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        .aparencia-upload-preview {
+            min-height: 7rem;
+            border-radius: .9rem;
+            border: 1px dashed #94a3b8;
+            background: #f8fafc;
+            background-position: center;
+            background-size: cover;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-size: .85rem;
+            font-weight: 700;
+        }
+        .aparencia-menu-cor-preview {
+            width: 2.35rem;
+            height: 2.35rem;
+            border-radius: .7rem;
+            border: 1px solid rgba(15, 23, 42, .14);
+            background: var(--aparencia-menu-cor, #0d6efd);
+            box-shadow: inset 0 0 0 2px rgba(255,255,255,.55);
+            flex-shrink: 0;
+        }
+        .aparencia-texto-fundo-preview {
+            width: 2.35rem;
+            height: 2.35rem;
+            border-radius: .7rem;
+            border: 1px solid rgba(15, 23, 42, .14);
+            background: var(--aparencia-texto-fundo-cor, transparent);
+            background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%), linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e8f0 75%), linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+            background-size: .7rem .7rem;
+            background-position: 0 0, 0 .35rem, .35rem -.35rem, -.35rem 0;
+            box-shadow: inset 0 0 0 2px rgba(255,255,255,.55);
+            flex-shrink: 0;
+        }
+        .aparencia-texto-fundo-preview.has-color {
+            background-image: none;
+        }
+        .nav-tabs {
+            gap: .35rem;
+            border-bottom-color: #dbe3ec;
+        }
+        .nav-tabs .nav-link {
+            border: 1px solid #dbe3ec;
+            border-bottom-color: #dbe3ec;
+            border-radius: .75rem .75rem 0 0;
+            background: #eef2f7;
+            color: #495057;
+            font-weight: 600;
+        }
+        .nav-tabs .nav-link:hover,
+        .nav-tabs .nav-link:focus-visible {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+        .nav-tabs .nav-link.active {
+            background: #fff;
+            border-color: #dbe3ec #dbe3ec #fff;
+            color: #0f172a;
+            font-weight: 800;
+            box-shadow: 0 -.25rem .8rem rgba(15, 23, 42, .05);
+        }
         .danger-zone { border:1px solid #f1aeb5; background:#fff5f5; border-radius:.9rem; padding:1rem; }
         @@media (max-width: 767.98px) {
             .sidebar { position:static; width:100%; height:auto; }
@@ -211,10 +302,12 @@
         <input type="hidden" id="grupoIdAtual" value="@Model.GrupoId" />
         <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
         <input type="hidden" id="alterarFotoGrupoUrl" value="@Url.Page("/Menu/Group", "AlterarFotoGrupo", new { grupoId = Model.GrupoId })" />
+        <input type="hidden" id="uploadAparenciaGrupoUrl" value="@Url.Page("/Menu/Group", "UploadAparencia", new { grupoId = Model.GrupoId })" />
         <div id="feedbackGrupo" class="alert d-none" role="alert"></div>
 
         <ul class="nav nav-tabs mb-3" id="grupoTabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabGeral" type="button">Geral</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAparencia" type="button">Aparência</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabEstrutura" type="button">Estrutura</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabRegras" type="button">Regras</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabSla" type="button">SLA e Automação</button></li>
@@ -291,6 +384,111 @@
                         </div>
                     </div>
                 </div></div>
+            </section>
+
+            <section class="tab-pane fade" id="tabAparencia">
+                <input type="hidden" id="aparenciaTelaTipo" value="@(Model.Configuracao.AparenciaTelaTipo ?? "padrao")">
+                <input type="hidden" id="aparenciaTelaValor" value="@(Model.Configuracao.AparenciaTelaValor ?? string.Empty)">
+                <input type="hidden" id="aparenciaSidebarTipo" value="@(Model.Configuracao.AparenciaSidebarTipo ?? "padrao")">
+                <input type="hidden" id="aparenciaSidebarValor" value="@(Model.Configuracao.AparenciaSidebarValor ?? string.Empty)">
+                <input type="hidden" id="aparenciaMenuAtivoCorValor" value="@(Model.Configuracao.AparenciaMenuAtivoCor ?? "#0d6efd")">
+                <input type="hidden" id="aparenciaSidebarTextoFundoCorValor" value="@(Model.Configuracao.AparenciaSidebarTextoFundoCor ?? string.Empty)">
+
+                <div class="row g-3">
+                    <div class="col-xl-6">
+                        <div class="card section-card h-100">
+                            <div class="card-body">
+                                <h2 class="h5 mb-1">Fundo das telas</h2>
+                                <p class="text-muted small mb-3">Escolha uma cor, um modelo visual ou envie uma imagem leve para as telas do grupo.</p>
+
+                                <h3 class="h6">Cores</h3>
+                                <div class="aparencia-option-grid mb-3" data-aparencia-area="tela" data-aparencia-tipo="cor">
+                                    @AparenciaCor("tela", "#f8fafc", "Claro")
+                                    @AparenciaCor("tela", "#e0f2fe", "Azul suave")
+                                    @AparenciaCor("tela", "#ecfdf5", "Verde suave")
+                                    @AparenciaCor("tela", "#f5f3ff", "Lavanda")
+                                </div>
+
+                                <h3 class="h6">Modelos visuais</h3>
+                                <div class="aparencia-option-grid mb-3" data-aparencia-area="tela" data-aparencia-tipo="preset">
+                                    @AparenciaPreset("tela", "aurora", "Aurora")
+                                    @AparenciaPreset("tela", "oceano", "Oceano")
+                                    @AparenciaPreset("tela", "grafite", "Grafite")
+                                    @AparenciaPreset("tela", "folha", "Folha")
+                                    @AparenciaPreset("tela", "nevoa", "Névoa")
+                                    @AparenciaPreset("tela", "ameixa", "Ameixa")
+                                </div>
+
+                                <h3 class="h6">Imagem própria</h3>
+                                <div class="aparencia-upload-preview mb-2" id="previewUploadAparenciaTela">Nenhuma imagem selecionada</div>
+                                <input type="file" class="form-control form-control-sm mb-2" id="uploadAparenciaTela" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="btnUploadAparenciaTela">Enviar imagem da tela</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xl-6">
+                        <div class="card section-card h-100">
+                            <div class="card-body">
+                                <h2 class="h5 mb-1">Fundo da barra lateral</h2>
+                                <p class="text-muted small mb-3">Escolha o fundo da barra lateral. Os campos ficam sem fundo extra; apenas o item ativo usa a cor definida abaixo.</p>
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="aparenciaMenuAtivoCor">Cor do campo selecionado</label>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input type="color"
+                                               class="form-control form-control-color"
+                                               id="aparenciaMenuAtivoCor"
+                                               value="@(Model.Configuracao.AparenciaMenuAtivoCor ?? "#0d6efd")"
+                                               title="Cor do menu selecionado">
+                                        <span class="aparencia-menu-cor-preview" id="previewAparenciaMenuAtivoCor" aria-hidden="true"></span>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label" for="aparenciaSidebarTextoFundoCor">Fundo dos textos e ícones</label>
+                                    <div class="d-flex flex-wrap align-items-center gap-2">
+                                        <input type="color"
+                                               class="form-control form-control-color"
+                                               id="aparenciaSidebarTextoFundoCor"
+                                               value="@(Model.Configuracao.AparenciaSidebarTextoFundoCor ?? "#ffffff")"
+                                               title="Cor de fundo dos textos e ícones">
+                                        <span class="aparencia-texto-fundo-preview" id="previewAparenciaSidebarTextoFundoCor" aria-hidden="true"></span>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnLimparAparenciaSidebarTextoFundo">Sem fundo</button>
+                                    </div>
+                                </div>
+
+                                <h3 class="h6">Cores</h3>
+                                <div class="aparencia-option-grid mb-3" data-aparencia-area="sidebar" data-aparencia-tipo="cor">
+                                    @AparenciaCor("sidebar", "#f8fafc", "Claro")
+                                    @AparenciaCor("sidebar", "#dbeafe", "Azul suave")
+                                    @AparenciaCor("sidebar", "#dcfce7", "Verde suave")
+                                    @AparenciaCor("sidebar", "#ede9fe", "Lavanda")
+                                </div>
+
+                                <h3 class="h6">Modelos visuais</h3>
+                                <div class="aparencia-option-grid mb-3" data-aparencia-area="sidebar" data-aparencia-tipo="preset">
+                                    @AparenciaPreset("sidebar", "aurora", "Aurora")
+                                    @AparenciaPreset("sidebar", "oceano", "Oceano")
+                                    @AparenciaPreset("sidebar", "grafite", "Grafite")
+                                    @AparenciaPreset("sidebar", "folha", "Folha")
+                                    @AparenciaPreset("sidebar", "nevoa", "Névoa")
+                                    @AparenciaPreset("sidebar", "ameixa", "Ameixa")
+                                </div>
+
+                                <h3 class="h6">Imagem própria</h3>
+                                <div class="aparencia-upload-preview mb-2" id="previewUploadAparenciaSidebar">Nenhuma imagem selecionada</div>
+                                <input type="file" class="form-control form-control-sm mb-2" id="uploadAparenciaSidebar" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="btnUploadAparenciaSidebar">Enviar imagem da barra</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center gap-2 mt-3">
+                    <button type="button" class="btn btn-outline-secondary" id="btnRestaurarAparencia">Restaurar padrão</button>
+                    <button type="button" class="btn btn-primary" id="btnSalvarAparencia">Salvar aparência</button>
+                </div>
             </section>
 
             <section class="tab-pane fade" id="tabEstrutura">
@@ -396,6 +594,7 @@
 const grupoId = document.getElementById("grupoIdAtual").value;
 const token = document.getElementById("requestVerificationToken").value;
 const alterarFotoGrupoUrl = document.getElementById("alterarFotoGrupoUrl")?.value || "";
+const uploadAparenciaGrupoUrl = document.getElementById("uploadAparenciaGrupoUrl")?.value || "";
 const feedback = document.getElementById("feedbackGrupo");
 const grupoTabStorageKey = `grupo:${grupoId}:abaAtiva`;
 const nomeGrupoAtual = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.GrupoAtual.Nome));
@@ -404,6 +603,16 @@ const previewFotoGrupoConfig = document.getElementById("previewFotoGrupoConfig")
 const btnSalvarFotoGrupo = document.getElementById("btnSalvarFotoGrupo");
 const geralCor = document.getElementById("geralCor");
 const previewCorGrupoConfig = document.getElementById("previewCorGrupoConfig");
+const aparenciaTelaTipo = document.getElementById("aparenciaTelaTipo");
+const aparenciaTelaValor = document.getElementById("aparenciaTelaValor");
+const aparenciaSidebarTipo = document.getElementById("aparenciaSidebarTipo");
+const aparenciaSidebarValor = document.getElementById("aparenciaSidebarValor");
+const aparenciaMenuAtivoCor = document.getElementById("aparenciaMenuAtivoCor");
+const aparenciaMenuAtivoCorValor = document.getElementById("aparenciaMenuAtivoCorValor");
+const previewAparenciaMenuAtivoCor = document.getElementById("previewAparenciaMenuAtivoCor");
+const aparenciaSidebarTextoFundoCor = document.getElementById("aparenciaSidebarTextoFundoCor");
+const aparenciaSidebarTextoFundoCorValor = document.getElementById("aparenciaSidebarTextoFundoCorValor");
+const previewAparenciaSidebarTextoFundoCor = document.getElementById("previewAparenciaSidebarTextoFundoCor");
 
 restaurarAbaGrupo();
 document.querySelectorAll("#grupoTabs [data-bs-toggle='tab']").forEach(tab => {
@@ -471,6 +680,7 @@ function atualizarPreviewCorGrupo() {
 
 geralCor?.addEventListener("change", atualizarPreviewCorGrupo);
 atualizarPreviewCorGrupo();
+inicializarAparenciaGrupo();
 
 inputFotoGrupo?.addEventListener("change", () => atualizarPreviewFotoGrupo(inputFotoGrupo, previewFotoGrupoConfig, nomeGrupoAtual?.charAt(0) || "G"));
 
@@ -506,6 +716,161 @@ btnSalvarFotoGrupo?.addEventListener("click", async () => {
         btnSalvarFotoGrupo.disabled = false;
     }
 });
+
+function inicializarAparenciaGrupo() {
+    document.querySelectorAll("[data-aparencia-area][data-aparencia-tipo][data-aparencia-valor]").forEach(botao => {
+        botao.addEventListener("click", () => selecionarAparencia(botao.dataset.aparenciaArea, botao.dataset.aparenciaTipo, botao.dataset.aparenciaValor));
+    });
+
+    document.getElementById("btnRestaurarAparencia")?.addEventListener("click", () => {
+        selecionarAparencia("tela", "padrao", "");
+        selecionarAparencia("sidebar", "padrao", "");
+        if (aparenciaMenuAtivoCor) aparenciaMenuAtivoCor.value = "#0d6efd";
+        if (aparenciaMenuAtivoCorValor) aparenciaMenuAtivoCorValor.value = "#0d6efd";
+        if (aparenciaSidebarTextoFundoCorValor) aparenciaSidebarTextoFundoCorValor.value = "";
+        atualizarPreviewCorMenuAtivo();
+        atualizarPreviewCorTextoFundo();
+        marcarAparenciaSelecionada();
+    });
+
+    document.getElementById("btnSalvarAparencia")?.addEventListener("click", () => post("SalvarAparencia", {
+        telaTipo: aparenciaTelaTipo?.value || "padrao",
+        telaValor: aparenciaTelaValor?.value || "",
+        sidebarTipo: aparenciaSidebarTipo?.value || "padrao",
+        sidebarValor: aparenciaSidebarValor?.value || "",
+        menuAtivoCor: aparenciaMenuAtivoCorValor?.value || "#0d6efd",
+        sidebarTextoFundoCor: aparenciaSidebarTextoFundoCorValor?.value || ""
+    }).catch(e => showFeedback("danger", e.message)));
+
+    configurarUploadAparencia("tela", document.getElementById("uploadAparenciaTela"), document.getElementById("previewUploadAparenciaTela"), document.getElementById("btnUploadAparenciaTela"));
+    configurarUploadAparencia("sidebar", document.getElementById("uploadAparenciaSidebar"), document.getElementById("previewUploadAparenciaSidebar"), document.getElementById("btnUploadAparenciaSidebar"));
+    aparenciaMenuAtivoCor?.addEventListener("input", () => {
+        aparenciaMenuAtivoCorValor.value = aparenciaMenuAtivoCor.value || "#0d6efd";
+        atualizarPreviewCorMenuAtivo();
+        marcarAparenciaSelecionada();
+    });
+    aparenciaSidebarTextoFundoCor?.addEventListener("input", () => {
+        aparenciaSidebarTextoFundoCorValor.value = aparenciaSidebarTextoFundoCor.value || "";
+        atualizarPreviewCorTextoFundo();
+    });
+    document.getElementById("btnLimparAparenciaSidebarTextoFundo")?.addEventListener("click", () => {
+        if (aparenciaSidebarTextoFundoCorValor) aparenciaSidebarTextoFundoCorValor.value = "";
+        atualizarPreviewCorTextoFundo();
+    });
+    atualizarPreviewCorMenuAtivo();
+    atualizarPreviewCorTextoFundo();
+    marcarAparenciaSelecionada();
+    atualizarPreviewsUploadAparenciaSalvos();
+}
+
+function selecionarAparencia(area, tipo, valor) {
+    if (area === "tela") {
+        aparenciaTelaTipo.value = tipo || "padrao";
+        aparenciaTelaValor.value = valor || "";
+    } else if (area === "sidebar") {
+        aparenciaSidebarTipo.value = tipo || "padrao";
+        aparenciaSidebarValor.value = valor || "";
+    }
+
+    marcarAparenciaSelecionada();
+}
+
+function marcarAparenciaSelecionada() {
+    document.querySelectorAll(".aparencia-option").forEach(botao => {
+        const area = botao.dataset.aparenciaArea;
+        const tipo = area === "tela" ? aparenciaTelaTipo?.value : aparenciaSidebarTipo?.value;
+        const valor = area === "tela" ? aparenciaTelaValor?.value : aparenciaSidebarValor?.value;
+        const selecionado = botao.dataset.aparenciaTipo === tipo && botao.dataset.aparenciaValor === valor;
+        botao.classList.toggle("is-selected", selecionado);
+
+        if (selecionado) {
+            const corSelecionada = botao.dataset.aparenciaTipo === "cor"
+                ? botao.dataset.aparenciaValor
+                : aparenciaMenuAtivoCorValor?.value || "#0d6efd";
+            botao.style.setProperty("--aparencia-selected-color", corSelecionada);
+        } else {
+            botao.style.removeProperty("--aparencia-selected-color");
+        }
+    });
+}
+
+function atualizarPreviewCorMenuAtivo() {
+    const cor = aparenciaMenuAtivoCorValor?.value || "#0d6efd";
+    if (previewAparenciaMenuAtivoCor) {
+        previewAparenciaMenuAtivoCor.style.setProperty("--aparencia-menu-cor", cor);
+    }
+}
+
+function atualizarPreviewCorTextoFundo() {
+    const cor = aparenciaSidebarTextoFundoCorValor?.value || "";
+    if (!previewAparenciaSidebarTextoFundoCor) return;
+
+    previewAparenciaSidebarTextoFundoCor.classList.toggle("has-color", !!cor);
+    previewAparenciaSidebarTextoFundoCor.style.setProperty("--aparencia-texto-fundo-cor", cor || "transparent");
+}
+
+function configurarUploadAparencia(alvo, input, preview, botao) {
+    input?.addEventListener("change", () => {
+        const arquivo = input.files?.[0];
+        if (!preview) return;
+
+        if (!arquivo || !arquivo.type.startsWith("image/")) {
+            preview.textContent = "Nenhuma imagem selecionada";
+            preview.style.backgroundImage = "";
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = event => {
+            preview.textContent = "";
+            preview.style.backgroundImage = `url('${event.target.result}')`;
+        };
+        reader.readAsDataURL(arquivo);
+    });
+
+    botao?.addEventListener("click", async () => {
+        const arquivo = input?.files?.[0];
+        if (!arquivo) {
+            showFeedback("danger", "Selecione uma imagem para enviar.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("alvo", alvo);
+        formData.append("imagem", arquivo);
+
+        botao.disabled = true;
+        try {
+            const response = await fetch(uploadAparenciaGrupoUrl, {
+                method: "POST",
+                headers: { "RequestVerificationToken": token },
+                body: formData
+            });
+            const data = await response.json().catch(() => ({ success:false, message:"Erro inesperado." }));
+            if (!response.ok || !data.success) throw new Error(data.message || "Não foi possível enviar a imagem.");
+
+            selecionarAparencia(alvo, "upload", data.dados?.url || "");
+            showFeedback("success", data.message || "Imagem salva.");
+            sessionStorage.setItem(grupoTabStorageKey, getAbaGrupoAtiva());
+            setTimeout(() => window.location.reload(), 650);
+        } catch (error) {
+            showFeedback("danger", error.message || "Não foi possível enviar a imagem.");
+        } finally {
+            botao.disabled = false;
+        }
+    });
+}
+
+function atualizarPreviewsUploadAparenciaSalvos() {
+    atualizarPreviewUploadSalvo("tela", aparenciaTelaTipo?.value, aparenciaTelaValor?.value, document.getElementById("previewUploadAparenciaTela"));
+    atualizarPreviewUploadSalvo("sidebar", aparenciaSidebarTipo?.value, aparenciaSidebarValor?.value, document.getElementById("previewUploadAparenciaSidebar"));
+}
+
+function atualizarPreviewUploadSalvo(area, tipo, valor, preview) {
+    if (!preview || tipo !== "upload" || !valor) return;
+    preview.textContent = "";
+    preview.style.backgroundImage = `url('${valor}')`;
+}
 
 async function post(handler, body) {
     const response = await fetch(`/Menu/Group?handler=${handler}&grupoId=${grupoId}`, {
@@ -696,6 +1061,23 @@ function recolherSelectLongo(select) {
 
     private IHtmlContent Switch(string id, string label, bool value) =>
         new HtmlString($"<div class=\"col-md-4\"><div class=\"form-check form-switch\"><input class=\"form-check-input\" type=\"checkbox\" id=\"{id}\" {(value ? "checked" : "")}><label class=\"form-check-label\" for=\"{id}\">{label}</label></div></div>");
+
+    private IHtmlContent AparenciaCor(string area, string cor, string titulo) =>
+        new HtmlString($"<button type=\"button\" class=\"aparencia-option\" data-aparencia-area=\"{area}\" data-aparencia-tipo=\"cor\" data-aparencia-valor=\"{cor}\"><span class=\"aparencia-preview\" style=\"--aparencia-preview-bg:{cor}\"></span><span class=\"aparencia-option-title\">{E(titulo)}</span></button>");
+
+    private IHtmlContent AparenciaPreset(string area, string valor, string titulo) =>
+        new HtmlString($"<button type=\"button\" class=\"aparencia-option\" data-aparencia-area=\"{area}\" data-aparencia-tipo=\"preset\" data-aparencia-valor=\"{valor}\"><span class=\"aparencia-preview\" style=\"--aparencia-preview-bg:{PresetCss(valor)}\"></span><span class=\"aparencia-option-title\">{E(titulo)}</span></button>");
+
+    private static string PresetCss(string valor) => valor switch
+    {
+        "aurora" => "radial-gradient(circle at 18% 18%, rgba(125, 211, 252, .95), transparent 28rem), linear-gradient(135deg, #1d4ed8 0%, #7c3aed 48%, #db2777 100%)",
+        "oceano" => "radial-gradient(circle at 80% 14%, rgba(103, 232, 249, .9), transparent 24rem), linear-gradient(135deg, #083344 0%, #0f766e 48%, #38bdf8 100%)",
+        "grafite" => "radial-gradient(circle at 22% 18%, rgba(148, 163, 184, .34), transparent 20rem), linear-gradient(135deg, #020617 0%, #334155 56%, #111827 100%)",
+        "folha" => "radial-gradient(circle at 80% 18%, rgba(190, 242, 100, .72), transparent 22rem), linear-gradient(135deg, #14532d 0%, #16a34a 48%, #a3e635 100%)",
+        "nevoa" => "radial-gradient(circle at 20% 12%, rgba(147, 197, 253, .7), transparent 23rem), linear-gradient(135deg, #e0f2fe 0%, #f8fafc 48%, #ddd6fe 100%)",
+        "ameixa" => "radial-gradient(circle at 22% 22%, rgba(244, 114, 182, .72), transparent 22rem), linear-gradient(135deg, #581c87 0%, #be185d 50%, #fb7185 100%)",
+        _ => "#f8fafc"
+    };
 
     private IHtmlContent ListaSimples(string titulo, string tipo, IEnumerable<GroupModel.ItemVm> itens, bool permiteExcluir)
     {

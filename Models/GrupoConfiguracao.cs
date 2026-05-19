@@ -73,6 +73,30 @@ namespace CallStationApp.Models
         [Column("exibir_prazo_conclusao_modal")]
         public bool ExibirPrazoConclusaoModal { get; set; } = true;
 
+        [Column("aparencia_tela_tipo", TypeName = "varchar(20)")]
+        [StringLength(20)]
+        public string? AparenciaTelaTipo { get; set; }
+
+        [Column("aparencia_tela_valor", TypeName = "varchar(255)")]
+        [StringLength(255)]
+        public string? AparenciaTelaValor { get; set; }
+
+        [Column("aparencia_sidebar_tipo", TypeName = "varchar(20)")]
+        [StringLength(20)]
+        public string? AparenciaSidebarTipo { get; set; }
+
+        [Column("aparencia_sidebar_valor", TypeName = "varchar(255)")]
+        [StringLength(255)]
+        public string? AparenciaSidebarValor { get; set; }
+
+        [Column("aparencia_menu_ativo_cor", TypeName = "varchar(7)")]
+        [StringLength(7)]
+        public string? AparenciaMenuAtivoCor { get; set; }
+
+        [Column("aparencia_sidebar_texto_fundo_cor", TypeName = "varchar(7)")]
+        [StringLength(7)]
+        public string? AparenciaSidebarTextoFundoCor { get; set; }
+
         [Column("atualizado_por_usuario_id")]
         public int? AtualizadoPorUsuarioId { get; set; }
 

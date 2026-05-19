@@ -933,6 +933,12 @@ CREATE TABLE Grupos_configuracoes (
     exibir_data_finalizacao_modal BOOLEAN NOT NULL DEFAULT TRUE,
     exibir_prazo_resposta_modal BOOLEAN NOT NULL DEFAULT TRUE,
     exibir_prazo_conclusao_modal BOOLEAN NOT NULL DEFAULT TRUE,
+    aparencia_tela_tipo VARCHAR(20) NULL,
+    aparencia_tela_valor VARCHAR(255) NULL,
+    aparencia_sidebar_tipo VARCHAR(20) NULL,
+    aparencia_sidebar_valor VARCHAR(255) NULL,
+    aparencia_menu_ativo_cor VARCHAR(7) NULL,
+    aparencia_sidebar_texto_fundo_cor VARCHAR(7) NULL,
     atualizado_por_usuario_id INT NULL,
     data_atualizacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
