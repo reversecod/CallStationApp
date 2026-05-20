@@ -342,8 +342,9 @@ body.sidebar-collapsed .tasks-content {
 
 .task-modal .modal-content,
 .task-modal {
-    background: #1f232a;
+    background: var(--grupo-tarefa-modal-bg, #1f232a);
     color: #e5e7eb;
+    transition: background-color .16s ease, background .16s ease;
 }
 
 #modalCartao .modal-dialog {

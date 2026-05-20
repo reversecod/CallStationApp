@@ -106,6 +106,27 @@
 <script>
     (function () {
         try {
+            const grupoId = "@grupoId";
+            const sidebarOpacity = localStorage.getItem(`callstation.sidebar.backgroundOpacity.${grupoId}`);
+            const chamadoModalOpacity = localStorage.getItem(`callstation.chamado.modalOpacity.${grupoId}`);
+
+            if (sidebarOpacity !== null) {
+                const value = Math.min(100, Math.max(0, Number(sidebarOpacity)));
+                if (!Number.isNaN(value)) {
+                    document.documentElement.style.setProperty("--grupo-sidebar-bg-opacity", String(value / 100));
+                }
+            }
+
+            if (chamadoModalOpacity !== null) {
+                const value = Math.min(100, Math.max(0, Number(chamadoModalOpacity)));
+                if (!Number.isNaN(value)) {
+                    const alpha = value / 100;
+                    document.documentElement.style.setProperty("--grupo-chamado-modal-opacity", String(alpha));
+                    document.documentElement.style.setProperty("--grupo-chamado-modal-bg", `rgba(255, 255, 255, ${alpha})`);
+                    document.documentElement.style.setProperty("--grupo-tarefa-modal-bg", `rgba(31, 35, 42, ${alpha})`);
+                }
+            }
+
             if (localStorage.getItem("callstation.sidebar.recolhida") === "1") {
                 document.body.classList.add("sidebar-collapsed");
             }
@@ -150,13 +171,17 @@
     }
 
     body.grupo-aparencia-sidebar .sidebar {
-        background: var(--grupo-sidebar-background) center / cover no-repeat !important;
+        background: transparent !important;
         isolation: isolate;
     }
 
     body.grupo-aparencia-sidebar .sidebar > * {
         position: relative;
         z-index: 1;
+    }
+
+    body.grupo-aparencia-sidebar .sidebar::before {
+        background: var(--grupo-sidebar-background) center / cover no-repeat;
     }
 
     body.grupo-aparencia-sidebar .sidebar .nav-link,
@@ -201,6 +226,10 @@
         --sidebar-collapsed-width: 5.25rem;
         --grupo-sidebar-active-bg: @corMenuAtivo;
         --grupo-sidebar-active-text: @corTextoMenuAtivo;
+        --grupo-sidebar-bg-opacity: 1;
+        --grupo-chamado-modal-opacity: 1;
+        --grupo-chamado-modal-bg: rgba(255, 255, 255, var(--grupo-chamado-modal-opacity));
+        --grupo-tarefa-modal-bg: rgba(31, 35, 42, var(--grupo-chamado-modal-opacity));
         @if (temFundoTextoSidebar)
         {
             @:--grupo-sidebar-text-bg: @corFundoTextoSidebar;
@@ -209,7 +238,24 @@
 
     .sidebar {
         width: var(--sidebar-expanded-width);
+        isolation: isolate;
         transition: width .22s ease, padding .22s ease;
+    }
+
+    .sidebar::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background: #f8f9fa;
+        opacity: var(--grupo-sidebar-bg-opacity);
+        pointer-events: none;
+        transition: opacity .16s ease, background .16s ease;
+    }
+
+    .sidebar > * {
+        position: relative;
+        z-index: 1;
     }
 
     .content-wrapper,
@@ -258,7 +304,8 @@
     }
 
     .sidebar-collapse-button,
-    .sidebar-expand-button {
+    .sidebar-expand-button,
+    .sidebar-options-button {
         border: 0;
         border-radius: .7rem;
         background: transparent;
@@ -275,11 +322,48 @@
 
     .sidebar-collapse-button:hover,
     .sidebar-expand-button:hover,
+    .sidebar-options-button:hover,
     .sidebar-collapse-button:focus-visible,
-    .sidebar-expand-button:focus-visible {
+    .sidebar-expand-button:focus-visible,
+    .sidebar-options-button:focus-visible {
         background: #e9ecef;
         color: #0f172a;
         outline: none;
+    }
+
+    .sidebar-options-modal .modal-content {
+        border: 0;
+        border-radius: 1rem;
+        box-shadow: 0 1.15rem 2.8rem rgba(15, 23, 42, .16);
+    }
+
+    .sidebar-options-control {
+        display: grid;
+        gap: .45rem;
+    }
+
+    .sidebar-options-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        color: #334155;
+        font-weight: 700;
+    }
+
+    .sidebar-options-label span:last-child {
+        color: #64748b;
+        font-size: .86rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .sidebar-options-scale {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 700;
     }
 
     .sidebar-expand-button {
@@ -609,6 +693,7 @@
 
     body.sidebar-collapsed .sidebar-logo-full,
     body.sidebar-collapsed .sidebar-collapse-button,
+    body.sidebar-collapsed .sidebar-options-button,
     body.sidebar-collapsed .sidebar-group-label-content,
     body.sidebar-collapsed .sidebar-profile-toggle strong {
         display: none !important;
@@ -846,6 +931,63 @@
             <button type="button" class="sidebar-collapse-button" id="sidebarToggleButton" aria-label="Recolher barra lateral" aria-expanded="true">
                 <i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>
             </button>
+            <button type="button"
+                    class="sidebar-options-button"
+                    id="sidebarOptionsButton"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalSidebarOpcoes"
+                    aria-label="Ajustar transparência">
+                <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade sidebar-options-modal" id="modalSidebarOpcoes" tabindex="-1" aria-labelledby="modalSidebarOpcoesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalSidebarOpcoesLabel">Transparência</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body d-grid gap-4">
+                <div class="sidebar-options-control">
+                    <label class="sidebar-options-label" for="sidebarBackgroundOpacityRange">
+                        <span>Background da barra lateral</span>
+                        <span id="sidebarBackgroundOpacityValue">100%</span>
+                    </label>
+                    <input type="range"
+                           class="form-range"
+                           id="sidebarBackgroundOpacityRange"
+                           min="0"
+                           max="100"
+                           step="1"
+                           value="100">
+                    <div class="sidebar-options-scale" aria-hidden="true">
+                        <span>Transparente</span>
+                        <span>Sólido</span>
+                    </div>
+                </div>
+
+                <div class="sidebar-options-control">
+                    <label class="sidebar-options-label" for="chamadoModalOpacityRange">
+                        <span>Modal de edição</span>
+                        <span id="chamadoModalOpacityValue">100%</span>
+                    </label>
+                    <input type="range"
+                           class="form-range"
+                           id="chamadoModalOpacityRange"
+                           min="0"
+                           max="100"
+                           step="1"
+                           value="100"
+                           data-default-value="100">
+                    <div class="sidebar-options-scale" aria-hidden="true">
+                        <span>Transparente</span>
+                        <span>Sólido</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -911,8 +1053,71 @@
         const sidebarToggleButton = document.getElementById("sidebarToggleButton");
         const sidebarExpandButton = document.getElementById("sidebarExpandButton");
         const sidebarCollapsedKey = "callstation.sidebar.recolhida";
+        const sidebarBackgroundOpacityRange = document.getElementById("sidebarBackgroundOpacityRange");
+        const sidebarBackgroundOpacityValue = document.getElementById("sidebarBackgroundOpacityValue");
+        const chamadoModalOpacityRange = document.getElementById("chamadoModalOpacityRange");
+        const chamadoModalOpacityValue = document.getElementById("chamadoModalOpacityValue");
+        const sidebarBackgroundOpacityKey = `callstation.sidebar.backgroundOpacity.${sidebar.dataset.sidebarGrupoId}`;
+        const chamadoModalOpacityKey = `callstation.chamado.modalOpacity.${sidebar.dataset.sidebarGrupoId}`;
         let organizacoesCarregadas = false;
         let notificacoesAlteradas = false;
+
+        function limitarPercentual(value, fallback) {
+            const numeric = Number(value);
+            if (Number.isNaN(numeric)) {
+                return fallback;
+            }
+
+            return Math.min(100, Math.max(0, numeric));
+        }
+
+        function obterPercentualSalvo(key, fallback) {
+            try {
+                const value = localStorage.getItem(key);
+                return value === null ? fallback : limitarPercentual(value, fallback);
+            } catch {
+                return fallback;
+            }
+        }
+
+        function salvarPercentual(key, value) {
+            try {
+                localStorage.setItem(key, String(value));
+            } catch {
+                // Preferencia visual local: se o navegador bloquear storage, segue apenas na pagina atual.
+            }
+        }
+
+        function aplicarOpacidadeSidebar(value, salvar) {
+            const percentual = limitarPercentual(value, 100);
+            document.documentElement.style.setProperty("--grupo-sidebar-bg-opacity", String(percentual / 100));
+            if (sidebarBackgroundOpacityRange) {
+                sidebarBackgroundOpacityRange.value = String(percentual);
+            }
+            if (sidebarBackgroundOpacityValue) {
+                sidebarBackgroundOpacityValue.textContent = `${percentual}%`;
+            }
+            if (salvar) {
+                salvarPercentual(sidebarBackgroundOpacityKey, percentual);
+            }
+        }
+
+        function aplicarOpacidadeModalChamado(value, salvar) {
+            const percentual = limitarPercentual(value, limitarPercentual(chamadoModalOpacityRange?.dataset.defaultValue, 100));
+            const alpha = percentual / 100;
+            document.documentElement.style.setProperty("--grupo-chamado-modal-opacity", String(alpha));
+            document.documentElement.style.setProperty("--grupo-chamado-modal-bg", `rgba(255, 255, 255, ${alpha})`);
+            document.documentElement.style.setProperty("--grupo-tarefa-modal-bg", `rgba(31, 35, 42, ${alpha})`);
+            if (chamadoModalOpacityRange) {
+                chamadoModalOpacityRange.value = String(percentual);
+            }
+            if (chamadoModalOpacityValue) {
+                chamadoModalOpacityValue.textContent = `${percentual}%`;
+            }
+            if (salvar) {
+                salvarPercentual(chamadoModalOpacityKey, percentual);
+            }
+        }
 
         function obterSidebarRecolhidaSalva() {
             try {
@@ -946,6 +1151,13 @@
         aplicarEstadoSidebar(obterSidebarRecolhidaSalva());
         sidebarToggleButton?.addEventListener("click", alternarSidebar);
         sidebarExpandButton?.addEventListener("click", alternarSidebar);
+        aplicarOpacidadeSidebar(obterPercentualSalvo(sidebarBackgroundOpacityKey, 100), false);
+        aplicarOpacidadeModalChamado(
+            obterPercentualSalvo(chamadoModalOpacityKey, limitarPercentual(chamadoModalOpacityRange?.dataset.defaultValue, 100)),
+            false
+        );
+        sidebarBackgroundOpacityRange?.addEventListener("input", event => aplicarOpacidadeSidebar(event.target.value, true));
+        chamadoModalOpacityRange?.addEventListener("input", event => aplicarOpacidadeModalChamado(event.target.value, true));
 
         function escapeSidebarHtml(value) {
             return String(value ?? "")

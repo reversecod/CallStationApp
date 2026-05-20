@@ -436,10 +436,15 @@
       .chamado-editor-card {
         border: 1px solid rgba(148, 163, 184, .28);
         border-radius: 1.5rem;
-        background: rgba(255, 255, 255, .88);
+        background: var(--grupo-chamado-modal-bg, #fff);
         box-shadow: 0 1.15rem 2.8rem rgba(15, 23, 42, .12);
         backdrop-filter: blur(10px);
         overflow: hidden;
+        transition: background-color .16s ease, background .16s ease;
+      }
+
+      .chamado-editor-principal {
+        background: var(--grupo-chamado-modal-bg, #fff);
       }
 
       .chamado-editor-card.editor-active {
@@ -1272,7 +1277,7 @@
                 </div>
 
                 <div class="col-12 col-xl-5 mb-3">
-                    <div class="card chamado-editor-card">
+                    <div class="card chamado-editor-card chamado-editor-principal">
                         <div class="card-body">
                             <div class="chamado-topo">
                                 <div class="chamado-topo-titulos">
