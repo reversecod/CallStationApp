@@ -189,6 +189,61 @@ main {
     margin-bottom: .75rem;
 }
 
+.demo-new-ticket-row {
+    min-height: 4.45rem;
+    display: flex;
+    align-items: center;
+    margin-bottom: .75rem;
+    overflow: visible;
+}
+
+.demo-new-ticket-button {
+    width: 3.55rem;
+    height: 3.55rem;
+    position: relative;
+    overflow: visible;
+    isolation: isolate;
+    flex: 0 0 auto;
+}
+
+.demo-new-ticket-button img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    position: relative;
+    z-index: 2;
+}
+
+.demo-new-ticket-preview {
+    position: absolute;
+    left: .95rem;
+    top: 50%;
+    min-width: 9.8rem;
+    height: 3.05rem;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 1rem 0 4rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #6d63d8 0%, #2c91c9 46%, #12b96d 100%);
+    color: #fff;
+    box-shadow: 0 .65rem 1.35rem rgba(15, 23, 42, .2);
+    font-size: .92rem;
+    font-weight: 850;
+    line-height: 1;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(.12rem, -50%) scale(.34, .82);
+    transform-origin: left center;
+    transition: opacity .18s ease, transform .24s cubic-bezier(.2, .85, .25, 1);
+    z-index: 1;
+}
+
+.demo-new-ticket-button.ticket-preview-visivel .demo-new-ticket-preview {
+    opacity: 1;
+    transform: translate(0, -50%) scale(1);
+}
+
 .demo-ticket-stage,
 .demo-notification-list {
     min-height: 8.5rem;
@@ -262,36 +317,176 @@ main {
     text-align: center;
 }
 
-.demo-board {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: .65rem;
+.demo-mini-board {
+    min-height: 12rem;
+    display: flex;
+    align-items: flex-start;
+    gap: .7rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: .25rem .1rem .55rem;
 }
 
-.demo-column {
-    min-height: 9.5rem;
-    padding: .55rem;
+.demo-mini-list,
+.demo-add-list-panel {
+    flex: 0 0 11.5rem;
     border-radius: 8px;
+}
+
+.demo-mini-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 19rem;
+    min-height: 11.5rem;
     background: #121a24;
     color: #e5e7eb;
+    box-shadow: 0 .5rem 1.2rem rgba(15, 23, 42, .14);
 }
 
-.demo-column-title {
-    margin-bottom: .55rem;
+.demo-mini-list.is-dragging,
+.demo-mini-card.is-dragging {
+    opacity: .55;
+}
+
+.demo-mini-list-header {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .62rem .62rem .35rem;
+}
+
+.demo-mini-list-handle {
+    width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #94a3b8;
+    cursor: grab;
+}
+
+.demo-mini-list-handle:active {
+    cursor: grabbing;
+}
+
+.demo-mini-list-title {
+    min-width: 0;
+    flex: 1;
+    color: #f8fafc;
+    font-size: .84rem;
+    font-weight: 850;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+}
+
+.demo-mini-list-count {
+    min-width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .12);
     color: #cbd5e1;
-    font-size: .78rem;
-    font-weight: 800;
+    font-size: .72rem;
+    font-weight: 850;
 }
 
-.demo-task-card {
-    padding: .65rem;
+.demo-mini-cards {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    min-height: 4.5rem;
+    padding: .35rem .55rem;
+    overflow-y: auto;
+}
+
+.demo-mini-cards.is-drop-target {
+    background: rgba(255, 255, 255, .08);
+}
+
+.demo-mini-card {
+    padding: .55rem .6rem;
     border: 1px solid rgba(255, 255, 255, .08);
     border-radius: 8px;
     background: #242d38;
     color: #fff;
-    font-size: .86rem;
+    cursor: grab;
+    font-size: .82rem;
     font-weight: 700;
+    line-height: 1.24;
+    overflow-wrap: anywhere;
     animation: demoRise .16s ease-out;
+}
+
+.demo-mini-card:active {
+    cursor: grabbing;
+}
+
+.demo-add-card-button,
+.demo-add-list-button {
+    width: calc(100% - .8rem);
+    min-height: 2.15rem;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .4rem;
+    border: 0;
+    border-radius: 8px;
+    padding: .4rem .58rem;
+    text-align: left;
+    font-size: .82rem;
+    font-weight: 800;
+}
+
+.demo-add-card-button {
+    background: transparent;
+    color: #cbd5e1;
+}
+
+.demo-add-card-button:hover,
+.demo-add-card-button:focus-visible {
+    background: rgba(255, 255, 255, .12);
+    outline: none;
+}
+
+.demo-add-list-panel {
+    background: #e9eef5;
+}
+
+.demo-add-list-button {
+    width: calc(100% - .8rem);
+    background: transparent;
+    color: #111827;
+}
+
+.demo-add-list-button:hover,
+.demo-add-list-button:focus-visible {
+    background: rgba(15, 23, 42, .08);
+    outline: none;
+}
+
+.demo-inline-form {
+    display: grid;
+    gap: .4rem;
+    padding: .45rem;
+}
+
+.demo-inline-form input {
+    min-height: 2rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: .35rem .48rem;
+    font-size: .82rem;
+}
+
+.demo-inline-actions {
+    display: flex;
+    gap: .35rem;
 }
 
 .demo-notification-head {
@@ -435,7 +630,6 @@ main {
         padding: .8rem;
     }
 
-    .demo-board,
     .demo-appearance-grid,
     .demo-shell {
         grid-template-columns: 1fr;
@@ -455,11 +649,27 @@ main {
         grid-column: 1 / -1;
         justify-self: start;
     }
+
+    .demo-new-ticket-row {
+        min-height: 4rem;
+    }
+
+    .demo-new-ticket-button {
+        width: 3.1rem;
+        height: 3.1rem;
+    }
+
+    .demo-new-ticket-preview {
+        min-width: 8.9rem;
+        height: 2.7rem;
+        padding-left: 3.55rem;
+        font-size: .82rem;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .demo-ticket,
-    .demo-task-card,
+    .demo-mini-card,
     .demo-notification-item {
         animation: none;
     }

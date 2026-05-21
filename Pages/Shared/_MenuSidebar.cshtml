@@ -778,19 +778,20 @@
         margin: 0 !important;
     }
 
-    @@media (max-width: 767.98px) {
-        body.sidebar-collapsed .sidebar {
-            position: static;
+    @@media (max-width: 991.98px) {
+        .sidebar {
+            position: relative;
             width: 100% !important;
             height: auto;
         }
 
-        body.sidebar-collapsed .content-wrapper {
+        .content-wrapper,
+        .tasks-content {
             margin-left: 0 !important;
         }
 
-        body.sidebar-collapsed .tasks-content {
-            margin-left: 0 !important;
+        body.sidebar-collapsed .sidebar {
+            position: relative;
         }
     }
 
@@ -885,12 +886,6 @@
             <a asp-page="/Menu/Members" asp-route-grupoId="@grupoId" class="@ActiveClass("Members")" aria-current="@(activeMenu == "Members" ? "page" : null)">
                 <i class="bi bi-people me-2 icon-svg" aria-hidden="true"></i>
                 Membros
-            </a>
-        </li>
-        <li>
-            <a asp-page="/Infos/Tour" class="nav-link link-body-emphasis">
-                <i class="bi bi-question-circle me-2 icon-svg" aria-hidden="true"></i>
-                Tour
             </a>
         </li>
         @if (usuarioLogadoEhAdministrador)

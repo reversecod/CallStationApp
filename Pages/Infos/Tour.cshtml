@@ -60,7 +60,16 @@
                         Limpar
                     </button>
                 </div>
-                <form class="demo-ticket-form" id="tutorialTicketForm" autocomplete="off">
+                <div class="demo-new-ticket-row">
+                    <button type="button"
+                            class="btn p-0 border-0 rounded-circle shadow-sm demo-new-ticket-button"
+                            id="tutorialNewTicketButton"
+                            aria-label="Criar mini chamado">
+                        <img src="~/images/logoticket.png" alt="Novo Ticket" loading="lazy">
+                        <span class="demo-new-ticket-preview" aria-hidden="true">Novo chamado</span>
+                    </button>
+                </div>
+                <form class="demo-ticket-form d-none" id="tutorialTicketForm" autocomplete="off">
                     <label class="form-label" for="tutorialTicketTitle">Titulo</label>
                     <div class="input-group">
                         <input type="text" class="form-control" id="tutorialTicketTitle" maxlength="70" placeholder="Ex.: Impressora sem papel">
@@ -84,23 +93,19 @@
             </div>
             <div class="tutorial-demo">
                 <div class="demo-toolbar">
-                    <h3>Quadro leve</h3>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="tutorialMoveTask">
-                        <i class="bi bi-arrow-right" aria-hidden="true"></i>
-                        Avancar
+                    <h3>Mini quadro</h3>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="tutorialResetBoard">
+                        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                        Limpar
                     </button>
                 </div>
-                <div class="demo-board" id="tutorialBoard">
-                    <div class="demo-column" data-column="0">
-                        <div class="demo-column-title">Pendente</div>
-                        <div class="demo-task-card" data-demo-task="true">Conferir dados do chamado</div>
-                    </div>
-                    <div class="demo-column" data-column="1">
-                        <div class="demo-column-title">Em andamento</div>
-                    </div>
-                    <div class="demo-column" data-column="2">
-                        <div class="demo-column-title">Concluido</div>
-                    </div>
+                <div class="demo-mini-board" id="tutorialBoard" aria-live="polite">
+                    <section class="demo-add-list-panel">
+                        <button type="button" class="demo-add-list-button" id="tutorialAddListButton">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                            Nova lista
+                        </button>
+                    </section>
                 </div>
             </div>
         </section>
