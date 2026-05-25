@@ -2108,6 +2108,7 @@ function escapeHtml(value) {
 
 function renderizarTextoSeguro(value) {
     return escapeHtml(value)
+        .replace(/@\[todos\]\(todos\)/gi, '<span class="mention-token mention-token-all">@todos</span>')
         .replace(/@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)/g, '<span class="mention-token">@$1</span>');
 }
 

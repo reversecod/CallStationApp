@@ -29,6 +29,10 @@ body {
     overflow-wrap: normal;
 }
 
+.mention-token-all {
+    color: #6d28d9;
+}
+
 .mention-menu {
     position: absolute;
     z-index: 2000;
@@ -59,6 +63,15 @@ body {
 .mention-menu-item:hover,
 .mention-menu-item.active {
     background: rgba(13, 110, 253, .12);
+}
+
+.mention-menu-item-all {
+    border-bottom: 1px solid rgba(124, 58, 237, .16);
+}
+
+.mention-menu-item-all .mention-menu-name {
+    color: #6d28d9;
+    font-weight: 700;
 }
 
 .mention-menu-name,

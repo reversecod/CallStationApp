@@ -2361,7 +2361,9 @@
         function renderizarTextoSeguro(value) {
             const at = String.fromCharCode(64);
             const mentionRegex = new RegExp(at + "\\[([^\\]\\r\\n]{1,100})\\]\\(usuario:(\\d{1,10})\\)", "g");
+            const mentionTodosRegex = new RegExp(at + "\\[todos\\]\\(todos\\)", "gi");
             return escapeHtml(value)
+                .replace(mentionTodosRegex, '<span class="mention-token mention-token-all">' + at + 'todos</span>')
                 .replace(mentionRegex, '<span class="mention-token">' + at + '$1</span>');
         }
 

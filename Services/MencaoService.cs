@@ -9,6 +9,7 @@ namespace CallStationApp.Services;
 public class MencaoService
 {
     private static readonly Regex TokenMencaoRegex = new(@"\@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)", RegexOptions.Compiled);
+    private static readonly Regex TokenTodosRegex = new(@"\@\[todos\]\(todos\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private readonly AppDbContext _context;
 
     public MencaoService(AppDbContext context)
@@ -51,7 +52,7 @@ public class MencaoService
                 EF.Functions.Like(u.Apelido ?? string.Empty, padrao, "\\"));
         }
 
-        return await query
+        var membros = await query
             .OrderBy(u => u.Apelido ?? u.NomeUsuario)
             .ThenBy(u => u.UsuarioId)
             .Take(8)
@@ -62,6 +63,19 @@ public class MencaoService
                 NomeUsuario = u.NomeUsuario
             })
             .ToListAsync();
+
+        if ("todos".StartsWith(termoNormalizado, StringComparison.OrdinalIgnoreCase))
+        {
+            membros.Insert(0, new MembroMencaoDto
+            {
+                UsuarioId = 0,
+                NomeExibicao = "todos",
+                NomeUsuario = "todos que podem ser mencionados",
+                EhTodos = true
+            });
+        }
+
+        return membros;
     }
 
     public async Task SincronizarMencoesAsync(
@@ -78,26 +92,53 @@ public class MencaoService
         IEnumerable<int>? usuariosPermitidosIds = null)
     {
         var mencoesTexto = ExtrairMencoes(texto).ToList();
+        var mencoesTodos = ExtrairMencoesTodos(texto).ToList();
         var idsMencionados = mencoesTexto.Select(m => m.UsuarioMencionadoId).Distinct().ToList();
         var idsPermitidos = usuariosPermitidosIds?.Distinct().ToHashSet();
 
+        var queryUsuariosValidos = _context.UsuariosGrupos
+            .AsNoTracking()
+            .Where(ug =>
+                ug.GrupoId == grupoId &&
+                ug.Ativo &&
+                ug.UsuarioId != usuarioAutorId);
+
+        if (idsPermitidos != null)
+            queryUsuariosValidos = queryUsuariosValidos.Where(ug => idsPermitidos.Contains(ug.UsuarioId));
+
         var usuariosValidos = idsMencionados.Count == 0
             ? new List<int>()
-            : await _context.UsuariosGrupos
-                .AsNoTracking()
-                .Where(ug =>
-                    ug.GrupoId == grupoId &&
-                    ug.Ativo &&
-                    ug.UsuarioId != usuarioAutorId &&
-                    idsMencionados.Contains(ug.UsuarioId))
+            : await queryUsuariosValidos
+                .Where(ug => idsMencionados.Contains(ug.UsuarioId))
                 .Select(ug => ug.UsuarioId)
                 .ToListAsync();
 
-        if (idsPermitidos != null)
-            usuariosValidos = usuariosValidos.Where(idsPermitidos.Contains).ToList();
-
+        var usuariosValidosSet = usuariosValidos.ToHashSet();
         if (usuariosValidos.Count != idsMencionados.Count)
-            throw new InvalidOperationException("Uma ou mais mencoes sao invalidas para este contexto.");
+        {
+            mencoesTexto = mencoesTexto
+                .Where(m => usuariosValidosSet.Contains(m.UsuarioMencionadoId))
+                .ToList();
+        }
+
+        if (mencoesTodos.Count > 0)
+        {
+            var usuariosTodos = await queryUsuariosValidos
+                .Select(ug => ug.UsuarioId)
+                .Distinct()
+                .ToListAsync();
+
+            foreach (var mencaoTodos in mencoesTodos)
+            {
+                mencoesTexto.AddRange(usuariosTodos.Select(usuarioId => new MencaoExtraida
+                {
+                    UsuarioMencionadoId = usuarioId,
+                    TextoExibido = "todos",
+                    PosicaoInicio = mencaoTodos.PosicaoInicio,
+                    PosicaoFim = mencaoTodos.PosicaoFim
+                }));
+            }
+        }
 
         var existentes = await _context.MencoesTextos
             .Where(m =>
@@ -115,7 +156,22 @@ public class MencaoService
             .Select(m => CriarChave(m.UsuarioMencionadoId, m.PosicaoInicio, m.PosicaoFim, m.TextoExibido))
             .ToHashSet(StringComparer.Ordinal);
 
-        _context.MencoesTextos.RemoveRange(existentes.Where(m => !novasChaves.Contains(CriarChave(m.UsuarioMencionadoId, m.PosicaoInicio, m.PosicaoFim, m.TextoExibido))));
+        var remover = existentes
+            .Where(m => !novasChaves.Contains(CriarChave(m.UsuarioMencionadoId, m.PosicaoInicio, m.PosicaoFim, m.TextoExibido)))
+            .ToList();
+
+        if (remover.Count > 0)
+        {
+            var removerIds = remover.Select(m => m.Id).ToList();
+            var notificacoesVinculadas = await _context.Notificacoes
+                .Where(n => n.MencaoId.HasValue && removerIds.Contains(n.MencaoId.Value))
+                .ToListAsync();
+
+            foreach (var notificacao in notificacoesVinculadas)
+                notificacao.MencaoId = null;
+
+            _context.MencoesTextos.RemoveRange(remover);
+        }
 
         var novas = mencoesTexto
             .Where(m => !existentesChaves.Contains(CriarChave(m.UsuarioMencionadoId, m.PosicaoInicio, m.PosicaoFim, m.TextoExibido)))
@@ -180,7 +236,9 @@ public class MencaoService
         if (string.IsNullOrEmpty(texto))
             return string.Empty;
 
-        return TokenMencaoRegex.Replace(texto, match => "@" + match.Groups[1].Value);
+        return TokenTodosRegex.Replace(
+            TokenMencaoRegex.Replace(texto, match => "@" + match.Groups[1].Value),
+            "@todos");
     }
 
     private static IEnumerable<MencaoExtraida> ExtrairMencoes(string? texto)
@@ -203,6 +261,21 @@ public class MencaoService
         }
     }
 
+    private static IEnumerable<MencaoTodosExtraida> ExtrairMencoesTodos(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+            yield break;
+
+        foreach (Match match in TokenTodosRegex.Matches(texto))
+        {
+            yield return new MencaoTodosExtraida
+            {
+                PosicaoInicio = match.Index,
+                PosicaoFim = match.Index + match.Length
+            };
+        }
+    }
+
     private static string CriarChave(int usuarioId, int inicio, int fim, string texto) =>
         $"{usuarioId}:{inicio}:{fim}:{texto}";
 
@@ -216,6 +289,12 @@ public class MencaoService
         public int PosicaoInicio { get; set; }
         public int PosicaoFim { get; set; }
     }
+
+    private sealed class MencaoTodosExtraida
+    {
+        public int PosicaoInicio { get; set; }
+        public int PosicaoFim { get; set; }
+    }
 }
 
 public class MembroMencaoDto
@@ -223,4 +302,5 @@ public class MembroMencaoDto
     public int UsuarioId { get; set; }
     public string NomeExibicao { get; set; } = string.Empty;
     public string NomeUsuario { get; set; } = string.Empty;
+    public bool EhTodos { get; set; }
 }

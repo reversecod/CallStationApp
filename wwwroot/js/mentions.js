@@ -66,7 +66,9 @@
 
     window.renderizarTextoComMencoes = function (texto) {
         const seguro = escapeMentionHtml(String(texto || ""));
-        return seguro.replace(/@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)/g, '<span class="mention-token">@$1</span>');
+        return seguro
+            .replace(/@\[todos\]\(todos\)/gi, '<span class="mention-token mention-token-all">@todos</span>')
+            .replace(/@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)/g, '<span class="mention-token">@$1</span>');
     };
 
     window.desserializarTextoComMencoes = function (texto) {
@@ -103,7 +105,9 @@
             substituicoes.push({
                 inicio: indice,
                 fim,
-                token: `@[${mencao.nome}](usuario:${Number(mencao.usuarioId || 0)})`
+                token: mencao.tipo === "todos"
+                    ? "@[todos](todos)"
+                    : `@[${mencao.nome}](usuario:${Number(mencao.usuarioId || 0)})`
             });
         }
 
@@ -181,11 +185,12 @@
         garantirMenu();
         indiceAtivo = 0;
         menu.innerHTML = membros.map((membro, index) => `
-            <button type="button" class="mention-menu-item ${index === 0 ? "active" : ""}"
+            <button type="button" class="mention-menu-item ${membro.ehTodos ? "mention-menu-item-all" : ""} ${index === 0 ? "active" : ""}"
                     data-mention-user-id="${Number(membro.usuarioId || 0)}"
-                    data-mention-name="${escapeMentionHtml(membro.nomeExibicao || membro.nomeUsuario || "")}">
+                    data-mention-name="${escapeMentionHtml(membro.nomeExibicao || membro.nomeUsuario || "")}"
+                    data-mention-type="${membro.ehTodos ? "todos" : "usuario"}">
                 <span class="mention-menu-name">${escapeMentionHtml(membro.nomeExibicao || "")}</span>
-                <span class="mention-menu-user">@${escapeMentionHtml(membro.nomeUsuario || "")}</span>
+                <span class="mention-menu-user">${membro.ehTodos ? "menção coletiva" : `@${escapeMentionHtml(membro.nomeUsuario || "")}`}</span>
             </button>
         `).join("");
 
@@ -218,16 +223,18 @@
 
         const usuarioId = Number(item.dataset.mentionUserId || 0);
         const nome = item.dataset.mentionName || "";
-        if (!usuarioId || !nome) return;
+        const tipo = item.dataset.mentionType || "usuario";
+        if ((!usuarioId && tipo !== "todos") || !nome) return;
 
-        const exibicao = `@${nome}`;
+        const exibicao = tipo === "todos" ? "@todos" : `@${nome}`;
         const texto = campoAtivo.value || "";
         const inserirEspaco = texto.slice(estado.fim, estado.fim + 1) !== " ";
         const textoInserido = `${exibicao}${inserirEspaco ? " " : ""}`;
         campoAtivo.value = texto.slice(0, estado.inicio) + textoInserido + texto.slice(estado.fim);
         registrarMencaoCampo(campoAtivo, {
             usuarioId,
-            nome,
+            nome: tipo === "todos" ? "todos" : nome,
+            tipo,
             inicio: estado.inicio,
             fim: estado.inicio + exibicao.length
         });
@@ -248,7 +255,7 @@
         try {
             const mencoes = JSON.parse(campo.dataset.mentions || "[]");
             return Array.isArray(mencoes)
-                ? mencoes.filter(m => Number(m.usuarioId || 0) > 0 && m.nome)
+                ? mencoes.filter(m => (m.tipo === "todos" || Number(m.usuarioId || 0) > 0) && m.nome)
                 : [];
         } catch {
             return [];
@@ -265,21 +272,23 @@
         const mencoes = [];
         let textoVisivel = "";
         let ultimoIndice = 0;
-        const regex = /@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)/g;
+        const regex = /@\[([^\]\r\n]{1,100})\]\((usuario:(\d{1,10})|todos)\)/gi;
 
         for (const match of texto.matchAll(regex)) {
             const nome = match[1];
-            const usuarioId = Number(match[2] || 0);
-            const exibicao = `@${nome}`;
+            const tipo = match[2].toLowerCase() === "todos" ? "todos" : "usuario";
+            const usuarioId = Number(match[3] || 0);
+            const exibicao = tipo === "todos" ? "@todos" : `@${nome}`;
             const inicio = textoVisivel.length + match.index - ultimoIndice;
 
             textoVisivel += texto.slice(ultimoIndice, match.index) + exibicao;
             ultimoIndice = match.index + match[0].length;
 
-            if (usuarioId > 0 && nome) {
+            if ((tipo === "todos" || usuarioId > 0) && nome) {
                 mencoes.push({
                     usuarioId,
-                    nome,
+                    nome: tipo === "todos" ? "todos" : nome,
+                    tipo,
                     inicio,
                     fim: inicio + exibicao.length
                 });
