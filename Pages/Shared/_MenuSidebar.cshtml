@@ -123,7 +123,6 @@
                     const alpha = value / 100;
                     document.documentElement.style.setProperty("--grupo-chamado-modal-opacity", String(alpha));
                     document.documentElement.style.setProperty("--grupo-chamado-modal-bg", `rgba(255, 255, 255, ${alpha})`);
-                    document.documentElement.style.setProperty("--grupo-tarefa-modal-bg", `rgba(31, 35, 42, ${alpha})`);
                 }
             }
 
@@ -229,7 +228,7 @@
         --grupo-sidebar-bg-opacity: 1;
         --grupo-chamado-modal-opacity: 1;
         --grupo-chamado-modal-bg: rgba(255, 255, 255, var(--grupo-chamado-modal-opacity));
-        --grupo-tarefa-modal-bg: rgba(31, 35, 42, var(--grupo-chamado-modal-opacity));
+        --grupo-tarefa-modal-bg: #1f232a;
         @if (temFundoTextoSidebar)
         {
             @:--grupo-sidebar-text-bg: @corFundoTextoSidebar;
@@ -1108,7 +1107,6 @@
             const alpha = percentual / 100;
             document.documentElement.style.setProperty("--grupo-chamado-modal-opacity", String(alpha));
             document.documentElement.style.setProperty("--grupo-chamado-modal-bg", `rgba(255, 255, 255, ${alpha})`);
-            document.documentElement.style.setProperty("--grupo-tarefa-modal-bg", `rgba(31, 35, 42, ${alpha})`);
             if (chamadoModalOpacityRange) {
                 chamadoModalOpacityRange.value = String(percentual);
             }

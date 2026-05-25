@@ -39,6 +39,7 @@ public class HomeModel : PageModel
     private readonly IWebHostEnvironment _environment;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly NotificacaoService _notificacaoService;
+    private readonly MencaoService _mencaoService;
     private readonly ILogger<HomeModel> _logger;
     private const int TamanhoPaginaChamados = 20;
 
@@ -47,12 +48,14 @@ public class HomeModel : PageModel
         IWebHostEnvironment environment,
         GrupoAuthorizationService grupoAuthorizationService,
         NotificacaoService notificacaoService,
+        MencaoService mencaoService,
         ILogger<HomeModel> logger)
     {
         _context = context;
         _environment = environment;
         _grupoAuthorizationService = grupoAuthorizationService;
         _notificacaoService = notificacaoService;
+        _mencaoService = mencaoService;
         _logger = logger;
     }
 
@@ -1227,6 +1230,8 @@ public class HomeModel : PageModel
             select subcategoria.Id).AnyAsync();
 
         var houveAlteracao = false;
+        var descricaoAlterada = false;
+        var solucaoAlterada = false;
         var statusAnteriorOriginal = chamado.Status;
         var publicoAnteriorOriginal = chamado.Publico;
 
@@ -1242,6 +1247,7 @@ public class HomeModel : PageModel
         {
             chamado.Descricao = string.IsNullOrWhiteSpace(request.Descricao) ? null : request.Descricao.Trim();
             houveAlteracao = true;
+            descricaoAlterada = true;
         }
 
         if (GrupoPermissionService.PodeEditarCampoChamado(contextoMembro.Permissao, ChamadoCampoEditavel.Solucao, idUsuario.Value, chamado.CriadorChamadoId)
@@ -1249,6 +1255,7 @@ public class HomeModel : PageModel
         {
             chamado.Solucao = string.IsNullOrWhiteSpace(request.Solucao) ? null : request.Solucao.Trim();
             houveAlteracao = true;
+            solucaoAlterada = true;
         }
 
         if (possuiSetor &&
@@ -1432,6 +1439,39 @@ public class HomeModel : PageModel
                     if (!publicoAnteriorOriginal && chamado.Publico)
                         await _notificacaoService.CriarNotificacoesChamadoPublicoAdicionadoAsync(chamado, idUsuario.Value);
 
+                    var usuariosPermitidosMencao = await ObterUsuariosPermitidosMencaoChamadoAsync(chamado, chamado.Publico);
+                    if (descricaoAlterada)
+                    {
+                        await _mencaoService.SincronizarMencoesAsync(
+                            chamado.GrupoId,
+                            idUsuario.Value,
+                            "Chamado",
+                            chamado.Id,
+                            "Descricao",
+                            chamado.Descricao,
+                            TipoNotificacao.Chamado,
+                            "Voce foi mencionado em um chamado",
+                            $"descricao do chamado #{chamado.NumeroChamadoGrupo}",
+                            $"/Menu/Home?grupoId={chamado.GrupoId}",
+                            usuariosPermitidosMencao);
+                    }
+
+                    if (solucaoAlterada)
+                    {
+                        await _mencaoService.SincronizarMencoesAsync(
+                            chamado.GrupoId,
+                            idUsuario.Value,
+                            "Chamado",
+                            chamado.Id,
+                            "Solucao",
+                            chamado.Solucao,
+                            TipoNotificacao.Chamado,
+                            "Voce foi mencionado em um chamado",
+                            $"solucao do chamado #{chamado.NumeroChamadoGrupo}",
+                            $"/Menu/Home?grupoId={chamado.GrupoId}",
+                            usuariosPermitidosMencao);
+                    }
+
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -1457,6 +1497,30 @@ public class HomeModel : PageModel
                 message = "Não foi possível salvar o chamado no momento."
             });
         }
+    }
+
+    public async Task<IActionResult> OnGetMembrosMencaoAsync(int grupoId, int? chamadoId, string? termo)
+    {
+        var idUsuario = GetUsuarioLogadoId();
+        if (idUsuario == null)
+            return Unauthorized();
+
+        var contexto = await _grupoAuthorizationService.ObterContextoMembroAsync(idUsuario.Value, grupoId);
+        if (contexto == null)
+            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+
+        IEnumerable<int>? usuariosPermitidos = null;
+        if (chamadoId.HasValue && chamadoId.Value > 0)
+        {
+            var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, grupoId, chamadoId.Value);
+            if (!acesso.Success)
+                return new JsonResult(new { success = false, message = acesso.Message });
+
+            usuariosPermitidos = await ObterUsuariosPermitidosMencaoChamadoAsync(acesso.Chamado!, acesso.Chamado!.Publico);
+        }
+
+        var membros = await _mencaoService.BuscarMembrosAsync(grupoId, idUsuario.Value, termo, usuariosPermitidos);
+        return new JsonResult(new { success = true, dados = membros });
     }
 
     public async Task<IActionResult> OnGetComentariosChamadoAsync(int chamadoId, int page = 1)
@@ -1604,6 +1668,19 @@ public class HomeModel : PageModel
                         DataAlteracao = DateTime.UtcNow
                     });
                     await _notificacaoService.CriarNotificacoesComentarioChamadoAsync(acesso.Chamado, idUsuario.Value, ReferenciaTipoComentarioChamado);
+                    await _context.SaveChangesAsync();
+                    await _mencaoService.SincronizarMencoesAsync(
+                        acesso.Chamado.GrupoId,
+                        idUsuario.Value,
+                        "ComentarioChamado",
+                        comentario.Id,
+                        "Comentario",
+                        comentario.Mensagem,
+                        TipoNotificacao.Chamado,
+                        "Voce foi mencionado em um comentario",
+                        $"comentario do chamado #{acesso.Chamado.NumeroChamadoGrupo}",
+                        $"/Menu/Home?grupoId={acesso.Chamado.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoChamadoAsync(acesso.Chamado, acesso.Chamado.Publico));
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -1691,6 +1768,18 @@ public class HomeModel : PageModel
                         TipoAlteracao = "ComentarioEditado",
                         DataAlteracao = DateTime.UtcNow
                     });
+                    await _mencaoService.SincronizarMencoesAsync(
+                        acesso.Chamado!.GrupoId,
+                        idUsuario.Value,
+                        "ComentarioChamado",
+                        comentario.Id,
+                        "Comentario",
+                        comentario.Mensagem,
+                        TipoNotificacao.Chamado,
+                        "Voce foi mencionado em um comentario",
+                        $"comentario do chamado #{acesso.Chamado.NumeroChamadoGrupo}",
+                        $"/Menu/Home?grupoId={acesso.Chamado.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoChamadoAsync(acesso.Chamado, acesso.Chamado.Publico));
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -1746,6 +1835,18 @@ public class HomeModel : PageModel
                         return (IActionResult)new JsonResult(new { success = false, message = "Você só pode excluir comentários próprios." });
 
                     anexoRemover = comentario.AnexoComentario;
+                    await _mencaoService.SincronizarMencoesAsync(
+                        acesso.Chamado!.GrupoId,
+                        idUsuario.Value,
+                        "ComentarioChamado",
+                        comentario.Id,
+                        "Comentario",
+                        null,
+                        TipoNotificacao.Chamado,
+                        "Voce foi mencionado em um comentario",
+                        $"comentario do chamado #{acesso.Chamado.NumeroChamadoGrupo}",
+                        $"/Menu/Home?grupoId={acesso.Chamado.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoChamadoAsync(acesso.Chamado, acesso.Chamado.Publico));
                     _context.ComentariosChamados.Remove(comentario);
                     _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
                     {
@@ -2324,6 +2425,24 @@ public class HomeModel : PageModel
 
     private static bool PodeAcessarComentariosChamado(PermissaoUsuario permissao) =>
         permissao != PermissaoUsuario.Nenhuma;
+
+    private async Task<List<int>> ObterUsuariosPermitidosMencaoChamadoAsync(Chamado chamado, bool chamadoPublico)
+    {
+        var membros = await _context.UsuariosGrupos
+            .AsNoTracking()
+            .Where(ug => ug.GrupoId == chamado.GrupoId && ug.Ativo)
+            .Select(ug => new { ug.UsuarioId, ug.Permissao })
+            .ToListAsync();
+
+        return membros
+            .Where(membro => GrupoPermissionService.PodeVerChamado(
+                membro.Permissao,
+                chamadoPublico,
+                membro.UsuarioId,
+                chamado.CriadorChamadoId))
+            .Select(membro => membro.UsuarioId)
+            .ToList();
+    }
 
     private async Task<List<ChamadoVinculoDto>> ObterVinculosVisiveisAsync(int usuarioId, int grupoId, int chamadoId, PermissaoUsuario permissao)
     {

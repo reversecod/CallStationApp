@@ -20,3 +20,56 @@ html {
 body {
   margin-bottom: 60px;
 }
+.mention-token {
+    display: inline-block;
+    color: #7c3aed;
+    font-weight: 600;
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+.mention-menu {
+    position: absolute;
+    z-index: 2000;
+    width: min(280px, calc(100vw - 16px));
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid rgba(13, 110, 253, .25);
+    border-radius: 6px;
+    background: var(--bs-body-bg, #fff);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, .15);
+    padding: 4px;
+}
+
+.mention-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    padding: 6px 8px;
+    text-align: left;
+}
+
+.mention-menu-item:hover,
+.mention-menu-item.active {
+    background: rgba(13, 110, 253, .12);
+}
+
+.mention-menu-name,
+.mention-menu-user {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mention-menu-user {
+    color: var(--bs-secondary-color, #6c757d);
+    font-size: .82rem;
+}

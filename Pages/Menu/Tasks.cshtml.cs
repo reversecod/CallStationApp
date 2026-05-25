@@ -1,6 +1,7 @@
 using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Models;
+using CallStationApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -28,13 +29,15 @@ public class TasksModel : PageModel
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly MencaoService _mencaoService;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<TasksModel> _logger;
 
-    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
+    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
+        _mencaoService = mencaoService;
         _environment = environment;
         _logger = logger;
     }
@@ -1322,6 +1325,32 @@ public class TasksModel : PageModel
         return new JsonResult(new { success = true, membros });
     }
 
+    public async Task<IActionResult> OnGetMembrosMencaoAsync(int grupoId, int? cartaoId, string? termo)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, grupoId);
+        if (contexto == null)
+            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+
+        IEnumerable<int>? usuariosPermitidos = null;
+        if (cartaoId.HasValue && cartaoId.Value > 0)
+        {
+            var cartao = await _context.CartoesTarefas
+                .FirstOrDefaultAsync(c => c.Id == cartaoId.Value && c.GrupoId == grupoId);
+
+            if (cartao == null || !await PodeVerCartaoAsync(cartao, usuarioId.Value))
+                return new JsonResult(new { success = false, message = "Voce nao tem permissao para acessar esta tarefa." });
+
+            usuariosPermitidos = await ObterUsuariosPermitidosMencaoCartaoAsync(cartao);
+        }
+
+        var membros = await _mencaoService.BuscarMembrosAsync(grupoId, usuarioId.Value, termo, usuariosPermitidos);
+        return new JsonResult(new { success = true, dados = membros });
+    }
+
     public async Task<IActionResult> OnGetChamadosVisivelParaTodosAsync(int cartaoId, int grupoId)
     {
         var usuarioId = GetUsuarioLogadoId();
@@ -1725,16 +1754,56 @@ public class TasksModel : PageModel
         if (string.IsNullOrWhiteSpace(texto) || texto.Length > LimiteCaracteresComentario)
             return BadRequest(new { success = false, message = $"Comentário inválido. Use até {LimiteCaracteresComentario} caracteres." });
 
-        _context.ComentariosTarefas.Add(new ComentarioTarefa
-        {
-            CartaoTarefaId = cartao.Id,
-            UsuarioId = usuarioId.Value,
-            Mensagem = texto,
-            DataCriacao = DateTime.UtcNow
-        });
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-        await _context.SaveChangesAsync();
-        return new JsonResult(new { success = true });
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var comentario = new ComentarioTarefa
+                    {
+                        CartaoTarefaId = cartao.Id,
+                        UsuarioId = usuarioId.Value,
+                        Mensagem = texto,
+                        DataCriacao = DateTime.UtcNow
+                    };
+
+                    _context.ComentariosTarefas.Add(comentario);
+                    await _context.SaveChangesAsync();
+                    await _mencaoService.SincronizarMencoesAsync(
+                        cartao.GrupoId,
+                        usuarioId.Value,
+                        "ComentarioTarefa",
+                        comentario.Id,
+                        "Comentario",
+                        comentario.Mensagem,
+                        TipoNotificacao.Tarefa,
+                        "Voce foi mencionado em um comentario",
+                        $"comentario da tarefa #{cartao.NumeroCartaoGrupo}",
+                        $"/Menu/Tasks?grupoId={cartao.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoCartaoAsync(cartao));
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao adicionar comentario na tarefa {CartaoId}.", request.CartaoId);
+            return BadRequest(new { success = false, message = "Nao foi possivel adicionar o comentario." });
+        }
     }
 
     public async Task<IActionResult> OnPostReordenarListasAsync([FromBody] ReordenarListasRequest request)
@@ -3087,6 +3156,18 @@ public class TasksModel : PageModel
         await SincronizarChamadosAsync(cartao, request.ChamadosIds, request.GrupoId, usuarioId, usuariosComAcesso);
         await SincronizarEtiquetasUsuarioCartaoAsync(cartao.Id, request.GrupoId, usuarioId, request.EtiquetasIds);
         RegistrarHistorico(cartao.Id, usuarioId, novo ? "Cartao criado" : "Cartao atualizado");
+        await _mencaoService.SincronizarMencoesAsync(
+            cartao.GrupoId,
+            usuarioId,
+            "Tarefa",
+            cartao.Id,
+            "Descricao",
+            cartao.Descricao,
+            TipoNotificacao.Tarefa,
+            "Voce foi mencionado em uma tarefa",
+            $"descricao da tarefa #{cartao.NumeroCartaoGrupo}",
+            $"/Menu/Tasks?grupoId={cartao.GrupoId}",
+            await ObterUsuariosPermitidosMencaoCartaoAsync(cartao));
         await _context.SaveChangesAsync();
 
         return cartao;
@@ -3219,6 +3300,26 @@ public class TasksModel : PageModel
             TipoAcao = acao,
             DataAcao = DateTime.UtcNow
         });
+    }
+
+    private async Task<List<int>> ObterUsuariosPermitidosMencaoCartaoAsync(CartaoTarefa cartao)
+    {
+        if (!cartao.Privado)
+        {
+            return await _context.UsuariosGrupos
+                .AsNoTracking()
+                .Where(ug => ug.GrupoId == cartao.GrupoId && ug.Ativo)
+                .Select(ug => ug.UsuarioId)
+                .ToListAsync();
+        }
+
+        var membros = await _context.CartoesTarefasUsuarios
+            .AsNoTracking()
+            .Where(x => x.CartaoTarefaId == cartao.Id)
+            .Select(x => x.UsuarioId)
+            .ToListAsync();
+
+        return membros.Append(cartao.CriadorId).Distinct().ToList();
     }
 
     private async Task<bool> PodeVerCartaoAsync(CartaoTarefa cartao, int usuarioId)

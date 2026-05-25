@@ -512,7 +512,7 @@ async function abrirModalCartaoExistente(id) {
     setValue("cartaoColunaId", data.colunaId);
     setValue("cartaoColunaSelect", data.colunaId);
     setValue("cartaoTitulo", data.titulo);
-    setValue("cartaoDescricao", data.descricao);
+    setValueComMencoes("cartaoDescricao", data.descricao);
     setValue("cartaoPrioridade", data.prioridade);
     setValue("cartaoCriticidade", data.criticidade);
     setValue("cartaoUrgencia", data.urgencia);
@@ -620,7 +620,7 @@ function montarPayloadSalvarCartao(id) {
         grupoId: getGrupoId(),
         colunaId: Number(getValue("cartaoColunaSelect") || getValue("cartaoColunaId")),
         titulo: getValue("cartaoTitulo"),
-        descricao: getNullableString("cartaoDescricao"),
+        descricao: getNullableStringSerializado("cartaoDescricao"),
         prioridade: getNullableString("cartaoPrioridade"),
         criticidade: getNullableString("cartaoCriticidade"),
         urgencia: getNullableString("cartaoUrgencia"),
@@ -1878,9 +1878,11 @@ function sincronizarSelectColunasComBoard() {
 
 async function adicionarComentario() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
-    const mensagem = getValue("comentarioTexto").trim();
-    if (!cartaoId || !mensagem) return;
-    if (mensagem.length > 250) {
+    const textoInput = document.getElementById("comentarioTexto");
+    const mensagemVisivel = (textoInput?.value || "").trim();
+    const mensagem = serializarTextoCampo(textoInput).trim();
+    if (!cartaoId || !mensagemVisivel) return;
+    if (mensagemVisivel.length > 250) {
         mostrarToast("O comentário não pode exceder 250 caracteres.");
         return;
     }
@@ -1978,7 +1980,7 @@ function renderizarAtividade(itens) {
             <div class="activity-item">
                 <div class="activity-avatar">${escapeHtml(inicial)}</div>
                 <div>
-                    <div><strong>${escapeHtml(item.usuario || "Usuário")}</strong> ${escapeHtml(item.texto || "")}</div>
+                    <div><strong>${escapeHtml(item.usuario || "Usuário")}</strong> ${renderizarTextoSeguro(item.texto || "")}</div>
                     <div class="text-muted small">${escapeHtml(data)}</div>
                 </div>
             </div>
@@ -2067,8 +2069,25 @@ function setValue(id, value) {
     if (el) el.value = value ?? "";
 }
 
+function setValueComMencoes(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (window.aplicarTextoComMencoesCampo) {
+        window.aplicarTextoComMencoesCampo(el, value ?? "");
+    } else {
+        el.value = value ?? "";
+    }
+}
+
 function getNullableString(id) {
     const value = getValue(id).trim();
+    return value === "" ? null : value;
+}
+
+function getNullableStringSerializado(id) {
+    const campo = document.getElementById(id);
+    const value = serializarTextoCampo(campo).trim();
     return value === "" ? null : value;
 }
 
@@ -2087,3 +2106,13 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
+function renderizarTextoSeguro(value) {
+    return escapeHtml(value)
+        .replace(/@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)/g, '<span class="mention-token">@$1</span>');
+}
+
+function serializarTextoCampo(campo) {
+    return window.serializarTextoComMencoes
+        ? window.serializarTextoComMencoes(campo)
+        : String(campo?.value || "");
+}

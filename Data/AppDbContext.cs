@@ -45,6 +45,7 @@ namespace CallStationApp.Data
         public DbSet<FeedbackChamado> FeedbacksChamados { get; set; }
         public DbSet<ConviteGrupo> ConvitesGrupo { get; set; }
         public DbSet<Notificacao> Notificacoes { get; set; }
+        public DbSet<MencaoTexto> MencoesTextos { get; set; }
         public DbSet<HistoricoAlteracaoChamado> HistoricoAlteracoesChamado { get; set; }
         public DbSet<ChamadoContadorGrupo> ChamadosContadorGrupo { get; set; }
         public DbSet<ChamadoContadorUsuario> ChamadosContadorUsuario { get; set; }
@@ -1119,6 +1120,12 @@ namespace CallStationApp.Data
                     .HasColumnType("varchar(50)")
                     .HasMaxLength(50);
 
+                entity.Property(n => n.UsuarioOrigemId)
+                    .HasColumnName("usuario_origem_id");
+
+                entity.Property(n => n.MencaoId)
+                    .HasColumnName("mencao_id");
+
                 entity.Property(n => n.LinkDestino)
                     .HasColumnName("link_destino")
                     .HasColumnType("varchar(255)")
@@ -1133,9 +1140,72 @@ namespace CallStationApp.Data
                 entity.HasIndex(n => new { n.UsuarioId, n.Lida, n.Tipo, n.ReferenciaTipo, n.ReferenciaId })
                     .HasDatabaseName("idx_notificacao_usuario_referencia_lida");
 
+                entity.HasIndex(n => n.MencaoId)
+                    .IsUnique()
+                    .HasDatabaseName("uq_notificacoes_mencao");
+
                 entity.HasOne(n => n.Grupo)
                     .WithMany()
                     .HasForeignKey(n => n.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne<Usuario>()
+                    .WithMany()
+                    .HasForeignKey(n => n.UsuarioOrigemId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne<MencaoTexto>()
+                    .WithMany()
+                    .HasForeignKey(n => n.MencaoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<MencaoTexto>(entity =>
+            {
+                entity.ToTable("Mencoes_textos");
+
+                entity.Property(m => m.EntidadeTipo)
+                    .IsRequired()
+                    .HasColumnName("entidade_tipo")
+                    .HasColumnType("varchar(30)")
+                    .HasMaxLength(30);
+
+                entity.Property(m => m.CampoOrigem)
+                    .IsRequired()
+                    .HasColumnName("campo_origem")
+                    .HasColumnType("varchar(40)")
+                    .HasMaxLength(40);
+
+                entity.Property(m => m.TextoExibido)
+                    .IsRequired()
+                    .HasColumnName("texto_exibido")
+                    .HasColumnType("varchar(100)")
+                    .HasMaxLength(100);
+
+                entity.Property(m => m.CriadoEm)
+                    .HasColumnName("criado_em")
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(m => new { m.GrupoId, m.EntidadeTipo, m.EntidadeId, m.CampoOrigem })
+                    .HasDatabaseName("idx_mencoes_contexto");
+
+                entity.HasIndex(m => new { m.UsuarioMencionadoId, m.CriadoEm })
+                    .HasDatabaseName("idx_mencoes_usuario");
+
+                entity.HasOne(m => m.Grupo)
+                    .WithMany()
+                    .HasForeignKey(m => m.GrupoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(m => m.UsuarioMencionado)
+                    .WithMany()
+                    .HasForeignKey(m => m.UsuarioMencionadoId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(m => m.UsuarioAutor)
+                    .WithMany()
+                    .HasForeignKey(m => m.UsuarioAutorId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
             modelBuilder.Entity<HistoricoAlteracaoChamado>(entity =>

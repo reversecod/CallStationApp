@@ -1,6 +1,7 @@
 using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Models;
+using CallStationApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -36,13 +37,15 @@ public class HistoryModel : PageModel
 
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
+    private readonly MencaoService _mencaoService;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<HistoryModel> _logger;
 
-    public HistoryModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, IWebHostEnvironment environment, ILogger<HistoryModel> logger)
+    public HistoryModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, IWebHostEnvironment environment, ILogger<HistoryModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
+        _mencaoService = mencaoService;
         _environment = environment;
         _logger = logger;
     }
@@ -515,6 +518,30 @@ public class HistoryModel : PageModel
         });
     }
 
+    public async Task<IActionResult> OnGetMembrosMencaoAsync(int grupoId, int? chamadoId, string? termo)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var contexto = await ValidarMembroAsync(usuarioId.Value, grupoId);
+        if (contexto == null)
+            return new JsonResult(new { success = false, message = "Voce nao pertence a este grupo." });
+
+        IEnumerable<int>? usuariosPermitidos = null;
+        if (chamadoId.HasValue && chamadoId.Value > 0)
+        {
+            var acesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, grupoId, chamadoId.Value);
+            if (!acesso.Success)
+                return new JsonResult(new { success = false, message = acesso.Message });
+
+            usuariosPermitidos = await ObterUsuariosPermitidosMencaoHistoricoAsync(acesso.Chamado!, acesso.EstaPublicoNoHistorico);
+        }
+
+        var membros = await _mencaoService.BuscarMembrosAsync(grupoId, usuarioId.Value, termo, usuariosPermitidos);
+        return new JsonResult(new { success = true, dados = membros });
+    }
+
     public async Task<IActionResult> OnGetCandidatosVinculoAsync(int chamadoId, string? termo)
     {
         var usuarioId = GetUsuarioLogadoId();
@@ -928,7 +955,18 @@ public class HistoryModel : PageModel
                         TipoAlteracao = "ComentarioHistoricoEditado",
                         DataAlteracao = DateTime.UtcNow
                     });
-
+                    await _mencaoService.SincronizarMencoesAsync(
+                        resultadoAcesso.Chamado!.GrupoId,
+                        usuarioId.Value,
+                        "ComentarioHistoricoChamado",
+                        comentario.Id,
+                        "Historico",
+                        comentario.Mensagem,
+                        TipoNotificacao.Chamado,
+                        "Voce foi mencionado no historico",
+                        $"comentario do historico do chamado #{resultadoAcesso.Chamado.NumeroChamadoGrupo}",
+                        Url.Page("/Menu/History", new { grupoId = resultadoAcesso.Chamado.GrupoId }) ?? $"/Menu/History?grupoId={resultadoAcesso.Chamado.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoHistoricoAsync(resultadoAcesso.Chamado, resultadoAcesso.EstaPublicoNoHistorico));
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -981,6 +1019,18 @@ public class HistoryModel : PageModel
                         return (IActionResult)new JsonResult(new { success = false, message = "Você só pode excluir comentários próprios." });
 
                     anexoRemover = comentario.AnexoComentario;
+                    await _mencaoService.SincronizarMencoesAsync(
+                        resultadoAcesso.Chamado!.GrupoId,
+                        usuarioId.Value,
+                        "ComentarioHistoricoChamado",
+                        comentario.Id,
+                        "Historico",
+                        null,
+                        TipoNotificacao.Chamado,
+                        "Voce foi mencionado no historico",
+                        $"comentario do historico do chamado #{resultadoAcesso.Chamado.NumeroChamadoGrupo}",
+                        Url.Page("/Menu/History", new { grupoId = resultadoAcesso.Chamado.GrupoId }) ?? $"/Menu/History?grupoId={resultadoAcesso.Chamado.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoHistoricoAsync(resultadoAcesso.Chamado, resultadoAcesso.EstaPublicoNoHistorico));
                     _context.ComentariosChamados.Remove(comentario);
                     _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
                     {
@@ -1105,6 +1155,20 @@ public class HistoryModel : PageModel
 
                     if (notificacoes.Count > 0)
                         _context.Notificacoes.AddRange(notificacoes);
+
+                    await _context.SaveChangesAsync();
+                    await _mencaoService.SincronizarMencoesAsync(
+                        resultadoAcesso.Chamado.GrupoId,
+                        usuarioId.Value,
+                        "ComentarioHistoricoChamado",
+                        comentario.Id,
+                        "Historico",
+                        comentario.Mensagem,
+                        TipoNotificacao.Chamado,
+                        "Voce foi mencionado no historico",
+                        $"comentario do historico do chamado #{resultadoAcesso.Chamado.NumeroChamadoGrupo}",
+                        Url.Page("/Menu/History", new { grupoId = resultadoAcesso.Chamado.GrupoId }) ?? $"/Menu/History?grupoId={resultadoAcesso.Chamado.GrupoId}",
+                        await ObterUsuariosPermitidosMencaoHistoricoAsync(resultadoAcesso.Chamado, resultadoAcesso.EstaPublicoNoHistorico));
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -2084,6 +2148,24 @@ public class HistoryModel : PageModel
     private static bool PodeGerenciarChamadoNoHistorico(PermissaoUsuario permissao) =>
         permissao == PermissaoUsuario.Administracao ||
         permissao == PermissaoUsuario.Tecnico;
+
+    private async Task<List<int>> ObterUsuariosPermitidosMencaoHistoricoAsync(Chamado chamado, bool chamadoPublico)
+    {
+        var membros = await _context.UsuariosGrupos
+            .AsNoTracking()
+            .Where(ug => ug.GrupoId == chamado.GrupoId && ug.Ativo)
+            .Select(ug => new { ug.UsuarioId, ug.Permissao })
+            .ToListAsync();
+
+        return membros
+            .Where(membro => GrupoPermissionService.PodeVerChamado(
+                membro.Permissao,
+                chamadoPublico,
+                membro.UsuarioId,
+                chamado.CriadorChamadoId))
+            .Select(membro => membro.UsuarioId)
+            .ToList();
+    }
 
     private static string FormatarStatusTexto(StatusChamado status) => status switch
     {

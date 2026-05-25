@@ -55,6 +55,17 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
+function renderizarTextoSeguro(value) {
+    return escapeHtml(value)
+        .replace(/@\[([^\]\r\n]{1,100})\]\(usuario:(\d{1,10})\)/g, '<span class="mention-token">@$1</span>');
+}
+
+function serializarTextoCampo(campo) {
+    return window.serializarTextoComMencoes
+        ? window.serializarTextoComMencoes(campo)
+        : String(campo?.value || "");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     mostrarToastPendente();
 
@@ -753,6 +764,17 @@ function setValueIfExists(id, value) {
     }
 }
 
+function setValueComMencoesIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (window.aplicarTextoComMencoesCampo) {
+        window.aplicarTextoComMencoesCampo(el, value ?? "");
+    } else {
+        el.value = value ?? "";
+    }
+}
+
 function setDateValueIfExists(id, value) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1003,8 +1025,8 @@ async function preencherFormularioEdicao(data) {
 
     setValueIfExists("editId", data.id);
     setValueIfExists("editTitulo", data.titulo);
-    setValueIfExists("editDescricao", data.descricao);
-    setValueIfExists("editSolucao", data.solucao);
+    setValueComMencoesIfExists("editDescricao", data.descricao);
+    setValueComMencoesIfExists("editSolucao", data.solucao);
 
     setValueIfExists("editGrupoId", data.grupoId);
     setValueIfExists("editSetorId", data.setorId);
@@ -1568,15 +1590,16 @@ async function enviarComentarioChamado() {
     const chamadoId = Number(document.getElementById("comentariosChamadoId")?.value);
     const textoInput = document.getElementById("textoNovoComentarioChamado");
     const anexoInput = document.getElementById("anexoNovoComentarioChamado");
-    const mensagem = (textoInput?.value || "").trim();
+    const mensagemVisivel = (textoInput?.value || "").trim();
+    const mensagem = serializarTextoCampo(textoInput).trim();
     const arquivo = anexoInput?.files?.[0] || null;
 
-    if (!chamadoId || (!mensagem && !arquivo)) {
+    if (!chamadoId || (!mensagemVisivel && !arquivo)) {
         mostrarToast("Informe um comentário ou selecione uma imagem.");
         return;
     }
 
-    if (mensagem.length > 250) {
+    if (mensagemVisivel.length > 250) {
         mostrarToast("O comentário não pode exceder 250 caracteres.");
         return;
     }
@@ -1705,7 +1728,7 @@ function renderizarComentariosChamado(comentarios) {
                     <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
                     <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                 </div>
-                <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                <div class="comment-text">${renderizarTextoSeguro(comentario.texto || "")}</div>
                 ${anexo}
             </div>
         `;
@@ -1799,7 +1822,7 @@ function renderizarComentarioChamadoPaginado(comentario) {
                 <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                 ${acoes}
             </div>
-            <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+            <div class="comment-text">${renderizarTextoSeguro(comentario.texto || "")}</div>
             ${anexo}
         </div>
     `;
@@ -1862,9 +1885,11 @@ async function salvarEdicaoComentarioChamado(botao) {
     const card = botao.closest("[data-comentario-chamado-id]");
     const comentarioId = Number(card?.dataset.comentarioChamadoId || 0);
     const chamadoId = Number(document.getElementById("comentariosChamadoId")?.value || 0);
-    const mensagem = (card?.querySelector("[data-texto-edicao-comentario]")?.value || "").trim();
+    const textoInput = card?.querySelector("[data-texto-edicao-comentario]");
+    const mensagemVisivel = (textoInput?.value || "").trim();
+    const mensagem = serializarTextoCampo(textoInput).trim();
 
-    if (!chamadoId || !comentarioId || !mensagem) {
+    if (!chamadoId || !comentarioId || !mensagemVisivel) {
         mostrarToast("Informe o comentário.");
         return;
     }
@@ -2023,8 +2048,8 @@ async function salvarEdicaoChamado() {
     const payload = {
         id: toNullableInt(getValue("editId")),
         titulo: getNullableString("editTitulo"),
-        descricao: getNullableString("editDescricao"),
-        solucao: getNullableString("editSolucao"),
+        descricao: getNullableStringSerializado("editDescricao"),
+        solucao: getNullableStringSerializado("editSolucao"),
         grupoId: toNullableInt(getValue("editGrupoId")),
         setorId: toNullableInt(getValue("editSetorId")),
         ocorrenciaTipoId: toNullableInt(getValue("editOcorrenciaTipoId")),
@@ -2159,6 +2184,12 @@ async function fetchJson(url, payload) {
 
 function getNullableString(id) {
     const value = getValue(id).trim();
+    return value === "" ? null : value;
+}
+
+function getNullableStringSerializado(id) {
+    const campo = document.getElementById(id);
+    const value = serializarTextoCampo(campo).trim();
     return value === "" ? null : value;
 }
 

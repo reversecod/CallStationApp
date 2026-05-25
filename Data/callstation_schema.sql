@@ -824,6 +824,8 @@ CREATE TABLE Notificacoes (
     data_leitura DATETIME NULL,
 
     referencia_id INT NULL,
+    usuario_origem_id INT NULL,
+    mencao_id INT NULL,
     referencia_tipo VARCHAR(50) NULL,
     link_destino VARCHAR(255) NULL,
 
@@ -841,6 +843,46 @@ CREATE INDEX idx_notificacao_usuario_grupo_lida_data
 
 CREATE INDEX idx_notificacao_usuario_referencia_lida
     ON Notificacoes(usuario_id, lida, tipo, referencia_tipo, referencia_id);
+
+CREATE UNIQUE INDEX uq_notificacoes_mencao
+    ON Notificacoes(mencao_id);
+
+-- ==========================
+-- MENCOES EM TEXTOS
+-- ==========================
+
+CREATE TABLE Mencoes_textos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grupo_id INT NOT NULL,
+    usuario_mencionado_id INT NOT NULL,
+    usuario_autor_id INT NOT NULL,
+    entidade_tipo VARCHAR(30) NOT NULL,
+    entidade_id INT NOT NULL,
+    campo_origem VARCHAR(40) NOT NULL,
+    texto_exibido VARCHAR(100) NOT NULL,
+    posicao_inicio INT NOT NULL,
+    posicao_fim INT NOT NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_mencao_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+    CONSTRAINT fk_mencao_usuario_mencionado
+        FOREIGN KEY (usuario_mencionado_id) REFERENCES Usuarios(id),
+    CONSTRAINT fk_mencao_usuario_autor
+        FOREIGN KEY (usuario_autor_id) REFERENCES Usuarios(id)
+);
+
+CREATE INDEX idx_mencoes_contexto
+    ON Mencoes_textos(grupo_id, entidade_tipo, entidade_id, campo_origem);
+
+CREATE INDEX idx_mencoes_usuario
+    ON Mencoes_textos(usuario_mencionado_id, criado_em);
+
+ALTER TABLE Notificacoes
+    ADD CONSTRAINT fk_notificacao_usuario_origem
+        FOREIGN KEY (usuario_origem_id) REFERENCES Usuarios(id),
+    ADD CONSTRAINT fk_notificacao_mencao
+        FOREIGN KEY (mencao_id) REFERENCES Mencoes_textos(id);
     
 -- ==========================
 -- HISTÓRICO DE ALTERAÇÕES

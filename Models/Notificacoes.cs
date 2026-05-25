@@ -44,6 +44,12 @@ namespace CallStationApp.Models
         [Column("referencia_id")]
         public int? ReferenciaId { get; set; }
 
+        [Column("usuario_origem_id")]
+        public int? UsuarioOrigemId { get; set; }
+
+        [Column("mencao_id")]
+        public int? MencaoId { get; set; }
+
         [Column("referencia_tipo", TypeName = "varchar(50)")]
         [StringLength(50)]
         public string? ReferenciaTipo { get; set; }

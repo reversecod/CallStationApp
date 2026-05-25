@@ -1106,6 +1106,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/mentions.js" asp-append-version="true"></script>
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         const historyList = document.getElementById("historyList");
@@ -1228,13 +1229,14 @@
 
         btnEnviarComentario?.addEventListener("click", async () => {
             const chamadoId = Number(comentariosChamadoIdInput?.value);
-            const mensagem = (textoNovoComentario?.value || "").trim();
-            if (!chamadoId || !mensagem) {
+            const mensagemVisivel = (textoNovoComentario?.value || "").trim();
+            const mensagem = serializarTextoCampo(textoNovoComentario).trim();
+            if (!chamadoId || !mensagemVisivel) {
                 mostrarToast("Informe um comentário antes de enviar.");
                 return;
             }
 
-            if (mensagem.length > 250) {
+            if (mensagemVisivel.length > 250) {
                 mostrarToast("O comentário não pode exceder 250 caracteres.");
                 return;
             }
@@ -1550,7 +1552,7 @@
                             <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
                             <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                         </div>
-                        <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                        <div class="comment-text">${renderizarTextoSeguro(comentario.texto || "")}</div>
                         ${comentario.possuiAnexo ? '<div class="small text-muted mt-1">Contém anexo.</div>' : ''}
                     </div>
                 `).join("")
@@ -1649,6 +1651,12 @@
             if (campo === "categoria") {
                 document.getElementById("editHistoricoCategoriaId")?.addEventListener("change", carregarSubcategoriasHistorico);
             }
+            if (campo === "descricao") {
+                aplicarTextoCampoHistorico("editHistoricoDescricao", dados.descricao);
+            }
+            if (campo === "solucao") {
+                aplicarTextoCampoHistorico("editHistoricoSolucao", dados.solucao);
+            }
 
             valor.querySelectorAll("[data-select-nivel-historico]").forEach(select => {
                 select.addEventListener("change", () => atualizarClasseNivelSelect(select));
@@ -1661,10 +1669,10 @@
                 return `<input type="text" class="form-control" id="editHistoricoTitulo" maxlength="35" value="${escapeHtml(dados.titulo || "")}">`;
             }
             if (campo === "descricao") {
-                return `<textarea class="form-control" id="editHistoricoDescricao" rows="5" maxlength="500">${escapeHtml(dados.descricao || "")}</textarea>`;
+                return `<textarea class="form-control" id="editHistoricoDescricao" rows="5" maxlength="500"></textarea>`;
             }
             if (campo === "solucao") {
-                return `<textarea class="form-control" id="editHistoricoSolucao" rows="5" maxlength="500">${escapeHtml(dados.solucao || "")}</textarea>`;
+                return `<textarea class="form-control" id="editHistoricoSolucao" rows="5" maxlength="500"></textarea>`;
             }
             if (campo === "setor") {
                 return renderizarSelectInlineHistorico("editHistoricoSetorId", opcoes.setores || [], dados.setorId);
@@ -1773,8 +1781,8 @@
                     ocorrenciaTipoId: campoEstaEditando("tipoProblema") ? toNullableNumber(document.getElementById("editHistoricoTipoId")?.value) : null,
                     ocorrenciaCategoriaId: campoEstaEditando("categoria") ? toNullableNumber(document.getElementById("editHistoricoCategoriaId")?.value) : null,
                     ocorrenciaSubcategoriaId: campoEstaEditando("subcategoria") ? toNullableNumber(document.getElementById("editHistoricoSubcategoriaId")?.value) : null,
-                    descricao: document.getElementById("editHistoricoDescricao")?.value ?? null,
-                    solucao: document.getElementById("editHistoricoSolucao")?.value ?? null,
+                    descricao: serializarTextoCampo(document.getElementById("editHistoricoDescricao")) || null,
+                    solucao: serializarTextoCampo(document.getElementById("editHistoricoSolucao")) || null,
                     camposEditados: obterCamposHistoricoEditados()
                 });
 
@@ -1812,7 +1820,7 @@
             const classeNivel = obterClasseNivelCampo(campo, campo ? dados?.[campo] : null);
             const valorHtml = classeNivel
                 ? `<span class="nivel-badge ${classeNivel}">${escapeHtml(valor || "-")}</span>`
-                : escapeHtml(valor || "-");
+                : renderizarValorDetalheSeguro(valor || "-");
             const ajuda = obterAjudaCampoNivel(campo);
             return `
                 <div class="detail-block ${completo ? "mt-3" : ""}" ${campo ? `data-campo-historico="${escapeHtml(campo)}"` : ""}>
@@ -2062,7 +2070,7 @@
                                 <span class="comment-author">${escapeHtml(comentario.autor || "Não registrado")}</span>
                                 <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                             </div>
-                            <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                            <div class="comment-text">${renderizarTextoSeguro(comentario.texto || "")}</div>
                             ${anexo}
                         </div>
                     </div>
@@ -2122,7 +2130,7 @@
                             <span>${escapeHtml(formatCommentDateTime(comentario.dataComentario))}</span>
                             ${acoes}
                         </div>
-                        <div class="comment-text">${escapeHtml(comentario.texto || "")}</div>
+                        <div class="comment-text">${renderizarTextoSeguro(comentario.texto || "")}</div>
                         ${anexo}
                     </div>
                 </div>
@@ -2161,9 +2169,11 @@
             const card = botao.closest("[data-comentario-historico-id]");
             const comentarioId = Number(card?.dataset.comentarioHistoricoId || 0);
             const chamadoId = Number(comentariosChamadoIdInput?.value || 0);
-            const mensagem = (card?.querySelector("[data-texto-edicao-comentario]")?.value || "").trim();
+            const textoInput = card?.querySelector("[data-texto-edicao-comentario]");
+            const mensagemVisivel = (textoInput?.value || "").trim();
+            const mensagem = serializarTextoCampo(textoInput).trim();
 
-            if (!chamadoId || !comentarioId || !mensagem) {
+            if (!chamadoId || !comentarioId || !mensagemVisivel) {
                 mostrarToast("Informe o comentário.");
                 return;
             }
@@ -2346,6 +2356,36 @@
                 .replaceAll(">", "&gt;")
                 .replaceAll('"', "&quot;")
                 .replaceAll("'", "&#039;");
+        }
+
+        function renderizarTextoSeguro(value) {
+            const at = String.fromCharCode(64);
+            const mentionRegex = new RegExp(at + "\\[([^\\]\\r\\n]{1,100})\\]\\(usuario:(\\d{1,10})\\)", "g");
+            return escapeHtml(value)
+                .replace(mentionRegex, '<span class="mention-token">' + at + '$1</span>');
+        }
+
+        function renderizarValorDetalheSeguro(value) {
+            return renderizarTextoSeguro(value);
+        }
+
+        function aplicarTextoCampoHistorico(id, value) {
+            const campo = document.getElementById(id);
+            if (!campo) return;
+
+            if (window.aplicarTextoComMencoesCampo) {
+                window.aplicarTextoComMencoesCampo(campo, value || "");
+            } else if (window.desserializarTextoComMencoes) {
+                campo.value = window.desserializarTextoComMencoes(value || "");
+            } else {
+                campo.value = value || "";
+            }
+        }
+
+        function serializarTextoCampo(campo) {
+            return window.serializarTextoComMencoes
+                ? window.serializarTextoComMencoes(campo)
+                : String(campo?.value || "");
         }
 
         function formatDateTimeLocal(value) {
