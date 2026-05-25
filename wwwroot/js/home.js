@@ -2050,6 +2050,7 @@ async function salvarEdicaoChamado() {
 
     salvandoEdicaoChamado = true;
     const btnSalvar = document.getElementById("btnSalvarEdicao");
+    const btnSalvarEstavaHabilitado = btnSalvar ? !btnSalvar.disabled : false;
     if (btnSalvar) {
         btnSalvar.disabled = true;
     }
@@ -2071,6 +2072,10 @@ async function salvarEdicaoChamado() {
 
         if (!data.success) {
             mostrarToast(data.message || "Erro ao salvar chamado.");
+            salvandoEdicaoChamado = false;
+            if (btnSalvar) {
+                btnSalvar.disabled = !btnSalvarEstavaHabilitado;
+            }
             return;
         }
 
