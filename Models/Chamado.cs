@@ -21,8 +21,8 @@ namespace CallStationApp.Models
         [Column("numero_chamado_usuario_grupo")]
         public int NumeroChamadoUsuarioGrupo { get; set; }
 
-        [Column("titulo", TypeName = "varchar(35)")]
-        [StringLength(35)]
+        [Column("titulo", TypeName = "varchar(42)")]
+        [StringLength(42)]
         public string? Titulo { get; set; }
 
         [Column("descricao", TypeName = "varchar(500)")]

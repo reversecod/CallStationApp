@@ -1029,6 +1029,9 @@ public class HomeModel : PageModel
             });
         }
 
+        if (!string.IsNullOrWhiteSpace(request.Titulo) && request.Titulo.Trim().Length > 42)
+            return new JsonResult(new { success = false, message = "Título deve ter no máximo 42 caracteres." });
+
         if (!TryNormalizarDataHoraNullable(request.DataFinalizacao, out var dataFinalizacao))
             return new JsonResult(new { success = false, message = "Data de finalizacao invalida." });
 
