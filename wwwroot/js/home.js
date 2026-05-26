@@ -1060,6 +1060,8 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editCriticidade", data.criticidade);
     setValueIfExists("editUrgencia", data.urgencia);
     setValueIfExists("editStatus", data.status ?? "Aberto");
+    const editStatus = document.getElementById("editStatus");
+    if (editStatus) editStatus.dataset.originalStatus = data.status ?? "Aberto";
     atualizarCoresCamposChamado();
 
     setDateValueIfExists("editDataFinalizacao", data.dataFinalizacao);
@@ -2082,6 +2084,9 @@ async function salvarEdicaoChamado() {
         prazoConclusao: datasNormalizadas.valores.editPrazoConclusao,
         publico: !!document.getElementById("editPublico")?.checked
     };
+    if (!preencherObservacaoPendenteChamado(payload)) {
+        return;
+    }
 
     const formData = new FormData();
 
@@ -2134,6 +2139,26 @@ async function salvarEdicaoChamado() {
             btnSalvar.disabled = false;
         }
     }
+}
+
+function preencherObservacaoPendenteChamado(payload) {
+    const statusSelect = document.getElementById("editStatus");
+    const statusAnterior = statusSelect?.dataset.originalStatus || "Aberto";
+    const statusNovo = payload.status || "Aberto";
+
+    if (statusAnterior !== "Pendente" && statusNovo === "Pendente") {
+        const valor = prompt("Observacao opcional ao colocar o chamado em Pendente");
+        if (valor === null) return false;
+        const observacao = valor.trim();
+        if (observacao) payload.observacaoPendenteEntrada = observacao;
+    } else if (statusAnterior === "Pendente" && statusNovo !== "Pendente") {
+        const valor = prompt("Observacao opcional ao retirar o chamado de Pendente");
+        if (valor === null) return false;
+        const observacao = valor.trim();
+        if (observacao) payload.observacaoPendenteSaida = observacao;
+    }
+
+    return true;
 }
 
 function atualizarCardChamadoAposSalvar(payload) {

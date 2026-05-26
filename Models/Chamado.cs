@@ -85,10 +85,61 @@ namespace CallStationApp.Models
         [Column("prazo_conclusao")]
         public DateTime? PrazoConclusao { get; set; }
 
+        [Column("prazo_conclusao_operacional")]
+        public DateTime? PrazoConclusaoOperacional { get; set; }
+
         [Column("publico")]
         public bool Publico { get; set; } = false;
 
         public ICollection<HistoricoAlteracaoChamado> HistoricoAlteracoes { get; set; } = new List<HistoricoAlteracaoChamado>();
+    }
+
+    public class ChamadoPeriodoPendente
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("chamado_id")]
+        public int ChamadoId { get; set; }
+
+        [Column("inicio_pendente")]
+        public DateTime InicioPendente { get; set; }
+
+        [Column("fim_pendente")]
+        public DateTime? FimPendente { get; set; }
+
+        [Column("duracao_segundos")]
+        public long? DuracaoSegundos { get; set; }
+
+        [Column("observacao_entrada", TypeName = "varchar(500)")]
+        [StringLength(500)]
+        public string? ObservacaoEntrada { get; set; }
+
+        [Column("observacao_saida", TypeName = "varchar(500)")]
+        [StringLength(500)]
+        public string? ObservacaoSaida { get; set; }
+
+        [Column("criado_por_usuario_id")]
+        public int CriadoPorUsuarioId { get; set; }
+
+        [Column("finalizado_por_usuario_id")]
+        public int? FinalizadoPorUsuarioId { get; set; }
+
+        [Column("criado_em")]
+        public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+
+        [Column("atualizado_em")]
+        public DateTime? AtualizadoEm { get; set; }
+
+        [ForeignKey(nameof(ChamadoId))]
+        public Chamado Chamado { get; set; } = null!;
+
+        [ForeignKey(nameof(CriadoPorUsuarioId))]
+        public Usuario CriadoPorUsuario { get; set; } = null!;
+
+        [ForeignKey(nameof(FinalizadoPorUsuarioId))]
+        public Usuario? FinalizadoPorUsuario { get; set; }
     }
 
     public class ChamadoVinculo

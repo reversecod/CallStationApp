@@ -168,7 +168,8 @@ public class DashboardModel : PageModel
             reabertosIds.Contains(c.Id) &&
             (c.Status == StatusChamado.Concluido || c.Status == StatusChamado.Fechado));
         var totalMes = await query.CountAsync(c => c.DataCriacao.Year == filtro.DataInicial.Year && c.DataCriacao.Month == filtro.DataInicial.Month);
-        var tempoMedioSolucao = await CalcularTempoMedioSolucaoAsync(query);
+        var usarSlaBruto = string.Equals(request.TipoSla, "bruto", StringComparison.OrdinalIgnoreCase);
+        var tempoMedioSolucao = await CalcularTempoMedioSolucaoAsync(query, usarSlaBruto);
         var tempoMedioResposta = await CalcularTempoMedioRespostaAsync(query);
 
         var porSetor = await (from chamado in query
@@ -243,7 +244,8 @@ public class DashboardModel : PageModel
                 problemasReabertos,
                 tarefasPorStatus,
                 previsao,
-                podeVerUsuarios)
+                podeVerUsuarios,
+                usarSlaBruto ? "bruto" : "liquido")
         });
     }
 
@@ -364,13 +366,40 @@ public class DashboardModel : PageModel
             null);
     }
 
-    private async Task<double?> CalcularTempoMedioSolucaoAsync(IQueryable<Chamado> query)
+    private async Task<double?> CalcularTempoMedioSolucaoAsync(IQueryable<Chamado> query, bool usarSlaBruto)
     {
-        var minutos = await query
+        var chamados = await query
             .Where(c => c.DataFinalizacao.HasValue)
-            .Select(c => (double?)EF.Functions.DateDiffMinute(c.DataCriacao, c.DataFinalizacao!.Value))
-            .AverageAsync();
-        return minutos.HasValue ? Math.Round(minutos.Value / 60, 1) : null;
+            .Select(c => new { c.Id, c.DataCriacao, DataFinalizacao = c.DataFinalizacao!.Value })
+            .ToListAsync();
+
+        if (chamados.Count == 0)
+            return null;
+
+        var ids = chamados.Select(c => c.Id).ToList();
+        var pausasPorChamado = usarSlaBruto
+            ? new Dictionary<int, long>()
+            : await _context.ChamadosPeriodosPendentes
+                .AsNoTracking()
+                .Where(p => ids.Contains(p.ChamadoId))
+                .GroupBy(p => p.ChamadoId)
+                .Select(g => new
+                {
+                    ChamadoId = g.Key,
+                    Segundos = g.Sum(p => p.DuracaoSegundos ?? (p.FimPendente.HasValue ? EF.Functions.DateDiffSecond(p.InicioPendente, p.FimPendente.Value) : 0))
+                })
+                .ToDictionaryAsync(x => x.ChamadoId, x => x.Segundos);
+
+        var mediaHoras = chamados
+            .Select(c =>
+            {
+                var brutoSegundos = Math.Max(0, (c.DataFinalizacao - c.DataCriacao).TotalSeconds);
+                var pausaSegundos = pausasPorChamado.GetValueOrDefault(c.Id);
+                return Math.Max(0, brutoSegundos - pausaSegundos) / 3600d;
+            })
+            .Average();
+
+        return Math.Round(mediaHoras, 1);
     }
 
     private async Task<double?> CalcularTempoMedioRespostaAsync(IQueryable<Chamado> query)
@@ -461,13 +490,13 @@ public class DashboardModel : PageModel
     private static bool PodeVerDadosCompletos(PermissaoUsuario permissao) =>
         permissao == PermissaoUsuario.Administracao || permissao == PermissaoUsuario.Tecnico;
 
-    public record DashboardFiltroRequest(DateTime? DataInicial, DateTime? DataFinal, int? Mes, int? SetorId, int? UsuarioId, int? TipoId, string? Status, bool ApenasFechados, bool ApenasReabertos, bool IncluirPrevisao, string? DimensaoPrincipal, string? MetricaCruzada);
+    public record DashboardFiltroRequest(DateTime? DataInicial, DateTime? DataFinal, int? Mes, int? SetorId, int? UsuarioId, int? TipoId, string? Status, bool ApenasFechados, bool ApenasReabertos, bool IncluirPrevisao, string? DimensaoPrincipal, string? MetricaCruzada, string? TipoSla);
     public record FiltroOpcaoVm(int Id, string Nome);
     public record DashboardPontoVm(string Label, double Valor);
     public record GraficoDashboardVm(string Tipo, string Titulo, List<DashboardPontoVm> Pontos);
     public record DashboardIndicadoresVm(int TotalChamados, int TotalFechados, int TotalReabertos, int TotalMes, double? TempoMedioRespostaHoras, double? TempoMedioSolucaoHoras);
     public record DashboardPrevisaoVm(bool Disponivel, string Mensagem, double? EstimativaProximoMes, string? Confiabilidade, List<DashboardPontoVm> Historico);
-    public record DashboardResumoVm(DashboardIndicadoresVm Indicadores, List<DashboardPontoVm> PorSetor, List<DashboardPontoVm> PorTipo, List<DashboardPontoVm> PorStatus, List<DashboardPontoVm> PorUsuario, List<DashboardPontoVm> ProblemasReabertos, List<DashboardPontoVm> TarefasPorStatus, DashboardPrevisaoVm Previsao, bool PodeVerUsuarios);
+    public record DashboardResumoVm(DashboardIndicadoresVm Indicadores, List<DashboardPontoVm> PorSetor, List<DashboardPontoVm> PorTipo, List<DashboardPontoVm> PorStatus, List<DashboardPontoVm> PorUsuario, List<DashboardPontoVm> ProblemasReabertos, List<DashboardPontoVm> TarefasPorStatus, DashboardPrevisaoVm Previsao, bool PodeVerUsuarios, string TipoSla);
     private record FiltroNormalizado(DateTime DataInicial, DateTime DataFinal, int? Mes, int? SetorId, int? UsuarioId, int? TipoId, StatusChamado? Status, bool ApenasFechados, bool ApenasReabertos, bool IncluirPrevisao, string? Erro)
     {
         public static FiltroNormalizado Invalido(string erro) => new(DateTime.UtcNow.Date, DateTime.UtcNow.Date, null, null, null, null, null, false, false, false, erro);

@@ -227,6 +227,9 @@ namespace CallStationApp.Models
         [Column("data_vencimento")]
         public DateTime? DataVencimento { get; set; }
 
+        [Column("data_vencimento_operacional")]
+        public DateTime? DataVencimentoOperacional { get; set; }
+
         [Column("data_conclusao")]
         public DateTime? DataConclusao { get; set; }
 
@@ -599,9 +602,58 @@ namespace CallStationApp.Models
     public enum StatusCartaoTarefa
     {
         Ativa,
+        Pendente,
         Concluida,
         Arquivada,
         Cancelada
+    }
+
+    public class CartaoTarefaPeriodoPendente
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("cartao_tarefa_id")]
+        public int CartaoTarefaId { get; set; }
+
+        [Column("inicio_pendente")]
+        public DateTime InicioPendente { get; set; }
+
+        [Column("fim_pendente")]
+        public DateTime? FimPendente { get; set; }
+
+        [Column("duracao_segundos")]
+        public long? DuracaoSegundos { get; set; }
+
+        [Column("observacao_entrada", TypeName = "varchar(500)")]
+        [StringLength(500)]
+        public string? ObservacaoEntrada { get; set; }
+
+        [Column("observacao_saida", TypeName = "varchar(500)")]
+        [StringLength(500)]
+        public string? ObservacaoSaida { get; set; }
+
+        [Column("criado_por_usuario_id")]
+        public int CriadoPorUsuarioId { get; set; }
+
+        [Column("finalizado_por_usuario_id")]
+        public int? FinalizadoPorUsuarioId { get; set; }
+
+        [Column("criado_em")]
+        public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+
+        [Column("atualizado_em")]
+        public DateTime? AtualizadoEm { get; set; }
+
+        [ForeignKey(nameof(CartaoTarefaId))]
+        public CartaoTarefa CartaoTarefa { get; set; } = null!;
+
+        [ForeignKey(nameof(CriadoPorUsuarioId))]
+        public Usuario CriadoPorUsuario { get; set; } = null!;
+
+        [ForeignKey(nameof(FinalizadoPorUsuarioId))]
+        public Usuario? FinalizadoPorUsuario { get; set; }
     }
 
     public enum TipoParticipacaoCartaoTarefa

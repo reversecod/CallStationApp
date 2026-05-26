@@ -50,6 +50,7 @@ CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 builder.Services.AddScoped<GrupoAuthorizationService>();
 builder.Services.AddScoped<NotificacaoService>();
 builder.Services.AddScoped<MencaoService>();
+builder.Services.AddScoped<SlaPausaService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddHostedService<ChamadoStatusAutomationService>();
 

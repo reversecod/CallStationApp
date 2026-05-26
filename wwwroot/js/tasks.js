@@ -451,6 +451,11 @@ async function abrirModalCartaoNovo(colunaId) {
     setValue("cartaoColunaId", colunaId);
     setValue("cartaoColunaSelect", colunaId);
     setValue("cartaoCorCapa", "#0d6efd");
+    const statusNovo = document.getElementById("cartaoStatus");
+    if (statusNovo) {
+        statusNovo.value = "Ativa";
+        statusNovo.dataset.originalStatus = "Ativa";
+    }
     atualizarCorCapaModal();
     document.getElementById("cartaoCompartilharGrupo").checked = false;
     document.getElementById("cartaoPrivacidadeBadge").textContent = "Privado";
@@ -516,6 +521,9 @@ async function abrirModalCartaoExistente(id) {
     setValue("cartaoPrioridade", data.prioridade);
     setValue("cartaoCriticidade", data.criticidade);
     setValue("cartaoUrgencia", data.urgencia);
+    setValue("cartaoStatus", data.status || "Ativa");
+    const statusSelect = document.getElementById("cartaoStatus");
+    if (statusSelect) statusSelect.dataset.originalStatus = data.status || "Ativa";
     setValue("cartaoDataInicio", formatDateTimeLocal(data.dataInicio));
     setValue("cartaoDataVencimento", formatDateTimeLocal(data.dataVencimento));
     setValue("cartaoCorCapa", data.corCapa || "#0d6efd");
@@ -590,6 +598,9 @@ async function salvarCartao(event) {
 
     const id = toNullableInt(getValue("cartaoId"));
     const payload = montarPayloadSalvarCartao(id);
+    if (!preencherObservacaoPendenteCartao(payload)) {
+        return;
+    }
 
     if (id && cartaoSnapshotSalvar && !cartaoPossuiAlteracoes(payload)) {
         mostrarToast("Não há alterações feitas.", "warning");
@@ -624,6 +635,7 @@ function montarPayloadSalvarCartao(id) {
         prioridade: getNullableString("cartaoPrioridade"),
         criticidade: getNullableString("cartaoCriticidade"),
         urgencia: getNullableString("cartaoUrgencia"),
+        status: getNullableString("cartaoStatus"),
         dataInicio: getNullableString("cartaoDataInicio"),
         dataVencimento: getNullableString("cartaoDataVencimento"),
         corCapa: getNullableString("cartaoCorCapa"),
@@ -632,6 +644,26 @@ function montarPayloadSalvarCartao(id) {
         chamadosIds: getSelectedNumbers("cartaoChamados"),
         etiquetasIds: [...document.querySelectorAll("[data-etiqueta-tarefa]:checked")].map(input => Number(input.dataset.etiquetaTarefa))
     };
+}
+
+function preencherObservacaoPendenteCartao(payload) {
+    const statusSelect = document.getElementById("cartaoStatus");
+    const statusAnterior = statusSelect?.dataset.originalStatus || "Ativa";
+    const statusNovo = payload.status || "Ativa";
+
+    if (statusAnterior !== "Pendente" && statusNovo === "Pendente") {
+        const valor = prompt("Observacao opcional ao colocar a tarefa em Pendente");
+        if (valor === null) return false;
+        const observacao = valor.trim();
+        if (observacao) payload.observacaoPendenteEntrada = observacao;
+    } else if (statusAnterior === "Pendente" && statusNovo !== "Pendente") {
+        const valor = prompt("Observacao opcional ao retirar a tarefa de Pendente");
+        if (valor === null) return false;
+        const observacao = valor.trim();
+        if (observacao) payload.observacaoPendenteSaida = observacao;
+    }
+
+    return true;
 }
 
 function cartaoPossuiAlteracoes(payload) {
@@ -648,6 +680,7 @@ function normalizarPayloadCartao(payload) {
         prioridade: normalizarTextoComparacao(payload.prioridade),
         criticidade: normalizarTextoComparacao(payload.criticidade),
         urgencia: normalizarTextoComparacao(payload.urgencia),
+        status: normalizarTextoComparacao(payload.status || "Ativa"),
         dataInicio: normalizarTextoComparacao(payload.dataInicio),
         dataVencimento: normalizarTextoComparacao(payload.dataVencimento),
         corCapa: normalizarTextoComparacao(payload.corCapa || "#0d6efd").toLowerCase(),

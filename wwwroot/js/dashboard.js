@@ -89,10 +89,12 @@ async function carregarResumoDashboard() {
 
 function renderizarResumo(dados) {
     const indicadores = dados.indicadores || {};
+    const tipoSla = dados.tipoSla || getValue("dashboardTipoSla") || "liquido";
     setMetric("totalChamados", indicadores.totalChamados);
     setMetric("totalFechados", indicadores.totalFechados);
     setMetric("totalReabertos", indicadores.totalReabertos);
     setMetric("tempoMedioSolucaoHoras", formatHoras(indicadores.tempoMedioSolucaoHoras));
+    setMetricLabel("tempoMedioSolucaoHoras", `Tempo médio de solução SLA ${tipoSla === "bruto" ? "bruto" : "líquido"}`);
 
     renderizarGrafico("dashboardGraficoSetor", "bar", dados.porSetor || [], { label: "Chamados" });
     renderizarGrafico("dashboardGraficoTipo", "bar", dados.porTipo || [], { label: "Chamados" });
@@ -120,7 +122,8 @@ function montarPayloadFiltros() {
         apenasReabertos: document.getElementById("dashboardReabertos")?.checked || false,
         incluirPrevisao: document.getElementById("dashboardPrevisao")?.checked || false,
         dimensaoPrincipal: getValue("dashboardDimensao") || "evolucao",
-        metricaCruzada: getValue("dashboardMetrica") || "quantidade"
+        metricaCruzada: getValue("dashboardMetrica") || "quantidade",
+        tipoSla: getValue("dashboardTipoSla") || "liquido"
     };
 }
 
@@ -303,6 +306,12 @@ function gerarCores(total) {
 function setMetric(nome, valor) {
     const el = document.querySelector(`[data-metric="${nome}"]`);
     if (el) el.textContent = valor === null || valor === undefined || valor === "" ? "-" : String(valor);
+}
+
+function setMetricLabel(nome, valor) {
+    const valorEl = document.querySelector(`[data-metric="${nome}"]`);
+    const labelEl = valorEl?.parentElement?.querySelector(".metric-label");
+    if (labelEl) labelEl.textContent = valor;
 }
 
 function formatHoras(valor) {

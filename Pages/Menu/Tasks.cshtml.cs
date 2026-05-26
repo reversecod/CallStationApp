@@ -30,14 +30,16 @@ public class TasksModel : PageModel
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly MencaoService _mencaoService;
+    private readonly SlaPausaService _slaPausaService;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<TasksModel> _logger;
 
-    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
+    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, SlaPausaService slaPausaService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
         _mencaoService = mencaoService;
+        _slaPausaService = slaPausaService;
         _environment = environment;
         _logger = logger;
     }
@@ -1444,7 +1446,10 @@ public class TasksModel : PageModel
                             titulo,
                             prioridade,
                             criticidade,
-                            urgencia);
+                            urgencia,
+                            Enum.TryParse<StatusCartaoTarefa>(request.Status, out var statusSolicitado)
+                                ? statusSolicitado
+                                : null);
 
                         await transaction.CommitAsync();
 
@@ -1916,11 +1921,13 @@ public class TasksModel : PageModel
             return Forbid();
         }
 
+        var statusAnterior = cartao.Status;
         var concluido = cartao.Status != StatusCartaoTarefa.Concluida;
         cartao.Status = concluido ? StatusCartaoTarefa.Concluida : StatusCartaoTarefa.Ativa;
         cartao.DataConclusao = concluido ? DateTime.UtcNow : null;
         cartao.PercentualConclusao = concluido ? 100m : 0m;
         cartao.DataAtualizacao = DateTime.UtcNow;
+        await _slaPausaService.RegistrarTransicaoCartaoAsync(cartao, statusAnterior, cartao.Status, usuarioId.Value, DateTime.UtcNow);
 
         RegistrarHistorico(cartao.Id, usuarioId.Value, concluido ? "Cartao concluído" : "Cartao reaberto");
         await _context.SaveChangesAsync();
@@ -3094,7 +3101,8 @@ public class TasksModel : PageModel
         string titulo,
         PrioridadeChamado? prioridade,
         CriticidadeChamado? criticidade,
-        UrgenciaChamado? urgencia)
+        UrgenciaChamado? urgencia,
+        StatusCartaoTarefa? statusSolicitado)
     {
         var coluna = await _context.ColunasQuadro
             .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa);
@@ -3110,6 +3118,8 @@ public class TasksModel : PageModel
 
         CartaoTarefa cartao;
         var novo = request.Id.GetValueOrDefault() <= 0;
+        var statusAnterior = StatusCartaoTarefa.Ativa;
+        DateTime? dataVencimentoAnterior = null;
 
         if (novo)
         {
@@ -3134,6 +3144,8 @@ public class TasksModel : PageModel
                 throw new UnauthorizedAccessException("Você não tem permissão para editar este cartão.");
             }
 
+            statusAnterior = cartao.Status;
+            dataVencimentoAnterior = cartao.DataVencimento;
             cartao.Titulo = titulo;
             cartao.ColunaId = coluna.Id;
             cartao.QuadroId = quadro.Id;
@@ -3145,12 +3157,35 @@ public class TasksModel : PageModel
         cartao.Urgencia = urgencia;
         cartao.DataInicio = request.DataInicio;
         cartao.DataVencimento = request.DataVencimento;
+        if (novo || cartao.DataVencimentoOperacional == null || cartao.DataVencimentoOperacional == dataVencimentoAnterior)
+            cartao.DataVencimentoOperacional = request.DataVencimento;
         cartao.CorCapa = NormalizarCor(request.CorCapa);
         cartao.Privado = !request.CompartilharGrupo;
         cartao.DataAtualizacao = DateTime.UtcNow;
 
+        var statusNovo = statusSolicitado ?? cartao.Status;
+        if (statusNovo != cartao.Status)
+        {
+            cartao.Status = statusNovo;
+            cartao.DataConclusao = statusNovo == StatusCartaoTarefa.Concluida ? DateTime.UtcNow : null;
+            cartao.PercentualConclusao = statusNovo == StatusCartaoTarefa.Concluida ? 100m : 0m;
+        }
+
         if (novo)
             await _context.SaveChangesAsync();
+
+        if (statusAnterior != cartao.Status)
+        {
+            await _slaPausaService.RegistrarTransicaoCartaoAsync(
+                cartao,
+                statusAnterior,
+                cartao.Status,
+                usuarioId,
+                DateTime.UtcNow,
+                request.ObservacaoPendenteEntrada,
+                request.ObservacaoPendenteSaida);
+            RegistrarHistorico(cartao.Id, usuarioId, $"Status alterado de {statusAnterior} para {cartao.Status}");
+        }
 
         var usuariosComAcesso = await SincronizarMembrosAsync(cartao.Id, request.GrupoId, request.MembrosIds, usuarioId, cartao.CriadorId);
         await SincronizarChamadosAsync(cartao, request.ChamadosIds, request.GrupoId, usuarioId, usuariosComAcesso);
@@ -3765,6 +3800,9 @@ public class TasksModel : PageModel
         public string? Prioridade { get; set; }
         public string? Criticidade { get; set; }
         public string? Urgencia { get; set; }
+        public string? Status { get; set; }
+        public string? ObservacaoPendenteEntrada { get; set; }
+        public string? ObservacaoPendenteSaida { get; set; }
         public DateTime? DataInicio { get; set; }
         public DateTime? DataVencimento { get; set; }
         public string? CorCapa { get; set; }

@@ -52,13 +52,14 @@ public class ChamadoStatusAutomationService : BackgroundService
             from chamado in context.Chamados.AsNoTracking()
             join configuracao in context.GruposConfiguracoes.AsNoTracking()
                 on chamado.GrupoId equals configuracao.GrupoId
-            where chamado.PrazoConclusao.HasValue &&
+            let prazoOperacional = chamado.PrazoConclusaoOperacional ?? chamado.PrazoConclusao
+            where prazoOperacional.HasValue &&
                   configuracao.AutomatizarPendentePorPrazoConclusao &&
                   configuracao.HorasAposVencimentoParaPendente.HasValue &&
                   StatusElegiveis.Contains(chamado.Status) &&
                   chamado.Status != StatusChamado.Excluido &&
-                  chamado.PrazoConclusao.Value.AddHours(configuracao.HorasAposVencimentoParaPendente.Value) <= agora
-            orderby chamado.PrazoConclusao
+                  prazoOperacional.Value.AddHours(configuracao.HorasAposVencimentoParaPendente.Value) <= agora
+            orderby prazoOperacional
             select new
             {
                 chamado.Id,

@@ -40,6 +40,7 @@ public class HomeModel : PageModel
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly NotificacaoService _notificacaoService;
     private readonly MencaoService _mencaoService;
+    private readonly SlaPausaService _slaPausaService;
     private readonly ILogger<HomeModel> _logger;
     private const int TamanhoPaginaChamados = 20;
 
@@ -49,6 +50,7 @@ public class HomeModel : PageModel
         GrupoAuthorizationService grupoAuthorizationService,
         NotificacaoService notificacaoService,
         MencaoService mencaoService,
+        SlaPausaService slaPausaService,
         ILogger<HomeModel> logger)
     {
         _context = context;
@@ -56,6 +58,7 @@ public class HomeModel : PageModel
         _grupoAuthorizationService = grupoAuthorizationService;
         _notificacaoService = notificacaoService;
         _mencaoService = mencaoService;
+        _slaPausaService = slaPausaService;
         _logger = logger;
     }
 
@@ -1375,6 +1378,7 @@ public class HomeModel : PageModel
             && chamado.PrazoConclusao != prazoConclusao)
         {
             chamado.PrazoConclusao = prazoConclusao;
+            chamado.PrazoConclusaoOperacional = prazoConclusao;
             houveAlteracao = true;
         }
 
@@ -1431,6 +1435,14 @@ public class HomeModel : PageModel
                 {
                     if (chamado.Status != statusAnteriorOriginal)
                     {
+                        await _slaPausaService.RegistrarTransicaoChamadoAsync(
+                            chamado,
+                            statusAnteriorOriginal,
+                            chamado.Status,
+                            idUsuario.Value,
+                            DateTime.UtcNow,
+                            request.ObservacaoPendenteEntrada,
+                            request.ObservacaoPendenteSaida);
                         RegistrarTransicaoStatusChamado(chamado, statusAnteriorOriginal, chamado.Status, idUsuario.Value, false, "Atualizacao manual");
                         RegistrarHistoricoAlteracaoStatus(chamado, statusAnteriorOriginal, chamado.Status, idUsuario.Value, "StatusManual");
                     }
@@ -3025,6 +3037,8 @@ public class HomeModel : PageModel
         public string? Criticidade { get; set; }
         public string? Urgencia { get; set; }
         public string? Status { get; set; }
+        public string? ObservacaoPendenteEntrada { get; set; }
+        public string? ObservacaoPendenteSaida { get; set; }
         public string? DataFinalizacao { get; set; }
         public string? PrazoResposta { get; set; }
         public string? PrazoConclusao { get; set; }

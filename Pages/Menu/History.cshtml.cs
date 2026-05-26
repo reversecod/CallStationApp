@@ -367,6 +367,7 @@ public class HistoryModel : PageModel
                 c.DataFinalizacao,
                 c.PrazoResposta,
                 c.PrazoConclusao,
+                c.PrazoConclusaoOperacional,
                 Setor = setor != null ? setor.NomeSetor : null,
                 TipoProblema = tipo != null ? tipo.TipoOcorrencia : null,
                 Categoria = categoria != null ? categoria.CategoriaOcorrencia : null,
@@ -442,6 +443,7 @@ public class HistoryModel : PageModel
                 dataFinalizacao = ParaDataHoraRegionalIso(detalhes.DataFinalizacao),
                 prazoResposta = ParaDataHoraRegionalIso(detalhes.PrazoResposta),
                 prazoConclusao = ParaDataHoraRegionalIso(detalhes.PrazoConclusao),
+                prazoConclusaoOperacional = ParaDataHoraRegionalIso(detalhes.PrazoConclusaoOperacional),
                 setor = detalhes.Setor,
                 tipoProblema = detalhes.TipoProblema,
                 categoria = detalhes.Categoria,
@@ -459,6 +461,255 @@ public class HistoryModel : PageModel
                 }),
                 podeAcessarVinculosChamado,
                 vinculos
+            }
+        });
+    }
+
+    public async Task<IActionResult> OnGetSlaChamadoAsync(int chamadoId)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, chamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        var chamado = await _context.Chamados
+            .AsNoTracking()
+            .Where(c => c.Id == chamadoId && c.GrupoId == GrupoId)
+            .Select(c => new
+            {
+                c.Id,
+                c.NumeroChamadoGrupo,
+                c.DataCriacao,
+                c.DataFinalizacao,
+                c.PrazoResposta,
+                c.PrazoConclusao,
+                c.PrazoConclusaoOperacional
+            })
+            .FirstOrDefaultAsync();
+
+        if (chamado == null)
+            return new JsonResult(new { success = false, message = "Chamado não encontrado." });
+
+        var periodos = await _context.ChamadosPeriodosPendentes
+            .AsNoTracking()
+            .Where(p => p.ChamadoId == chamado.Id)
+            .OrderBy(p => p.InicioPendente)
+            .Select(p => new
+            {
+                p.Id,
+                p.InicioPendente,
+                p.FimPendente,
+                p.DuracaoSegundos,
+                p.ObservacaoEntrada,
+                p.ObservacaoSaida,
+                p.CriadoPorUsuarioId,
+                p.FinalizadoPorUsuarioId
+            })
+            .ToListAsync();
+
+        var usuariosIds = periodos
+            .SelectMany(p => new[] { p.CriadoPorUsuarioId, p.FinalizadoPorUsuarioId ?? 0 })
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        var usuariosPorId = usuariosIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await _context.Usuarios
+                .AsNoTracking()
+                .Where(u => usuariosIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.NomeUsuario);
+
+        var encerramento = chamado.DataFinalizacao ?? DateTime.UtcNow;
+        var tempoBruto = encerramento >= chamado.DataCriacao
+            ? encerramento - chamado.DataCriacao
+            : TimeSpan.Zero;
+        var totalPendenteSegundos = periodos.Sum(p =>
+        {
+            if (p.DuracaoSegundos.HasValue)
+                return Math.Max(0, p.DuracaoSegundos.Value);
+
+            var fim = p.FimPendente ?? DateTime.UtcNow;
+            return fim >= p.InicioPendente
+                ? (long)(fim - p.InicioPendente).TotalSeconds
+                : 0L;
+        });
+        var tempoPendente = TimeSpan.FromSeconds(totalPendenteSegundos);
+        var tempoLiquido = tempoBruto - tempoPendente;
+        if (tempoLiquido < TimeSpan.Zero)
+            tempoLiquido = TimeSpan.Zero;
+
+        return new JsonResult(new
+        {
+            success = true,
+            dados = new
+            {
+                chamado.NumeroChamadoGrupo,
+                chamadoId = chamado.Id,
+                dataCriacao = ParaDataHoraRegionalDisplay(chamado.DataCriacao),
+                dataFinalizacao = ParaDataHoraRegionalDisplay(chamado.DataFinalizacao),
+                prazoResposta = ParaDataHoraRegionalDisplay(chamado.PrazoResposta),
+                prazoConclusao = ParaDataHoraRegionalDisplay(chamado.PrazoConclusao),
+                prazoConclusaoOperacional = ParaDataHoraRegionalDisplay(chamado.PrazoConclusaoOperacional),
+                tempoBrutoTexto = FormatarTempo(tempoBruto),
+                tempoLiquidoTexto = FormatarTempo(tempoLiquido),
+                tempoPendenteTexto = FormatarTempo(tempoPendente),
+                podeEditarPeriodos = PodeGerenciarChamadoNoHistorico(resultadoAcesso.ContextoMembro!.Permissao),
+                periodosPendentes = periodos.Select(p =>
+                {
+                    var fim = p.FimPendente ?? DateTime.UtcNow;
+                    var duracao = TimeSpan.FromSeconds(p.DuracaoSegundos ?? Math.Max(0, (long)(fim - p.InicioPendente).TotalSeconds));
+                    return new
+                    {
+                        id = p.Id,
+                        inicio = ParaDataHoraRegionalDisplay(p.InicioPendente),
+                        inicioIso = ParaDataHoraRegionalIso(p.InicioPendente),
+                        fim = p.FimPendente.HasValue ? ParaDataHoraRegionalDisplay(p.FimPendente.Value) : "Em aberto",
+                        fimIso = p.FimPendente.HasValue ? ParaDataHoraRegionalIso(p.FimPendente.Value) : null,
+                        duracaoTexto = FormatarTempo(duracao),
+                        p.ObservacaoEntrada,
+                        p.ObservacaoSaida,
+                        criadoPor = usuariosPorId.GetValueOrDefault(p.CriadoPorUsuarioId, "Não registrado"),
+                        finalizadoPor = p.FinalizadoPorUsuarioId.HasValue
+                            ? usuariosPorId.GetValueOrDefault(p.FinalizadoPorUsuarioId.Value, "Não registrado")
+                            : null
+                    };
+                })
+            }
+        });
+    }
+
+    public async Task<IActionResult> OnPostSalvarPeriodoPendenteSlaAsync([FromBody] SalvarPeriodoPendenteSlaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        if (!PodeGerenciarChamadoNoHistorico(resultadoAcesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para alterar períodos de SLA." });
+
+        if (!TryNormalizarDataHoraNullable(request.InicioPendente, out var inicio) || !inicio.HasValue)
+            return new JsonResult(new { success = false, message = "Informe o início do período pendente." });
+
+        if (!TryNormalizarDataHoraNullable(request.FimPendente, out var fim) || !fim.HasValue)
+            return new JsonResult(new { success = false, message = "Informe o fim do período pendente." });
+
+        if (fim.Value <= inicio.Value)
+            return new JsonResult(new { success = false, message = "O fim do período deve ser maior que o início." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var chamado = await _context.Chamados
+                    .FirstOrDefaultAsync(c => c.Id == request.ChamadoId && c.GrupoId == GrupoId && c.Status != StatusChamado.Excluido);
+                if (chamado == null)
+                    return (IActionResult)new JsonResult(new { success = false, message = "Chamado não encontrado." });
+
+                var periodoId = request.PeriodoId.GetValueOrDefault();
+                var existeSobreposicao = await _context.ChamadosPeriodosPendentes
+                    .AsNoTracking()
+                    .AnyAsync(p => p.ChamadoId == chamado.Id &&
+                                   p.Id != periodoId &&
+                                   p.FimPendente.HasValue &&
+                                   p.InicioPendente < fim.Value &&
+                                   inicio.Value < p.FimPendente.Value);
+                if (existeSobreposicao)
+                    return (IActionResult)new JsonResult(new { success = false, message = "Já existe um período pendente sobrepondo esse intervalo." });
+
+                ChamadoPeriodoPendente periodo;
+                if (periodoId > 0)
+                {
+                    periodo = await _context.ChamadosPeriodosPendentes
+                        .FirstOrDefaultAsync(p => p.Id == periodoId && p.ChamadoId == chamado.Id)
+                        ?? throw new InvalidOperationException("Período pendente não encontrado.");
+                }
+                else
+                {
+                    periodo = new ChamadoPeriodoPendente
+                    {
+                        ChamadoId = chamado.Id,
+                        CriadoPorUsuarioId = usuarioId.Value,
+                        CriadoEm = DateTime.UtcNow
+                    };
+                    _context.ChamadosPeriodosPendentes.Add(periodo);
+                }
+
+                periodo.InicioPendente = inicio.Value;
+                periodo.FimPendente = fim.Value;
+                periodo.DuracaoSegundos = Math.Max(0, (long)(fim.Value - inicio.Value).TotalSeconds);
+                periodo.ObservacaoEntrada = NormalizarObservacaoSla(request.ObservacaoEntrada);
+                periodo.ObservacaoSaida = NormalizarObservacaoSla(request.ObservacaoSaida);
+                periodo.FinalizadoPorUsuarioId = usuarioId.Value;
+                periodo.AtualizadoEm = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await RecalcularPrazoOperacionalChamadoAsync(chamado.Id);
+                RegistrarAuditoriaPeriodoSla(chamado, usuarioId.Value, periodoId > 0 ? "EditarPeriodoPendenteSla" : "InserirPeriodoPendenteSla");
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (IActionResult)new JsonResult(new { success = true, message = "Período pendente salvo." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+    }
+
+    public async Task<IActionResult> OnPostExcluirPeriodoPendenteSlaAsync([FromBody] ExcluirPeriodoPendenteSlaRequest request)
+    {
+        var usuarioId = GetUsuarioLogadoId();
+        if (usuarioId == null)
+            return Unauthorized();
+
+        var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
+        if (!resultadoAcesso.Success)
+            return new JsonResult(new { success = false, message = resultadoAcesso.Message });
+
+        if (!PodeGerenciarChamadoNoHistorico(resultadoAcesso.ContextoMembro!.Permissao))
+            return new JsonResult(new { success = false, message = "Você não tem permissão para excluir períodos de SLA." });
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var chamado = await _context.Chamados
+                    .FirstOrDefaultAsync(c => c.Id == request.ChamadoId && c.GrupoId == GrupoId && c.Status != StatusChamado.Excluido);
+                if (chamado == null)
+                    return (IActionResult)new JsonResult(new { success = false, message = "Chamado não encontrado." });
+
+                var periodo = await _context.ChamadosPeriodosPendentes
+                    .FirstOrDefaultAsync(p => p.Id == request.PeriodoId && p.ChamadoId == chamado.Id);
+                if (periodo == null)
+                    return (IActionResult)new JsonResult(new { success = false, message = "Período pendente não encontrado." });
+
+                _context.ChamadosPeriodosPendentes.Remove(periodo);
+                await _context.SaveChangesAsync();
+                await RecalcularPrazoOperacionalChamadoAsync(chamado.Id);
+                RegistrarAuditoriaPeriodoSla(chamado, usuarioId.Value, "ExcluirPeriodoPendenteSla");
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (IActionResult)new JsonResult(new { success = true, message = "Período pendente excluído." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         });
     }
@@ -2089,6 +2340,94 @@ public class HistoryModel : PageModel
         return $"{Math.Max(0, (int)valor.TotalMinutes)}min";
     }
 
+    private async Task RecalcularPrazoOperacionalChamadoAsync(int chamadoId)
+    {
+        var chamado = await _context.Chamados.FirstOrDefaultAsync(c => c.Id == chamadoId);
+        if (chamado == null)
+            return;
+
+        if (!chamado.PrazoConclusao.HasValue)
+        {
+            chamado.PrazoConclusaoOperacional = null;
+            return;
+        }
+
+        var periodos = await _context.ChamadosPeriodosPendentes
+            .AsNoTracking()
+            .Where(p => p.ChamadoId == chamadoId)
+            .Select(p => new { p.InicioPendente, p.FimPendente, p.DuracaoSegundos })
+            .ToListAsync();
+
+        var totalSegundos = periodos.Sum(p =>
+        {
+            if (p.DuracaoSegundos.HasValue)
+                return Math.Max(0, p.DuracaoSegundos.Value);
+
+            var fim = p.FimPendente ?? DateTime.UtcNow;
+            return fim > p.InicioPendente ? Math.Max(0, (long)(fim - p.InicioPendente).TotalSeconds) : 0L;
+        });
+
+        chamado.PrazoConclusaoOperacional = chamado.PrazoConclusao.Value.AddSeconds(totalSegundos);
+    }
+
+    private void RegistrarAuditoriaPeriodoSla(Chamado chamado, int usuarioId, string tipoAlteracao)
+    {
+        _context.HistoricoAlteracoesChamado.Add(new HistoricoAlteracaoChamado
+        {
+            ChamadoId = chamado.Id,
+            GrupoId = chamado.GrupoId,
+            UsuarioId = usuarioId,
+            CampoAlterado = "SLA Pendente",
+            ValorAnterior = null,
+            ValorAlterado = "Períodos pendentes recalculados",
+            TipoAlteracao = tipoAlteracao,
+            DataAlteracao = DateTime.UtcNow
+        });
+    }
+
+    private static string? NormalizarObservacaoSla(string? observacao)
+    {
+        var valor = observacao?.Trim();
+        if (string.IsNullOrWhiteSpace(valor))
+            return null;
+
+        return valor.Length <= 500 ? valor : valor[..500];
+    }
+
+    private static bool TryNormalizarDataHoraNullable(string? valor, out DateTime? resultado)
+    {
+        resultado = null;
+        if (string.IsNullOrWhiteSpace(valor))
+            return true;
+
+        var texto = valor.Trim();
+        var formatos = new[]
+        {
+            "yyyy-MM-dd'T'HH:mm",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy-MM-dd HH:mm:ss",
+            "dd/MM/yyyy HH:mm",
+            "dd/MM/yyyy HH:mm:ss",
+            "dd/MM/yyyy"
+        };
+
+        if (DateTime.TryParseExact(texto, formatos, CultureInfo.GetCultureInfo("pt-BR"), DateTimeStyles.None, out var dataHora) ||
+            DateTime.TryParse(texto, CultureInfo.GetCultureInfo("pt-BR"), DateTimeStyles.None, out dataHora))
+        {
+            resultado = DeDataHoraRegionalParaUtc(dataHora);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static DateTime DeDataHoraRegionalParaUtc(DateTime dataRegional)
+    {
+        var localRegional = DateTime.SpecifyKind(dataRegional, DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(localRegional, FusoHorarioRegional);
+    }
+
     private int? GetUsuarioLogadoId()
     {
         var claim = User.FindFirst("Id")?.Value;
@@ -2327,6 +2666,22 @@ public class HistoryModel : PageModel
     {
         public int ChamadoId { get; set; }
         public string? Status { get; set; }
+    }
+
+    public class SalvarPeriodoPendenteSlaRequest
+    {
+        public int ChamadoId { get; set; }
+        public int? PeriodoId { get; set; }
+        public string? InicioPendente { get; set; }
+        public string? FimPendente { get; set; }
+        public string? ObservacaoEntrada { get; set; }
+        public string? ObservacaoSaida { get; set; }
+    }
+
+    public class ExcluirPeriodoPendenteSlaRequest
+    {
+        public int ChamadoId { get; set; }
+        public int PeriodoId { get; set; }
     }
 
     public class SalvarDetalhesHistoricoRequest

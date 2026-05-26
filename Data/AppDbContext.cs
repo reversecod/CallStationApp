@@ -24,6 +24,7 @@ namespace CallStationApp.Data
         public DbSet<OcorrenciaSubcategoria> OcorrenciasSubcategoria { get; set; }
         public DbSet<Chamado> Chamados { get; set; }
         public DbSet<ChamadoVinculo> ChamadosVinculos { get; set; }
+        public DbSet<ChamadoPeriodoPendente> ChamadosPeriodosPendentes { get; set; }
         public DbSet<HistoricoStatusChamado> HistoricoStatusChamados { get; set; }
         public DbSet<ComentarioChamado> ComentariosChamados { get; set; }
         public DbSet<QuadroTarefa> QuadrosTarefas { get; set; }
@@ -32,6 +33,7 @@ namespace CallStationApp.Data
         public DbSet<CartaoTarefaContadorGrupo> CartaoTarefaContadorGrupo { get; set; }
         public DbSet<TemplateCartaoTarefa> TemplatesCartoesTarefas { get; set; }
         public DbSet<CartaoTarefa> CartoesTarefas { get; set; }
+        public DbSet<CartaoTarefaPeriodoPendente> CartoesTarefasPeriodosPendentes { get; set; }
         public DbSet<CartaoTarefaUsuario> CartoesTarefasUsuarios { get; set; }
         public DbSet<ComentarioTarefa> ComentariosTarefas { get; set; }
         public DbSet<AnexoTarefa> AnexosTarefas { get; set; }
@@ -597,6 +599,10 @@ namespace CallStationApp.Data
                     .HasColumnName("prazo_conclusao")
                     .HasColumnType("datetime");
 
+                entity.Property(c => c.PrazoConclusaoOperacional)
+                    .HasColumnName("prazo_conclusao_operacional")
+                    .HasColumnType("datetime");
+
                 entity.Property(c => c.Publico)
                     .HasColumnType("boolean")
                     .HasDefaultValue(false);
@@ -657,6 +663,23 @@ namespace CallStationApp.Data
                 entity.HasIndex(c => new { c.CriadorChamadoId, c.GrupoId, c.NumeroChamadoUsuarioGrupo })
                     .IsUnique()
                     .HasDatabaseName("ux_chamado_usuario_grupo_numero");
+            });
+
+            modelBuilder.Entity<ChamadoPeriodoPendente>(entity =>
+            {
+                entity.ToTable("Chamados_periodos_pendentes");
+                entity.Property(p => p.InicioPendente).HasColumnName("inicio_pendente").HasColumnType("datetime").IsRequired();
+                entity.Property(p => p.FimPendente).HasColumnName("fim_pendente").HasColumnType("datetime");
+                entity.Property(p => p.DuracaoSegundos).HasColumnName("duracao_segundos");
+                entity.Property(p => p.ObservacaoEntrada).HasColumnName("observacao_entrada").HasColumnType("varchar(500)").HasMaxLength(500);
+                entity.Property(p => p.ObservacaoSaida).HasColumnName("observacao_saida").HasColumnType("varchar(500)").HasMaxLength(500);
+                entity.Property(p => p.CriadoEm).HasColumnName("criado_em").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(p => p.AtualizadoEm).HasColumnName("atualizado_em").HasColumnType("datetime");
+                entity.HasIndex(p => p.ChamadoId).HasDatabaseName("idx_chamado_periodo_pendente_chamado");
+                entity.HasIndex(p => new { p.ChamadoId, p.FimPendente }).HasDatabaseName("idx_chamado_periodo_pendente_aberto");
+                entity.HasOne(p => p.Chamado).WithMany().HasForeignKey(p => p.ChamadoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.CriadoPorUsuario).WithMany().HasForeignKey(p => p.CriadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.FinalizadoPorUsuario).WithMany().HasForeignKey(p => p.FinalizadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<ChamadoVinculo>(entity =>
@@ -859,7 +882,7 @@ namespace CallStationApp.Data
                 entity.Property(c => c.Prioridade).HasConversion<string>().HasColumnType("ENUM('Baixa','Media','Alta','Critica')");
                 entity.Property(c => c.Criticidade).HasConversion<string>().HasColumnType("ENUM('Baixa','Media','Alta','Critico')");
                 entity.Property(c => c.Urgencia).HasConversion<string>().HasColumnType("ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia')");
-                entity.Property(c => c.Status).HasConversion<string>().HasColumnType("ENUM('Ativa','Concluida','Arquivada','Cancelada')").HasDefaultValue(StatusCartaoTarefa.Ativa);
+                entity.Property(c => c.Status).HasConversion<string>().HasColumnType("ENUM('Ativa','Pendente','Concluida','Arquivada','Cancelada')").HasDefaultValue(StatusCartaoTarefa.Ativa);
                 entity.Property(c => c.CorCapa).HasColumnName("cor_capa").HasColumnType("varchar(20)").HasMaxLength(20);
                 entity.Property(c => c.ImagemCapa).HasColumnName("imagem_capa").HasColumnType("varchar(255)").HasMaxLength(255);
                 entity.Property(c => c.OrdemColuna).HasColumnName("ordem_coluna").HasPrecision(18, 6);
@@ -870,6 +893,7 @@ namespace CallStationApp.Data
                 entity.Property(c => c.CriadoRapidamente).HasColumnName("criado_rapidamente").HasColumnType("boolean").HasDefaultValue(false);
                 entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(c => c.DataAtualizacao).HasColumnName("data_atualizacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(c => c.DataVencimentoOperacional).HasColumnName("data_vencimento_operacional").HasColumnType("datetime");
 
                 entity.HasIndex(c => new { c.GrupoId, c.NumeroCartaoGrupo }).IsUnique().HasDatabaseName("uq_cartoes_tarefas_numero_grupo");
                 entity.HasIndex(c => new { c.QuadroId, c.ColunaId, c.OrdemColuna }).HasDatabaseName("idx_cartoes_tarefas_quadro_coluna_ordem");
@@ -884,6 +908,23 @@ namespace CallStationApp.Data
                 entity.HasOne(c => c.PaiCartao).WithMany().HasForeignKey(c => c.PaiCartaoId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(c => c.Criador).WithMany().HasForeignKey(c => c.CriadorId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(c => c.ResponsavelUsuario).WithMany().HasForeignKey(c => c.ResponsavelUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CartaoTarefaPeriodoPendente>(entity =>
+            {
+                entity.ToTable("Cartoes_tarefas_periodos_pendentes");
+                entity.Property(p => p.InicioPendente).HasColumnName("inicio_pendente").HasColumnType("datetime").IsRequired();
+                entity.Property(p => p.FimPendente).HasColumnName("fim_pendente").HasColumnType("datetime");
+                entity.Property(p => p.DuracaoSegundos).HasColumnName("duracao_segundos");
+                entity.Property(p => p.ObservacaoEntrada).HasColumnName("observacao_entrada").HasColumnType("varchar(500)").HasMaxLength(500);
+                entity.Property(p => p.ObservacaoSaida).HasColumnName("observacao_saida").HasColumnType("varchar(500)").HasMaxLength(500);
+                entity.Property(p => p.CriadoEm).HasColumnName("criado_em").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(p => p.AtualizadoEm).HasColumnName("atualizado_em").HasColumnType("datetime");
+                entity.HasIndex(p => p.CartaoTarefaId).HasDatabaseName("idx_cartao_periodo_pendente_cartao");
+                entity.HasIndex(p => new { p.CartaoTarefaId, p.FimPendente }).HasDatabaseName("idx_cartao_periodo_pendente_aberto");
+                entity.HasOne(p => p.CartaoTarefa).WithMany().HasForeignKey(p => p.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.CriadoPorUsuario).WithMany().HasForeignKey(p => p.CriadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.FinalizadoPorUsuario).WithMany().HasForeignKey(p => p.FinalizadoPorUsuarioId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<CartaoTarefaUsuario>(entity =>

@@ -165,6 +165,7 @@ CREATE TABLE Chamados (
     data_finalizacao DATETIME,
     prazo_resposta DATETIME,
     prazo_conclusao DATETIME,
+    prazo_conclusao_operacional DATETIME,
     publico BOOLEAN NOT NULL DEFAULT FALSE,
 
     CONSTRAINT fk_chamado_criador
@@ -189,6 +190,36 @@ CREATE INDEX idx_chamados_grupo_status_data
 
 CREATE INDEX idx_chamados_grupo_publico_data
     ON Chamados (grupo_id, publico, data_criacao);
+
+CREATE TABLE Chamados_periodos_pendentes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    chamado_id INT NOT NULL,
+    inicio_pendente DATETIME NOT NULL,
+    fim_pendente DATETIME NULL,
+    duracao_segundos BIGINT NULL,
+    observacao_entrada VARCHAR(500) NULL,
+    observacao_saida VARCHAR(500) NULL,
+    criado_por_usuario_id INT NOT NULL,
+    finalizado_por_usuario_id INT NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME NULL,
+    aberto_chave INT GENERATED ALWAYS AS (CASE WHEN fim_pendente IS NULL THEN chamado_id ELSE NULL END) STORED,
+
+    CONSTRAINT fk_chamado_periodo_pendente_chamado
+        FOREIGN KEY (chamado_id) REFERENCES Chamados(id),
+    CONSTRAINT fk_chamado_periodo_pendente_criado_por
+        FOREIGN KEY (criado_por_usuario_id) REFERENCES Usuarios(id),
+    CONSTRAINT fk_chamado_periodo_pendente_finalizado_por
+        FOREIGN KEY (finalizado_por_usuario_id) REFERENCES Usuarios(id),
+    CONSTRAINT uq_chamado_periodo_pendente_aberto
+        UNIQUE (aberto_chave)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX idx_chamado_periodo_pendente_chamado
+    ON Chamados_periodos_pendentes (chamado_id);
+
+CREATE INDEX idx_chamado_periodo_pendente_aberto
+    ON Chamados_periodos_pendentes (chamado_id, fim_pendente);
 
 CREATE INDEX idx_chamados_grupo_criador_data
     ON Chamados (grupo_id, criador_chamado_id, data_criacao);
@@ -435,7 +466,7 @@ CREATE TABLE Cartoes_tarefas (
     criticidade ENUM('Baixa','Media','Alta','Critico') NULL,
     urgencia ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia') NULL,
 
-    status ENUM('Ativa','Concluida','Arquivada','Cancelada')
+    status ENUM('Ativa','Pendente','Concluida','Arquivada','Cancelada')
         NOT NULL DEFAULT 'Ativa',
 
     cor_capa VARCHAR(20) NULL,
@@ -443,6 +474,7 @@ CREATE TABLE Cartoes_tarefas (
 
     data_inicio DATETIME NULL,
     data_vencimento DATETIME NULL,
+    data_vencimento_operacional DATETIME NULL,
     data_conclusao DATETIME NULL,
 
     ordem_coluna DECIMAL(18,6) NOT NULL,
@@ -494,6 +526,36 @@ CREATE INDEX idx_cartoes_tarefas_criador
 
 CREATE INDEX idx_cartoes_tarefas_pai
     ON Cartoes_tarefas (pai_cartao_id);
+
+CREATE TABLE Cartoes_tarefas_periodos_pendentes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cartao_tarefa_id INT NOT NULL,
+    inicio_pendente DATETIME NOT NULL,
+    fim_pendente DATETIME NULL,
+    duracao_segundos BIGINT NULL,
+    observacao_entrada VARCHAR(500) NULL,
+    observacao_saida VARCHAR(500) NULL,
+    criado_por_usuario_id INT NOT NULL,
+    finalizado_por_usuario_id INT NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME NULL,
+    aberto_chave INT GENERATED ALWAYS AS (CASE WHEN fim_pendente IS NULL THEN cartao_tarefa_id ELSE NULL END) STORED,
+
+    CONSTRAINT fk_cartao_periodo_pendente_cartao
+        FOREIGN KEY (cartao_tarefa_id) REFERENCES Cartoes_tarefas(id),
+    CONSTRAINT fk_cartao_periodo_pendente_criado_por
+        FOREIGN KEY (criado_por_usuario_id) REFERENCES Usuarios(id),
+    CONSTRAINT fk_cartao_periodo_pendente_finalizado_por
+        FOREIGN KEY (finalizado_por_usuario_id) REFERENCES Usuarios(id),
+    CONSTRAINT uq_cartao_periodo_pendente_aberto
+        UNIQUE (aberto_chave)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX idx_cartao_periodo_pendente_cartao
+    ON Cartoes_tarefas_periodos_pendentes (cartao_tarefa_id);
+
+CREATE INDEX idx_cartao_periodo_pendente_aberto
+    ON Cartoes_tarefas_periodos_pendentes (cartao_tarefa_id, fim_pendente);
 
 -- =========================================================
 -- 6) USUÁRIOS COM ACESSO DIRETO À TAREFA

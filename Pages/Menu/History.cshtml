@@ -767,6 +767,24 @@
             text-align:center;
         }
 
+        .history-sla-button {
+            width:100%;
+            text-align:left;
+            background:rgba(37, 99, 235, .10);
+            border:1px solid rgba(37, 99, 235, .24);
+            color:#1e3a8a;
+            border-radius:.5rem;
+            padding:.45rem .55rem;
+        }
+        .history-sla-button:hover { background:rgba(37, 99, 235, .16); }
+        .sla-timeline { display:grid; gap:.75rem; }
+        .sla-timeline-item {
+            border-left:3px solid #7c3aed;
+            padding:.25rem 0 .25rem .85rem;
+        }
+        .sla-timeline-item.is-pending { border-left-color:#ea580c; }
+        .sla-timeline-item.is-end { border-left-color:#16a34a; }
+
         @@media (max-width: 1200px) {
             :root {
                 --history-col-criado: minmax(0, 1fr);
@@ -858,7 +876,7 @@
                 </div>
                 <div class="filter-cell">
                     <button type="button" class="filter-button" data-sort-field="tempo-total" data-sort-type="number" data-default-dir="asc">
-                        <span>Tempo total</span>
+                        <span>Tempo total - SLA</span>
                         <span class="sort-indicator">-</span>
                     </button>
                 </div>
@@ -952,10 +970,13 @@
                                     </div>
                                 </div>
                                 <div class="history-cell">
-                                    <div class="history-block">
-                                        <div class="history-label">Tempo total</div>
-                                        <div class="history-value" title="@FormatarTempo(chamado.TempoResolucao)">@FormatarTempo(chamado.TempoResolucao)</div>
-                                    </div>
+                                    <button type="button"
+                                            class="history-block history-sla-button btn-abrir-sla"
+                                            data-chamado-id="@chamado.Id"
+                                            title="@FormatarTempo(chamado.TempoResolucao)">
+                                        <span class="history-label">Tempo total - SLA</span>
+                                        <span class="history-value">@FormatarTempo(chamado.TempoResolucao)</span>
+                                    </button>
                                 </div>
                                 <div class="history-cell">
                                     @if (Model.UsuarioLogadoPodeAlterarStatusHistorico)
@@ -1067,6 +1088,23 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalSlaHistorico" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="slaHistoricoTitulo">Tempo total - SLA</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="slaHistoricoConteudo">
+                <div class="text-muted">Carregando...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="modalStatusHistorico" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -1116,16 +1154,20 @@
         const sortButtons = Array.from(document.querySelectorAll("#historySortBar .filter-button"));
         const comentariosModalElement = document.getElementById("modalComentariosHistorico");
         const detalhesModalElement = document.getElementById("modalDetalhesHistorico");
+        const slaModalElement = document.getElementById("modalSlaHistorico");
         const statusModalElement = document.getElementById("modalStatusHistorico");
         const imagemPreviewElement = document.getElementById("modalVisualizarImagemHistorico");
         const imagemPreview = document.getElementById("imagemVisualizacaoHistorico");
         const comentariosModal = comentariosModalElement ? bootstrap.Modal.getOrCreateInstance(comentariosModalElement) : null;
         const detalhesModal = detalhesModalElement ? bootstrap.Modal.getOrCreateInstance(detalhesModalElement) : null;
+        const slaModal = slaModalElement ? bootstrap.Modal.getOrCreateInstance(slaModalElement) : null;
         const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
         const imagemPreviewModal = imagemPreviewElement ? bootstrap.Modal.getOrCreateInstance(imagemPreviewElement) : null;
         const listaComentarios = document.getElementById("listaComentariosHistorico");
         const detalhesTitulo = document.getElementById("detalhesHistoricoTitulo");
         const detalhesConteudo = document.getElementById("detalhesHistoricoConteudo");
+        const slaTitulo = document.getElementById("slaHistoricoTitulo");
+        const slaConteudo = document.getElementById("slaHistoricoConteudo");
         const comentariosChamadoIdInput = document.getElementById("comentariosChamadoId");
         const textoNovoComentario = document.getElementById("textoNovoComentarioHistorico");
         const btnEnviarComentario = document.getElementById("btnEnviarComentarioHistorico");
@@ -1218,6 +1260,12 @@
             const btnComentarios = event.target.closest(".btn-abrir-comentarios");
             if (btnComentarios) {
                 abrirComentarios(Number(btnComentarios.dataset.chamadoId));
+                return;
+            }
+
+            const btnSla = event.target.closest(".btn-abrir-sla");
+            if (btnSla) {
+                abrirSlaChamado(Number(btnSla.dataset.chamadoId));
                 return;
             }
 
@@ -1395,7 +1443,7 @@
                             ${renderizarCelulaHistorico("Tipo de problema", chamado.tipoProblema)}
                             ${renderizarCelulaHistorico("Data de abertura", chamado.dataCriacaoTexto)}
                             ${renderizarCelulaHistorico("Data de encerramento", chamado.dataFinalTexto)}
-                            ${renderizarCelulaHistorico("Tempo total", chamado.tempoResolucaoTexto)}
+                            ${renderizarCelulaSlaHistorico(chamado)}
                             ${renderizarStatusHistorico(chamado, statusTexto)}
                         </div>
                     </div>
@@ -1421,6 +1469,20 @@
                         <div class="history-label">${escapeHtml(label)}</div>
                         <div class="history-value" title="${escapeHtml(valor || "Não registrado")}">${escapeHtml(valor || "Não registrado")}</div>
                     </div>
+                </div>
+            `;
+        }
+
+        function renderizarCelulaSlaHistorico(chamado) {
+            return `
+                <div class="history-cell">
+                    <button type="button"
+                            class="history-block history-sla-button btn-abrir-sla"
+                            data-chamado-id="${Number(chamado.id || 0)}"
+                            title="${escapeHtml(chamado.tempoResolucaoTexto || "Não registrado")}">
+                        <span class="history-label">Tempo total - SLA</span>
+                        <span class="history-value">${escapeHtml(chamado.tempoResolucaoTexto || "Não registrado")}</span>
+                    </button>
                 </div>
             `;
         }
@@ -1535,6 +1597,218 @@
             } catch (error) {
                 detalhesConteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar os detalhes.")}</div>`;
             }
+        }
+
+        async function abrirSlaChamado(chamadoId) {
+            if (!chamadoId || !slaModal || !slaConteudo) return;
+
+            if (slaTitulo) slaTitulo.textContent = "Tempo total - SLA";
+            slaConteudo.innerHTML = '<div class="text-muted small">Carregando informações de SLA...</div>';
+            slaModal.show();
+
+            try {
+                const response = await fetch(`?handler=SlaChamado&grupoId=${encodeURIComponent(historyGrupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Não foi possível carregar o SLA.");
+                }
+
+                renderizarSlaChamado(data.dados || {});
+            } catch (error) {
+                slaConteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Não foi possível carregar o SLA.")}</div>`;
+            }
+        }
+
+        function renderizarSlaChamado(dados) {
+            if (!slaConteudo) return;
+
+            const numero = dados.numeroChamadoGrupo ? `#${dados.numeroChamadoGrupo}` : "";
+            if (slaTitulo) slaTitulo.textContent = `Tempo total - SLA ${numero}`.trim();
+
+            const periodos = dados.periodosPendentes || [];
+            const periodosHtml = periodos.length
+                ? periodos.map(periodo => `
+                    <div class="sla-timeline-item is-pending" data-sla-periodo-id="${Number(periodo.id || 0)}">
+                        <div class="d-flex align-items-start justify-content-between gap-2">
+                            <div class="fw-semibold">Pendente por ${escapeHtml(periodo.duracaoTexto || "0min")}</div>
+                            ${dados.podeEditarPeriodos ? `
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-primary" data-editar-periodo-sla="${Number(periodo.id || 0)}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger" data-excluir-periodo-sla="${Number(periodo.id || 0)}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            ` : ""}
+                        </div>
+                        <div class="small text-muted">${escapeHtml(periodo.inicio || "Não registrado")} até ${escapeHtml(periodo.fim || "Em aberto")}</div>
+                        <div class="small">Entrada: ${escapeHtml(periodo.observacaoEntrada || "Sem observação")}</div>
+                        <div class="small">Saída: ${escapeHtml(periodo.observacaoSaida || "Sem observação")}</div>
+                        <div class="small text-muted">Criado por ${escapeHtml(periodo.criadoPor || "Não registrado")}${periodo.finalizadoPor ? ` · Finalizado por ${escapeHtml(periodo.finalizadoPor)}` : ""}</div>
+                        <div class="d-none mt-2" data-form-periodo-sla="${Number(periodo.id || 0)}">
+                            ${renderizarFormularioPeriodoSla(dados.chamadoId, periodo)}
+                        </div>
+                    </div>
+                `).join("")
+                : '<div class="text-muted small">Nenhum período em Pendente registrado.</div>';
+
+            slaConteudo.innerHTML = `
+                <div class="row g-2 mb-3">
+                    ${renderizarResumoSla("Abertura", dados.dataCriacao)}
+                    ${renderizarResumoSla("Encerramento", dados.dataFinalizacao)}
+                    ${renderizarResumoSla("Prazo resposta", dados.prazoResposta)}
+                    ${renderizarResumoSla("Prazo conclusão bruto", dados.prazoConclusao)}
+                    ${renderizarResumoSla("Prazo operacional", dados.prazoConclusaoOperacional)}
+                    ${renderizarResumoSla("Tempo bruto", dados.tempoBrutoTexto)}
+                    ${renderizarResumoSla("Tempo líquido", dados.tempoLiquidoTexto)}
+                    ${renderizarResumoSla("Total em Pendente", dados.tempoPendenteTexto)}
+                </div>
+                <div class="sla-timeline">
+                    ${dados.podeEditarPeriodos ? `
+                        <div class="d-flex justify-content-end">
+                            <button type="button" class="btn btn-sm btn-primary" data-novo-periodo-sla="${Number(dados.chamadoId || 0)}">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar período
+                            </button>
+                        </div>
+                        <div class="d-none" data-form-novo-periodo-sla>
+                            ${renderizarFormularioPeriodoSla(dados.chamadoId, null)}
+                        </div>
+                    ` : ""}
+                    <div class="sla-timeline-item">
+                        <div class="fw-semibold">Chamado aberto</div>
+                        <div class="small text-muted">${escapeHtml(dados.dataCriacao || "Não registrado")}</div>
+                    </div>
+                    ${periodosHtml}
+                    <div class="sla-timeline-item is-end">
+                        <div class="fw-semibold">Chamado encerrado</div>
+                        <div class="small text-muted">${escapeHtml(dados.dataFinalizacao || "Não registrado")}</div>
+                    </div>
+                </div>
+            `;
+
+            inicializarAcoesSla(dados.chamadoId);
+        }
+
+        function renderizarFormularioPeriodoSla(chamadoId, periodo) {
+            return `
+                <div class="border rounded-2 p-2 bg-light">
+                    <input type="hidden" data-sla-campo="chamadoId" value="${Number(chamadoId || 0)}">
+                    <input type="hidden" data-sla-campo="periodoId" value="${Number(periodo?.id || 0)}">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Início</label>
+                            <input type="datetime-local" class="form-control form-control-sm" data-sla-campo="inicio" value="${escapeHtml(normalizarDataInput(periodo?.inicioIso))}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Fim</label>
+                            <input type="datetime-local" class="form-control form-control-sm" data-sla-campo="fim" value="${escapeHtml(normalizarDataInput(periodo?.fimIso))}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Observação entrada</label>
+                            <textarea class="form-control form-control-sm" rows="2" maxlength="500" data-sla-campo="observacaoEntrada">${escapeHtml(periodo?.observacaoEntrada || "")}</textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Observação saída</label>
+                            <textarea class="form-control form-control-sm" rows="2" maxlength="500" data-sla-campo="observacaoSaida">${escapeHtml(periodo?.observacaoSaida || "")}</textarea>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-cancelar-periodo-sla>Cancelar</button>
+                        <button type="button" class="btn btn-sm btn-primary" data-salvar-periodo-sla>Salvar</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function inicializarAcoesSla(chamadoId) {
+            slaConteudo?.querySelector("[data-novo-periodo-sla]")?.addEventListener("click", () => {
+                slaConteudo.querySelector("[data-form-novo-periodo-sla]")?.classList.remove("d-none");
+            });
+
+            slaConteudo?.querySelectorAll("[data-editar-periodo-sla]").forEach(botao => {
+                botao.addEventListener("click", () => {
+                    const id = botao.dataset.editarPeriodoSla;
+                    slaConteudo.querySelector(`[data-form-periodo-sla="${CSS.escape(id)}"]`)?.classList.remove("d-none");
+                });
+            });
+
+            slaConteudo?.querySelectorAll("[data-cancelar-periodo-sla]").forEach(botao => {
+                botao.addEventListener("click", () => botao.closest("[data-form-periodo-sla], [data-form-novo-periodo-sla]")?.classList.add("d-none"));
+            });
+
+            slaConteudo?.querySelectorAll("[data-salvar-periodo-sla]").forEach(botao => {
+                botao.addEventListener("click", () => salvarPeriodoSla(botao, chamadoId));
+            });
+
+            slaConteudo?.querySelectorAll("[data-excluir-periodo-sla]").forEach(botao => {
+                botao.addEventListener("click", () => excluirPeriodoSla(Number(botao.dataset.excluirPeriodoSla || 0), chamadoId));
+            });
+        }
+
+        async function salvarPeriodoSla(botao, chamadoId) {
+            const form = botao.closest("[data-form-periodo-sla], [data-form-novo-periodo-sla]");
+            if (!form) return;
+
+            const payload = {
+                chamadoId,
+                periodoId: Number(form.querySelector('[data-sla-campo="periodoId"]')?.value || 0) || null,
+                inicioPendente: form.querySelector('[data-sla-campo="inicio"]')?.value || null,
+                fimPendente: form.querySelector('[data-sla-campo="fim"]')?.value || null,
+                observacaoEntrada: form.querySelector('[data-sla-campo="observacaoEntrada"]')?.value || null,
+                observacaoSaida: form.querySelector('[data-sla-campo="observacaoSaida"]')?.value || null
+            };
+
+            try {
+                const data = await fetchJson(`?handler=SalvarPeriodoPendenteSla&grupoId=${encodeURIComponent(historyGrupoId)}`, payload);
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível salvar o período.");
+                    return;
+                }
+
+                mostrarToast(data.message || "Período salvo.", "success");
+                await abrirSlaChamado(chamadoId);
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível salvar o período.");
+            }
+        }
+
+        async function excluirPeriodoSla(periodoId, chamadoId) {
+            if (!periodoId || !chamadoId || !confirm("Excluir este período pendente?")) return;
+
+            try {
+                const data = await fetchJson(`?handler=ExcluirPeriodoPendenteSla&grupoId=${encodeURIComponent(historyGrupoId)}`, {
+                    chamadoId,
+                    periodoId
+                });
+                if (!data.success) {
+                    mostrarToast(data.message || "Não foi possível excluir o período.");
+                    return;
+                }
+
+                mostrarToast(data.message || "Período excluído.", "success");
+                await abrirSlaChamado(chamadoId);
+            } catch (error) {
+                mostrarToast(error.message || "Não foi possível excluir o período.");
+            }
+        }
+
+        function normalizarDataInput(value) {
+            const texto = String(value || "");
+            const match = texto.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+            return match ? match[1] : "";
+        }
+
+        function renderizarResumoSla(label, valor) {
+            return `
+                <div class="col-md-3 col-sm-6">
+                    <div class="detail-block h-100">
+                        <span class="detail-label">${escapeHtml(label)}</span>
+                        <span class="detail-value">${escapeHtml(valor || "Não registrado")}</span>
+                    </div>
+                </div>
+            `;
         }
 
         function renderizarDetalhesChamado(dados) {
