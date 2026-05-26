@@ -242,6 +242,10 @@
       background: linear-gradient(135deg, #b7791f, #f1b82d 55%, #ffe066);
     }
 
+    .ticket-em-atraso {
+      background: linear-gradient(135deg, #991b1b, #ea580c 58%, #fb923c);
+    }
+
     .ticket-em-andamento {
       background: linear-gradient(135deg, #1557b0, #2686df 55%, #63c7ff);
     }
@@ -948,6 +952,11 @@
         color: #92400e;
       }
 
+      .badge-status-ematraso {
+        background: #ffedd5;
+        color: #c2410c;
+      }
+
       .badge-status-cancelado,
       .badge-status-excluido {
         background: #fee2e2;
@@ -1202,6 +1211,7 @@
                             {
                                 StatusChamado.Aberto => "ticket-aberto",
                                 StatusChamado.Pendente => "ticket-pendente",
+                                StatusChamado.EmAtraso => "ticket-em-atraso",
                                 StatusChamado.EmAndamento => "ticket-em-andamento",
                                 StatusChamado.Reaberto => "ticket-reaberto",
                                 _ => "ticket-aberto"
@@ -1462,6 +1472,7 @@
                                             <option value="Aberto">Aberto</option>
                                             <option value="EmAndamento">Em andamento</option>
                                             <option value="Pendente">Pendente</option>
+                                            <option value="EmAtraso">Em atraso</option>
                                             <option value="Concluido">Concluído</option>
                                             <option value="Fechado">Fechado</option>
                                             <option value="Reaberto">Reaberto</option>

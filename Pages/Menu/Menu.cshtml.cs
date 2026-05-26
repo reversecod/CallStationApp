@@ -402,6 +402,7 @@ public class MenuModel : PageModel
                       gruposIds.Contains(chamado.GrupoId) &&
                       (chamado.Status == StatusChamado.Aberto ||
                        chamado.Status == StatusChamado.EmAndamento ||
+                       chamado.Status == StatusChamado.EmAtraso ||
                        chamado.Status == StatusChamado.Pendente) &&
                       (
                           usuarioGrupo.Permissao == PermissaoUsuario.Administracao ||

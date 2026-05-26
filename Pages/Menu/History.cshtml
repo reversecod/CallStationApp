@@ -195,6 +195,7 @@
 
         .ticket-status-concluido { background:linear-gradient(135deg, #1fba88, #70dd72); }
         .ticket-status-fechado { background:linear-gradient(135deg, #667285, #aeb9c8); }
+        .ticket-status-em-atraso { background:linear-gradient(135deg, #991b1b, #ea580c 58%, #fb923c); }
         .ticket-status-cancelado { background:linear-gradient(135deg, #ea4335, #ff7c7c); }
 
         .ticket-icon-button {
@@ -1080,6 +1081,7 @@
                     <option value="Concluido">Concluido</option>
                     <option value="Fechado">Fechado</option>
                     <option value="Reaberto">Reaberto</option>
+                    <option value="EmAtraso">Em atraso</option>
                     <option value="Cancelado">Cancelado</option>
                 </select>
             </div>
@@ -2024,6 +2026,7 @@
 
         function formatarStatusDetalhe(valor) {
             if (valor === "EmAndamento") return "Em andamento";
+            if (valor === "EmAtraso") return "Em atraso";
             return formatarValorDetalhe(valor);
         }
 
@@ -2260,7 +2263,7 @@
             }
 
             const statusTexto = dados.statusFormatado || dados.status || "";
-            card.classList.remove("ticket-status-concluido", "ticket-status-fechado", "ticket-status-cancelado");
+            card.classList.remove("ticket-status-concluido", "ticket-status-fechado", "ticket-status-em-atraso", "ticket-status-cancelado");
             card.classList.add(obterClasseStatusCard(statusTexto));
             card.dataset.sortStatusAtual = statusTexto;
             card.dataset.sortDataEncerramento = dados.dataFinalizacao ? Date.parse(dados.dataFinalizacao) : "0";
@@ -2287,6 +2290,7 @@
                 .replace(/\s+/g, "");
 
             if (normalizado === "concluido") return "ticket-status-concluido";
+            if (normalizado === "ematraso") return "ticket-status-em-atraso";
             if (normalizado === "cancelado") return "ticket-status-cancelado";
             return "ticket-status-fechado";
         }
@@ -2446,6 +2450,7 @@
         {
             "concluido" => "ticket-status-concluido",
             "fechado" => "ticket-status-fechado",
+            "ematraso" => "ticket-status-em-atraso",
             "cancelado" => "ticket-status-cancelado",
             _ => "ticket-status-fechado"
         };

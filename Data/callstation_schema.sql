@@ -155,7 +155,7 @@ CREATE TABLE Chamados (
     urgencia ENUM('NaoUrgente','PoucaUrgencia','Urgente','Emergencia'),
 
     status ENUM(
-        'Aberto','EmAndamento','Pendente',
+        'Aberto','EmAndamento','Pendente','EmAtraso',
         'Concluido','Fechado','Reaberto',
         'Cancelado','Excluido'
     ) NOT NULL DEFAULT 'Aberto',
@@ -242,12 +242,12 @@ CREATE TABLE Historico_status_chamados (
     chamado_id INT NOT NULL,
     usuario_id INT NULL,
     status_anterior ENUM(
-        'Aberto','EmAndamento','Pendente',
+        'Aberto','EmAndamento','Pendente','EmAtraso',
         'Concluido','Fechado','Reaberto',
         'Cancelado','Excluido'
     ) NOT NULL,
     status_novo ENUM(
-        'Aberto','EmAndamento','Pendente',
+        'Aberto','EmAndamento','Pendente','EmAtraso',
         'Concluido','Fechado','Reaberto',
         'Cancelado','Excluido'
     ) NOT NULL,

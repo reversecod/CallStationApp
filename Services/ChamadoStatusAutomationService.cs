@@ -95,16 +95,16 @@ public class ChamadoStatusAutomationService : BackgroundService
 
                 foreach (var chamado in chamados)
                 {
-                    chamado.Status = StatusChamado.Pendente;
+                    chamado.Status = StatusChamado.EmAtraso;
 
                     context.HistoricoStatusChamados.Add(new HistoricoStatusChamado
                     {
                         ChamadoId = chamado.Id,
                         StatusAnterior = Enum.Parse<StatusAnteriorChamado>(mapaStatusAnterior[chamado.Id].ToString()),
-                        StatusNovo = StatusNovoChamado.Pendente,
+                        StatusNovo = StatusNovoChamado.EmAtraso,
                         UsuarioId = null,
                         OrigemAutomatica = true,
-                        DescricaoOrigem = "Mudanca automatica do sistema por prazo excedido",
+                        DescricaoOrigem = "Mudanca automatica do sistema por prazo de conclusao excedido",
                         DataTransicao = agoraInterno
                     });
                 }

@@ -1147,6 +1147,7 @@ public class HomeModel : PageModel
             StatusChamado.Aberto,
             StatusChamado.EmAndamento,
             StatusChamado.Pendente,
+            StatusChamado.EmAtraso,
             StatusChamado.Concluido,
             StatusChamado.Fechado,
             StatusChamado.Reaberto,
@@ -2489,6 +2490,7 @@ public class HomeModel : PageModel
     private static string FormatarStatusChamado(StatusChamado status) => status switch
     {
         StatusChamado.EmAndamento => "Em andamento",
+        StatusChamado.EmAtraso => "Em atraso",
         StatusChamado.Concluido => "Concluido",
         _ => status.ToString()
     };

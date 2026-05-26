@@ -843,7 +843,7 @@ function atualizarCardChamadoStatusRapido(chamadoId, status) {
     if (!card) return;
 
     card.dataset.status = status;
-    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-andamento", "ticket-reaberto");
+    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-atraso", "ticket-em-andamento", "ticket-reaberto");
 
     if (status === "Concluido") {
         card.remove();
@@ -853,7 +853,7 @@ function atualizarCardChamadoStatusRapido(chamadoId, status) {
         return;
     }
 
-    card.classList.add(status === "EmAndamento" ? "ticket-em-andamento" : "ticket-aberto");
+    card.classList.add(obterClasseTicketStatus(status));
 }
 
 function animarAberturaEditorChamado() {
@@ -957,12 +957,29 @@ function formatarStatusChamado(valor) {
     switch (valor) {
         case "EmAndamento":
             return "Em andamento";
+        case "EmAtraso":
+            return "Em atraso";
         case "Concluido":
             return "Concluido";
         case "Reaberto":
             return "Reaberto";
         default:
             return valor || "-";
+    }
+}
+
+function obterClasseTicketStatus(status) {
+    switch (status) {
+        case "Pendente":
+            return "ticket-pendente";
+        case "EmAtraso":
+            return "ticket-em-atraso";
+        case "EmAndamento":
+            return "ticket-em-andamento";
+        case "Reaberto":
+            return "ticket-reaberto";
+        default:
+            return "ticket-aberto";
     }
 }
 
@@ -1181,7 +1198,7 @@ function obterClasseStatusSelect(valor) {
     const normalizado = (valor || "").toLowerCase();
     if (normalizado === "aberto" || normalizado === "concluido" || normalizado === "fechado") return "status-baixo";
     if (normalizado === "emandamento" || normalizado === "reaberto") return "status-neutro";
-    if (normalizado === "pendente") return "status-medio";
+    if (normalizado === "pendente" || normalizado === "ematraso") return "status-medio";
     if (normalizado === "cancelado" || normalizado === "excluido") return "status-grave";
     return "";
 }
@@ -2129,17 +2146,9 @@ function atualizarCardChamadoAposSalvar(payload) {
         return;
     }
 
-    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-andamento", "ticket-reaberto");
+    card.classList.remove("ticket-aberto", "ticket-pendente", "ticket-em-atraso", "ticket-em-andamento", "ticket-reaberto");
 
-    const classeStatus = payload.status === "Pendente"
-        ? "ticket-pendente"
-        : payload.status === "EmAndamento"
-            ? "ticket-em-andamento"
-            : payload.status === "Reaberto"
-                ? "ticket-reaberto"
-            : "ticket-aberto";
-
-    card.classList.add(classeStatus);
+    card.classList.add(obterClasseTicketStatus(payload.status));
 
     const texto = card.querySelector(".ticket-text");
     const cronometro = card.querySelector(".cronometro");

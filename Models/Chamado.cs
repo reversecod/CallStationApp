@@ -129,6 +129,8 @@ namespace CallStationApp.Models
         EmAndamento,
         [Display(Name = "Pendente")]
         Pendente,
+        [Display(Name = "Em atraso")]
+        EmAtraso,
         [Display(Name = "Concluido")]
         Concluido,
         [Display(Name = "Fechado")]

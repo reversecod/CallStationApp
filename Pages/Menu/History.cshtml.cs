@@ -32,6 +32,7 @@ public class HistoryModel : PageModel
         StatusChamado.Concluido,
         StatusChamado.Fechado,
         StatusChamado.Reaberto,
+        StatusChamado.EmAtraso,
         StatusChamado.Cancelado
     };
 
@@ -2055,6 +2056,7 @@ public class HistoryModel : PageModel
     private static string ObterClasseStatusCard(StatusChamado status) => status switch
     {
         StatusChamado.Concluido => "ticket-status-concluido",
+        StatusChamado.EmAtraso => "ticket-status-em-atraso",
         StatusChamado.Cancelado => "ticket-status-cancelado",
         _ => "ticket-status-fechado"
     };
@@ -2173,6 +2175,7 @@ public class HistoryModel : PageModel
         StatusChamado.Fechado => "Fechado",
         StatusChamado.Cancelado => "Cancelado",
         StatusChamado.EmAndamento => "Em andamento",
+        StatusChamado.EmAtraso => "Em atraso",
         StatusChamado.Reaberto => "Reaberto",
         _ => status.ToString()
     };

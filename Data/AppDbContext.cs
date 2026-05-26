@@ -576,7 +576,7 @@ namespace CallStationApp.Data
 
                 entity.Property(c => c.Status)
                     .HasConversion<string>()
-                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluido')")
+                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','EmAtraso','Concluido','Fechado','Reaberto','Cancelado','Excluido')")
                     .HasDefaultValue(StatusChamado.Aberto);
 
                 // ===== DATAS =====
@@ -713,12 +713,12 @@ namespace CallStationApp.Data
                 entity.Property(h => h.StatusAnterior)
                     .IsRequired()
                     .HasConversion<string>()
-                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluido')");
+                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','EmAtraso','Concluido','Fechado','Reaberto','Cancelado','Excluido')");
 
                 entity.Property(h => h.StatusNovo)
                     .IsRequired()
                     .HasConversion<string>()
-                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','Concluido','Fechado','Reaberto','Cancelado','Excluido')");
+                    .HasColumnType("ENUM('Aberto','EmAndamento','Pendente','EmAtraso','Concluido','Fechado','Reaberto','Cancelado','Excluido')");
 
                 entity.Property(h => h.DataTransicao)
                     .HasColumnName("data_transicao")

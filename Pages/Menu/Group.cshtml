@@ -522,12 +522,12 @@
             <section class="tab-pane fade" id="tabSla">
                 <div class="card section-card"><div class="card-body">
                     <div class="row g-3">
-                        @Switch("slaAtivo", "Mudar automaticamente para pendente quando houver prazo de conclusão", Model.Configuracao.AutomatizarPendentePorPrazoConclusao)
+                        @Switch("slaAtivo", "Mudar automaticamente para em atraso quando houver prazo de conclusão", Model.Configuracao.AutomatizarPendentePorPrazoConclusao)
                         @Switch("slaNotificarAdmins", "Notificar administradores sobre risco de SLA", Model.Configuracao.NotificarAdministradoresSla)
                         @Switch("slaExibirDataFinalizacao", "Exibir finalizacao no modal de edição", Model.Configuracao.ExibirDataFinalizacaoModal)
                         @Switch("slaExibirPrazoResposta", "Exibir prazo de resposta no modal de edição", Model.Configuracao.ExibirPrazoRespostaModal)
                         @Switch("slaExibirPrazoConclusao", "Exibir prazo de conclusão no modal de edição", Model.Configuracao.ExibirPrazoConclusaoModal)
-                        <div class="col-md-4"><label class="form-label">Horas após vencimento para pendente</label><input type="number" min="0" max="720" class="form-control" id="slaHorasApos" value="@Model.Configuracao.HorasAposVencimentoParaPendente"></div>
+                        <div class="col-md-4"><label class="form-label">Horas após vencimento para em atraso</label><input type="number" min="0" max="720" class="form-control" id="slaHorasApos" value="@Model.Configuracao.HorasAposVencimentoParaPendente"></div>
                         <div class="col-md-4"><label class="form-label">Horas antes do prazo para alerta</label><input type="number" min="0" max="720" class="form-control" id="slaHorasAntes" value="@Model.Configuracao.HorasAntesPrazoParaAlerta"></div>
                     </div>
                     <div class="d-flex justify-content-end mt-3"><button class="btn btn-primary" id="btnSalvarSla">Salvar SLA</button></div>
