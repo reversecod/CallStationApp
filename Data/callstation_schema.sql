@@ -137,7 +137,7 @@ CREATE TABLE Chamados (
     numero_chamado_usuario INT NOT NULL,
     numero_chamado_usuario_grupo INT NOT NULL,
 
-    titulo VARCHAR(41),
+    titulo VARCHAR(40),
     descricao VARCHAR(500),
     solucao VARCHAR(500),
 
