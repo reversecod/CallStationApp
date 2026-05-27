@@ -1027,6 +1027,7 @@ async function preencherFormularioEdicao(data) {
     const msg = document.getElementById("mensagemSelecioneChamado");
     const form = document.getElementById("formEdicaoChamado");
     const textoDataCriacao = document.getElementById("textoDataCriacao");
+    const criadoEmWrap = document.getElementById("chamadoCriadoEmWrap");
 
     if (!form) return;
 
@@ -1051,10 +1052,11 @@ async function preencherFormularioEdicao(data) {
     setValueIfExists("editOcorrenciaTipoId", data.ocorrenciaTipoId);
 
     if (textoDataCriacao) {
-        textoDataCriacao.textContent = data.dataCriacao
-            ? formatDateTimeDisplay(data.dataCriacao)
-            : "-";
+        const dataCriacaoTexto = data.dataCriacao ? formatDateTimeDisplay(data.dataCriacao) : "-";
+        textoDataCriacao.textContent = `Criado em: ${dataCriacaoTexto}`;
+        criadoEmWrap?.classList.toggle("d-none", !data.dataCriacao);
     }
+    atualizarObservacaoPendenteAtual(data.status, data.observacaoPendenteAtual);
 
     setValueIfExists("editPrioridade", data.prioridade);
     setValueIfExists("editCriticidade", data.criticidade);
@@ -1965,6 +1967,7 @@ function cancelarEdicaoChamado() {
     const label = document.getElementById("chamadoSelecionadoLabel");
     const metaInfo = document.getElementById("chamadoMetaInfo");
     const criadoPorWrap = document.getElementById("chamadoCriadoPorWrap");
+    const criadoEmWrap = document.getElementById("chamadoCriadoEmWrap");
     const statusInfo = document.getElementById("chamadoStatusInfo");
     const statusWrap = document.getElementById("chamadoStatusWrap");
 
@@ -1976,6 +1979,7 @@ function cancelarEdicaoChamado() {
         if (msg) msg.classList.remove("d-none");
         if (metaInfo) metaInfo.classList.add("d-none");
         if (criadoPorWrap) criadoPorWrap.classList.add("d-none");
+        if (criadoEmWrap) criadoEmWrap.classList.add("d-none");
         if (statusInfo) statusInfo.className = "meta-badge badge-status-aberto";
         if (statusWrap) statusWrap.classList.add("d-none");
 
@@ -2159,6 +2163,16 @@ function preencherObservacaoPendenteChamado(payload) {
     }
 
     return true;
+}
+
+function atualizarObservacaoPendenteAtual(status, observacao) {
+    const wrap = document.getElementById("wrapObservacaoPendenteAtual");
+    const texto = document.getElementById("textoObservacaoPendenteAtual");
+    if (!wrap || !texto) return;
+
+    const deveMostrar = status === "Pendente" && String(observacao || "").trim();
+    wrap.classList.toggle("d-none", !deveMostrar);
+    texto.textContent = deveMostrar ? observacao : "-";
 }
 
 function atualizarCardChamadoAposSalvar(payload) {

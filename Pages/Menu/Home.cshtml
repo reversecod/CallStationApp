@@ -877,9 +877,9 @@
       .chamado-meta {
         grid-area: meta;
         display: flex;
-        flex-wrap: nowrap;
-        gap: 0.75rem;
-        align-items: center;
+        flex-direction: column;
+        gap: 0.35rem;
+        align-items: flex-start;
         min-height: 2.5rem;
       }
 
@@ -903,6 +903,11 @@
         gap: 0.4rem;
         color: #6c757d;
         font-size: 0.95rem;
+      }
+
+      #chamadoCriadoEmWrap {
+        color: #334155;
+        font-weight: 500;
       }
 
       .badge {
@@ -1303,6 +1308,9 @@
                                         <span>Criado por</span>
                                         <span id="chamadoCriadoPor" class="meta-badge badge-permissao-nenhuma">-</span>
                                     </div>
+                                    <div id="chamadoCriadoEmWrap" class="meta-inline d-none">
+                                        <span id="textoDataCriacao">Criado em: -</span>
+                                    </div>
                                 </div>
                                 <div id="chamadoStatusWrap" class="chamado-status-topo d-none">
                                     <span id="chamadoStatusInfo" class="meta-badge badge-status-aberto">-</span>
@@ -1481,9 +1489,9 @@
                                     </div>
                                 </div>
 
-                                <div class="mb-2">
-                                    <label class="form-label">Criado em</label>
-                                    <div id="textoDataCriacao" class="form-control-plaintext text-muted">-</div>
+                                <div class="mb-2 d-none" id="wrapObservacaoPendenteAtual">
+                                    <label class="form-label">Pendência</label>
+                                    <div id="textoObservacaoPendenteAtual" class="form-control-plaintext text-muted">-</div>
                                 </div>
 
                                 <div class="row">

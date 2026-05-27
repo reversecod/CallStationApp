@@ -329,6 +329,15 @@ public class HomeModel : PageModel
             .AsNoTracking()
             .AnyAsync(c => c.ChamadoId == chamado.Id);
 
+        var observacaoPendenteAtual = chamado.Status == StatusChamado.Pendente
+            ? await _context.ChamadosPeriodosPendentes
+                .AsNoTracking()
+                .Where(p => p.ChamadoId == chamado.Id && p.FimPendente == null)
+                .OrderByDescending(p => p.InicioPendente)
+                .Select(p => p.ObservacaoEntrada)
+                .FirstOrDefaultAsync()
+            : null;
+
         return new JsonResult(new
         {
             success = true,
@@ -347,6 +356,7 @@ public class HomeModel : PageModel
             criticidade = chamado.Criticidade?.ToString(),
             urgencia = chamado.Urgencia?.ToString(),
             status = chamado.Status.ToString(),
+            observacaoPendenteAtual,
             temComentarios,
             dataCriacao = ParaDataHoraRegionalIso(chamado.DataCriacao),
             dataFinalizacao = ParaDataHoraRegionalIso(chamado.DataFinalizacao),
