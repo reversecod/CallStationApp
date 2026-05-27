@@ -1942,7 +1942,7 @@
         function renderizarControleInlineHistorico(campo, dados) {
             const opcoes = dados.opcoesEdicao || {};
             if (campo === "titulo") {
-                return `<input type="text" class="form-control" id="editHistoricoTitulo" maxlength="42" value="${escapeHtml(dados.titulo || "")}">`;
+                return `<input type="text" class="form-control" id="editHistoricoTitulo" maxlength="41" value="${escapeHtml(dados.titulo || "")}">`;
             }
             if (campo === "descricao") {
                 return `<textarea class="form-control" id="editHistoricoDescricao" rows="5" maxlength="500"></textarea>`;

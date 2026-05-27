@@ -1568,8 +1568,8 @@ public class HistoryModel : PageModel
         if (camposEditados.Count == 0)
             return new JsonResult(new { success = true, dados = new { chamadoId = request.ChamadoId, message = "Nenhuma alteração feita." } });
 
-        if (!string.IsNullOrWhiteSpace(titulo) && titulo.Length > 42)
-            return new JsonResult(new { success = false, message = "Título deve ter no máximo 42 caracteres." });
+        if (!string.IsNullOrWhiteSpace(titulo) && titulo.Length > 41)
+            return new JsonResult(new { success = false, message = "Título deve ter no máximo 41 caracteres." });
         if (!string.IsNullOrWhiteSpace(descricao) && descricao.Length > 500)
             return new JsonResult(new { success = false, message = "Descrição deve ter no máximo 500 caracteres." });
         if (!string.IsNullOrWhiteSpace(solucao) && solucao.Length > 500)

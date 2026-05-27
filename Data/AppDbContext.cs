@@ -547,8 +547,8 @@ namespace CallStationApp.Data
 
                 // ===== CAMPOS BÁSICOS =====
                 entity.Property(c => c.Titulo)
-                    .HasColumnType("varchar(42)")
-                    .HasMaxLength(42);
+                    .HasColumnType("varchar(41)")
+                    .HasMaxLength(41);
 
                 entity.Property(c => c.Descricao)
                     .HasColumnType("varchar(500)")
