@@ -96,9 +96,23 @@ public class ProfileModel : PageModel
         if (!string.IsNullOrWhiteSpace(NovaSenha))
             usuario.Senha = _passwordHasher.HashPassword(usuario, NovaSenha);
 
+        var strategy = _context.Database.CreateExecutionStrategy();
         try
         {
-            await _context.SaveChangesAsync();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {

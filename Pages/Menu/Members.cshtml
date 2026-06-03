@@ -642,6 +642,28 @@
             elemento.textContent = mensagem;
         }
 
+        async function lerRespostaJson(response, mensagemPadrao) {
+            let data = null;
+            try {
+                data = await response.json();
+            } catch {
+            }
+
+            if (!data) {
+                return {
+                    success: false,
+                    message: mensagemPadrao || `Erro HTTP: ${response.status}`
+                };
+            }
+
+            if (!response.ok && data.success !== false) {
+                data.success = false;
+                data.message = data.message || mensagemPadrao || `Erro HTTP: ${response.status}`;
+            }
+
+            return data;
+        }
+
         inputBuscarUsuario?.addEventListener("input", function () {
             const termo = this.value.trim();
             limparFeedbackConvite();
@@ -657,7 +679,7 @@
             timeoutBuscaUsuario = setTimeout(async () => {
                 try {
                     const response = await fetch(`/Menu/Members?handler=BuscarUsuarios&grupoId=${grupoIdAtual}&termo=${encodeURIComponent(termo)}`);
-                    const data = await response.json();
+                    const data = await lerRespostaJson(response, "Erro ao buscar usuários.");
 
                     if (!data.success) {
                         exibirFeedbackConvite("danger", data.message || "Erro ao buscar usuários.");
@@ -694,7 +716,7 @@
                     })
                 });
 
-                const data = await response.json();
+                const data = await lerRespostaJson(response, "Erro ao enviar solicitação.");
 
                 if (!data.success) {
                     exibirFeedbackConvite("danger", data.message || "Erro ao enviar solicitação.");
@@ -779,7 +801,7 @@
                     })
                 });
 
-                const data = await response.json();
+                const data = await lerRespostaJson(response, "Erro ao editar apelido.");
 
                 if (!data.success) {
                     exibirFeedbackElemento(feedbackEditarApelido, "danger", data.message || "Erro ao editar apelido.");
@@ -812,7 +834,7 @@
                     })
                 });
 
-                const data = await response.json();
+                const data = await lerRespostaJson(response, "Erro ao alterar permissão.");
 
                 if (!data.success) {
                     exibirFeedbackElemento(feedbackAlterarPermissao, "danger", data.message || "Erro ao alterar permissão.");
@@ -844,7 +866,7 @@
                     })
                 });
 
-                const data = await response.json();
+                const data = await lerRespostaJson(response, "Erro ao remover membro.");
 
                 if (!data.success) {
                     exibirFeedbackElemento(feedbackRemoverMembro, "danger", data.message || "Erro ao remover membro.");

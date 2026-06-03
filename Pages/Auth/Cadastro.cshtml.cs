@@ -102,10 +102,24 @@ public class CadastroModel : PageModel
         
         novoUsuario.Senha = _passwordHasher.HashPassword(novoUsuario, Senha);
         
-        Context.Usuarios.Add(novoUsuario);
+        var strategy = Context.Database.CreateExecutionStrategy();
         try
         {
-            await Context.SaveChangesAsync();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await Context.Database.BeginTransactionAsync();
+                try
+                {
+                    Context.Usuarios.Add(novoUsuario);
+                    await Context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {

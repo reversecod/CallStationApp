@@ -435,8 +435,8 @@ CREATE TABLE Templates_cartoes_tarefas (
         FOREIGN KEY (criado_por_usuario_id) REFERENCES Usuarios(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE UNIQUE INDEX uq_templates_cartoes_tarefas_grupo_nome_ativo
-    ON Templates_cartoes_tarefas (grupo_id, nome, ativo);
+CREATE UNIQUE INDEX uq_templates_cartoes_tarefas_grupo_nome
+    ON Templates_cartoes_tarefas (grupo_id, nome);
 
 -- =========================================================
 -- 5) CARTÕES / TAREFAS

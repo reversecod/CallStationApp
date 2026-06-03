@@ -63,6 +63,9 @@ namespace CallStationApp.Models
 
         [ForeignKey(nameof(GrupoId))]
         public Grupo? Grupo { get; set; }
+
+        [ForeignKey(nameof(MencaoId))]
+        public MencaoTexto? Mencao { get; set; }
     }
 
     public enum TipoNotificacao

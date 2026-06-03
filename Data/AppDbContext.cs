@@ -1195,7 +1195,7 @@ namespace CallStationApp.Data
                     .HasForeignKey(n => n.UsuarioOrigemId)
                     .OnDelete(DeleteBehavior.Restrict);
 
-                entity.HasOne<MencaoTexto>()
+                entity.HasOne(n => n.Mencao)
                     .WithMany()
                     .HasForeignKey(n => n.MencaoId)
                     .OnDelete(DeleteBehavior.Restrict);

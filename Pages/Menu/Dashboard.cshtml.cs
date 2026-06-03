@@ -79,6 +79,9 @@ public class DashboardModel : PageModel
         if (acesso.Result != null)
             return acesso.Result;
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
+
         var filtro = NormalizarFiltro(request, acesso.Contexto!.Permissao, acesso.UsuarioId);
         if (filtro.Erro != null)
             return BadRequest(new { success = false, message = filtro.Erro });
@@ -150,6 +153,9 @@ public class DashboardModel : PageModel
         if (acesso.Result != null)
             return acesso.Result;
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
+
         var filtro = NormalizarFiltro(request, acesso.Contexto!.Permissao, acesso.UsuarioId);
         if (filtro.Erro != null)
             return BadRequest(new { success = false, message = filtro.Erro });
@@ -162,15 +168,34 @@ public class DashboardModel : PageModel
             .Select(h => h.ChamadoId)
             .Distinct();
 
-        var totalChamados = await query.CountAsync();
-        var totalFechados = await query.CountAsync(c => c.Status == StatusChamado.Concluido || c.Status == StatusChamado.Fechado);
-        var totalReabertos = await query.CountAsync(c =>
-            reabertosIds.Contains(c.Id) &&
-            (c.Status == StatusChamado.Concluido || c.Status == StatusChamado.Fechado));
-        var totalMes = await query.CountAsync(c => c.DataCriacao.Year == filtro.DataInicial.Year && c.DataCriacao.Month == filtro.DataInicial.Month);
+        var inicioMesFiltro = new DateTime(filtro.DataInicial.Year, filtro.DataInicial.Month, 1);
+        var fimMesFiltro = inicioMesFiltro.AddMonths(1);
+        var indicadoresAgregados = await query
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalChamados = g.Count(),
+                TotalFechados = g.Sum(c => c.Status == StatusChamado.Concluido || c.Status == StatusChamado.Fechado ? 1 : 0),
+                TotalReabertos = g.Sum(c => reabertosIds.Contains(c.Id) &&
+                                             (c.Status == StatusChamado.Concluido || c.Status == StatusChamado.Fechado)
+                    ? 1
+                    : 0),
+                TotalMes = g.Sum(c => c.DataCriacao >= inicioMesFiltro && c.DataCriacao < fimMesFiltro ? 1 : 0),
+                TempoMedioRespostaMinutos = g.Average(c => c.DataInicioAtendimento.HasValue
+                    ? (double?)EF.Functions.DateDiffMinute(c.DataCriacao, c.DataInicioAtendimento.Value)
+                    : null)
+            })
+            .FirstOrDefaultAsync();
+
+        var totalChamados = indicadoresAgregados?.TotalChamados ?? 0;
+        var totalFechados = indicadoresAgregados?.TotalFechados ?? 0;
+        var totalReabertos = indicadoresAgregados?.TotalReabertos ?? 0;
+        var totalMes = indicadoresAgregados?.TotalMes ?? 0;
         var usarSlaBruto = string.Equals(request.TipoSla, "bruto", StringComparison.OrdinalIgnoreCase);
         var tempoMedioSolucao = await CalcularTempoMedioSolucaoAsync(query, usarSlaBruto);
-        var tempoMedioResposta = await CalcularTempoMedioRespostaAsync(query);
+        var tempoMedioResposta = indicadoresAgregados?.TempoMedioRespostaMinutos.HasValue == true
+            ? (double?)Math.Round(indicadoresAgregados.TempoMedioRespostaMinutos.Value / 60, 1)
+            : null;
 
         var porSetor = await (from chamado in query
                               join setor in _context.Setores.AsNoTracking() on chamado.SetorId equals setor.Id into setorJoin
@@ -400,15 +425,6 @@ public class DashboardModel : PageModel
             .Average();
 
         return Math.Round(mediaHoras, 1);
-    }
-
-    private async Task<double?> CalcularTempoMedioRespostaAsync(IQueryable<Chamado> query)
-    {
-        var minutos = await query
-            .Where(c => c.DataInicioAtendimento.HasValue)
-            .Select(c => (double?)EF.Functions.DateDiffMinute(c.DataCriacao, c.DataInicioAtendimento!.Value))
-            .AverageAsync();
-        return minutos.HasValue ? Math.Round(minutos.Value / 60, 1) : null;
     }
 
     private async Task<List<DashboardPontoVm>> MontarTarefasPorStatusAsync(int usuarioId, PermissaoUsuario permissao, FiltroNormalizado filtro)

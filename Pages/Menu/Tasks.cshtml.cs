@@ -106,6 +106,9 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null || request.GrupoId <= 0)
+            return BadRequest(new { success = false, message = "Lista invalida." });
+
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
@@ -191,6 +194,9 @@ public class TasksModel : PageModel
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
@@ -349,7 +355,7 @@ public class TasksModel : PageModel
                             cartao.Status = StatusCartaoTarefa.Arquivada;
 
                         if (colunaArquivo != null)
-                            cartao.ColunaId = colunaArquivo.Id;
+                            cartao.Coluna = colunaArquivo;
 
                         cartao.DataAtualizacao = agora;
                         RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado por exclusao da lista");
@@ -404,21 +410,31 @@ public class TasksModel : PageModel
             .Select(x => x.UsuarioId)
             .ToListAsync();
 
-        await DesvincularchamadosSemPermissaoAsync(cartao.Id, grupoId, membros, usuarioId.Value);
-
-        var chamados = await (
+        var chamadosVisiveis = await (
             from vinculo in _context.CartoesTarefasChamados.AsNoTracking()
             join chamado in _context.Chamados.AsNoTracking()
                 on vinculo.ChamadoId equals chamado.Id
             where vinculo.CartaoTarefaId == id && vinculo.Ativo
             orderby chamado.NumeroChamadoGrupo descending
-            select new ChamadoOpcaoViewModel
+            select new
+            {
+                chamado.Id,
+                chamado.NumeroChamadoGrupo,
+                chamado.Titulo,
+                chamado.Publico,
+                chamado.CriadorChamadoId
+            })
+            .ToListAsync();
+
+        var chamados = chamadosVisiveis
+            .Where(chamado => UsuarioPodeVerChamado(contexto.Permissao, usuarioId.Value, chamado.Publico, chamado.CriadorChamadoId))
+            .Select(chamado => new ChamadoOpcaoViewModel
             {
                 Id = chamado.Id,
                 NumeroChamadoGrupo = chamado.NumeroChamadoGrupo,
                 Titulo = chamado.Titulo ?? "Chamado"
             })
-            .ToListAsync();
+            .ToList();
 
         var chamadosOpcoes = await ObterChamadosPermitidosParaCartaoAsync(cartao);
 
@@ -1409,6 +1425,9 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null || request.GrupoId <= 0)
+            return BadRequest(new { success = false, message = "Tarefa invalida." });
+
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
@@ -1490,6 +1509,9 @@ public class TasksModel : PageModel
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
@@ -1583,6 +1605,9 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
+
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
@@ -1675,6 +1700,11 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null || request.GrupoId <= 0 || request.Colunas == null)
+            return BadRequest(new { success = false, message = "Ordem dos cartoes invalida." });
+        if (request.Colunas.Any(c => c == null || c.CartoesIds == null))
+            return BadRequest(new { success = false, message = "Ordem dos cartoes invalida." });
+
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
@@ -1710,33 +1740,47 @@ public class TasksModel : PageModel
                 x => x.Key,
                 x => x.Select(m => m.UsuarioId).ToList());
 
-        foreach (var colunaRequest in request.Colunas)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            if (!colunasValidasSet.Contains(colunaRequest.ColunaId))
-                return BadRequest(new { success = false, message = "Lista invalida." });
-
-            for (var i = 0; i < colunaRequest.CartoesIds.Count; i++)
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                var cartaoId = colunaRequest.CartoesIds[i];
-                if (!cartoes.TryGetValue(cartaoId, out var cartao))
-                    continue;
+                foreach (var colunaRequest in request.Colunas)
+                {
+                    if (!colunasValidasSet.Contains(colunaRequest.ColunaId))
+                        return (IActionResult)BadRequest(new { success = false, message = "Lista invalida." });
 
-                membrosPorCartao.TryGetValue(cartao.Id, out var membrosAtuais);
-                membrosAtuais ??= new List<int>();
+                    for (var i = 0; i < colunaRequest.CartoesIds.Count; i++)
+                    {
+                        var cartaoId = colunaRequest.CartoesIds[i];
+                        if (!cartoes.TryGetValue(cartaoId, out var cartao))
+                            continue;
 
-                if (!PodeVerCartao(cartao, usuarioId.Value, membrosAtuais))
-                    return Forbid();
-                if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
-                    return Forbid();
+                        membrosPorCartao.TryGetValue(cartao.Id, out var membrosAtuais);
+                        membrosAtuais ??= new List<int>();
 
-                cartao.ColunaId = colunaRequest.ColunaId;
-                cartao.OrdemColuna = (i + 1) * OrdemBase;
-                cartao.DataAtualizacao = DateTime.UtcNow;
+                        if (!PodeVerCartao(cartao, usuarioId.Value, membrosAtuais))
+                            return (IActionResult)Forbid();
+                        if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
+                            return (IActionResult)Forbid();
+
+                        cartao.ColunaId = colunaRequest.ColunaId;
+                        cartao.OrdemColuna = (i + 1) * OrdemBase;
+                        cartao.DataAtualizacao = DateTime.UtcNow;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return (IActionResult)new JsonResult(new { success = true });
             }
-        }
-
-        await _context.SaveChangesAsync();
-        return new JsonResult(new { success = true });
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostAdicionarComentarioAsync([FromBody] AdicionarComentarioRequest request)
@@ -1744,6 +1788,9 @@ public class TasksModel : PageModel
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
+
+        if (request == null || request.CartaoId <= 0 || request.GrupoId <= 0)
+            return BadRequest(new { success = false, message = "Comentario invalido." });
 
         var cartao = await _context.CartoesTarefas
             .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
@@ -1816,6 +1863,9 @@ public class TasksModel : PageModel
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
@@ -1899,6 +1949,9 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null || request.CartaoId <= 0 || request.GrupoId <= 0)
+            return BadRequest(new { success = false, message = "Tarefa invalida." });
+
         var cartao = await _context.CartoesTarefas
             .FirstOrDefaultAsync(c => c.Id == request.CartaoId && c.GrupoId == request.GrupoId);
 
@@ -1921,18 +1974,33 @@ public class TasksModel : PageModel
             return Forbid();
         }
 
-        var statusAnterior = cartao.Status;
-        var concluido = cartao.Status != StatusCartaoTarefa.Concluida;
-        cartao.Status = concluido ? StatusCartaoTarefa.Concluida : StatusCartaoTarefa.Ativa;
-        cartao.DataConclusao = concluido ? DateTime.UtcNow : null;
-        cartao.PercentualConclusao = concluido ? 100m : 0m;
-        cartao.DataAtualizacao = DateTime.UtcNow;
-        await _slaPausaService.RegistrarTransicaoCartaoAsync(cartao, statusAnterior, cartao.Status, usuarioId.Value, DateTime.UtcNow);
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var statusAnterior = cartao.Status;
+                var concluido = cartao.Status != StatusCartaoTarefa.Concluida;
+                cartao.Status = concluido ? StatusCartaoTarefa.Concluida : StatusCartaoTarefa.Ativa;
+                cartao.DataConclusao = concluido ? DateTime.UtcNow : null;
+                cartao.PercentualConclusao = concluido ? 100m : 0m;
+                cartao.DataAtualizacao = DateTime.UtcNow;
+                await _slaPausaService.RegistrarTransicaoCartaoAsync(cartao, statusAnterior, cartao.Status, usuarioId.Value, DateTime.UtcNow);
 
-        RegistrarHistorico(cartao.Id, usuarioId.Value, concluido ? "Cartao concluído" : "Cartao reaberto");
-        await _context.SaveChangesAsync();
+                RegistrarHistorico(cartao.Id, usuarioId.Value, concluido ? "Cartao concluído" : "Cartao reaberto");
+                await _context.SaveChangesAsync();
 
-        return new JsonResult(new { success = true, concluido });
+                await transaction.CommitAsync();
+
+                return (IActionResult)new JsonResult(new { success = true, concluido });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostSalvarComoTemplateAsync([FromBody] SalvarComoTemplateRequest request)
@@ -1961,7 +2029,7 @@ public class TasksModel : PageModel
 
         var existe = await _context.TemplatesCartoesTarefas
             .AsNoTracking()
-            .AnyAsync(t => t.GrupoId == request.GrupoId && t.Ativo && t.Nome == nome);
+            .AnyAsync(t => t.GrupoId == request.GrupoId && t.Nome == nome);
 
         if (existe)
             return BadRequest(new { success = false, message = "Ja existe um template com este nome." });
@@ -2321,6 +2389,9 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
+
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
@@ -2336,7 +2407,7 @@ public class TasksModel : PageModel
 
         var existe = await _context.TemplatesCartoesTarefas
             .AsNoTracking()
-            .AnyAsync(t => t.GrupoId == request.GrupoId && t.Ativo && t.Nome == nome);
+            .AnyAsync(t => t.GrupoId == request.GrupoId && t.Nome == nome);
 
         if (existe)
             return BadRequest(new { success = false, message = "Ja existe um template com este nome." });
@@ -2417,7 +2488,7 @@ public class TasksModel : PageModel
 
         var existe = await _context.TemplatesCartoesTarefas
             .AsNoTracking()
-            .AnyAsync(t => t.GrupoId == request.GrupoId && t.Ativo && t.Id != request.TemplateId && t.Nome == nome);
+            .AnyAsync(t => t.GrupoId == request.GrupoId && t.Id != request.TemplateId && t.Nome == nome);
 
         if (existe)
             return BadRequest(new { success = false, message = "Ja existe um template com este nome." });
@@ -2469,6 +2540,9 @@ public class TasksModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
+
         var contexto = await ValidarMembroComPermissaoAsync(usuarioId.Value, request.GrupoId);
         if (contexto == null)
             return Forbid();
@@ -2489,8 +2563,7 @@ public class TasksModel : PageModel
 
                 try
                 {
-                    template.Ativo = false;
-                    template.DataAtualizacao = DateTime.UtcNow;
+                    _context.TemplatesCartoesTarefas.Remove(template);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -2776,7 +2849,6 @@ public class TasksModel : PageModel
         };
 
         _context.ColunasQuadro.Add(colunaArquivo);
-        await _context.SaveChangesAsync();
 
         return colunaArquivo;
     }
@@ -2817,7 +2889,7 @@ public class TasksModel : PageModel
                     if (cartao.Status != StatusCartaoTarefa.Arquivada)
                         cartao.Status = StatusCartaoTarefa.Arquivada;
 
-                    cartao.ColunaId = colunaArquivo.Id;
+                    cartao.Coluna = colunaArquivo;
                     cartao.DataAtualizacao = agora;
                     RegistrarHistorico(cartao.Id, usuarioId, "Cartao arquivado por limpeza de lista excluída");
                 }
@@ -2825,8 +2897,6 @@ public class TasksModel : PageModel
 
             _context.ColunasQuadro.Remove(coluna);
         }
-
-        await _context.SaveChangesAsync();
     }
 
     private async Task CarregarDadosAsync(int usuarioId, PermissaoUsuario permissao)

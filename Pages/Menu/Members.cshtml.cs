@@ -314,53 +314,80 @@ public class MembersModel : PageModel
         if (request == null || request.UsuarioId <= 0)
             return new JsonResult(new { success = false, message = "Usuário inválido." });
 
-        var solicitanteNoGrupo = await _context.UsuariosGrupos
-            .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
-
-        if (solicitanteNoGrupo == null)
-            return new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
-
-        if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
-            return new JsonResult(new { success = false, message = "Somente administradores podem editar apelidos." });
-
-        var membroExiste = await _context.UsuariosGrupos
-            .AnyAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
-
-        if (!membroExiste)
-            return new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
-
-        var info = await _context.InfoUsuariosGrupos
-            .FirstOrDefaultAsync(i => i.UsuarioId == request.UsuarioId && i.GrupoId == GrupoId);
-
-        var apelidoNormalizado = string.IsNullOrWhiteSpace(request.Apelido)
-            ? null
-            : request.Apelido.Trim();
-
-        if (info == null)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        try
         {
-            info = new InfoUsuarioGrupo
+            return await strategy.ExecuteAsync(async () =>
             {
-                UsuarioId = request.UsuarioId,
-                GrupoId = GrupoId,
-                Apelido = apelidoNormalizado,
-                DataAtualizacaoRegistro = DateTime.UtcNow
-            };
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var solicitanteNoGrupo = await _context.UsuariosGrupos
+                        .FirstOrDefaultAsync(ug => ug.UsuarioId == idUsuario.Value && ug.GrupoId == GrupoId && ug.Ativo);
 
-            _context.InfoUsuariosGrupos.Add(info);
+                    if (solicitanteNoGrupo == null)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Você não pertence a este grupo." });
+
+                    if (solicitanteNoGrupo.Permissao != PermissaoUsuario.Administracao)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Somente administradores podem editar apelidos." });
+
+                    var membroExiste = await _context.UsuariosGrupos
+                        .AnyAsync(ug => ug.UsuarioId == request.UsuarioId && ug.GrupoId == GrupoId && ug.Ativo);
+
+                    if (!membroExiste)
+                        return (IActionResult)new JsonResult(new { success = false, message = "Membro não encontrado no grupo." });
+
+                    var info = await _context.InfoUsuariosGrupos
+                        .FirstOrDefaultAsync(i => i.UsuarioId == request.UsuarioId && i.GrupoId == GrupoId);
+
+                    var apelidoNormalizado = string.IsNullOrWhiteSpace(request.Apelido)
+                        ? null
+                        : request.Apelido.Trim();
+
+                    if (info == null)
+                    {
+                        info = new InfoUsuarioGrupo
+                        {
+                            UsuarioId = request.UsuarioId,
+                            GrupoId = GrupoId,
+                            Apelido = apelidoNormalizado,
+                            DataAtualizacaoRegistro = DateTime.UtcNow
+                        };
+
+                        _context.InfoUsuariosGrupos.Add(info);
+                    }
+                    else
+                    {
+                        info.Apelido = apelidoNormalizado;
+                        info.DataAtualizacaoRegistro = DateTime.UtcNow;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = "Apelido atualizado com sucesso."
+                    });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
-        else
+        catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
-            info.Apelido = apelidoNormalizado;
-            info.DataAtualizacaoRegistro = DateTime.UtcNow;
+            _logger.LogWarning(ex, "Duplicidade ao editar apelido do usuario {UsuarioAlvoId} no grupo {GrupoId}.", request.UsuarioId, GrupoId);
+            return new JsonResult(new { success = false, message = "O registro do membro foi alterado por outra operação. Tente novamente." });
         }
-
-        await _context.SaveChangesAsync();
-
-        return new JsonResult(new
+        catch (Exception ex)
         {
-            success = true,
-            message = "Apelido atualizado com sucesso."
-        });
+            _logger.LogError(ex, "Erro ao editar apelido do usuario {UsuarioAlvoId} no grupo {GrupoId}.", request.UsuarioId, GrupoId);
+            return new JsonResult(new { success = false, message = "Não foi possível atualizar o apelido no momento." });
+        }
     }
 
     public async Task<IActionResult> OnPostAlterarPermissaoAsync([FromBody] AlterarPermissaoRequest request)

@@ -588,6 +588,9 @@ public class HistoryModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
+
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoAcesso.Success)
             return new JsonResult(new { success = false, message = resultadoAcesso.Message });
@@ -673,6 +676,9 @@ public class HistoryModel : PageModel
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoAcesso.Success)

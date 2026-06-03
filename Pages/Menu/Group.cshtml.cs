@@ -1,6 +1,7 @@
 using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Models;
+using CallStationApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -18,6 +19,7 @@ public class GroupModel : PageModel
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<GroupModel> _logger;
     private readonly IWebHostEnvironment _environment;
+    private readonly FotoGrupoUploadService _fotoGrupoUploadService;
     private static readonly HashSet<string> ExtensoesFotoGrupoPermitidas = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg",
@@ -42,13 +44,14 @@ public class GroupModel : PageModel
         "ameixa"
     };
 
-    public GroupModel(AppDbContext context, GrupoAuthorizationService auth, IMemoryCache memoryCache, ILogger<GroupModel> logger, IWebHostEnvironment environment)
+    public GroupModel(AppDbContext context, GrupoAuthorizationService auth, IMemoryCache memoryCache, ILogger<GroupModel> logger, IWebHostEnvironment environment, FotoGrupoUploadService fotoGrupoUploadService)
     {
         _context = context;
         _auth = auth;
         _memoryCache = memoryCache;
         _logger = logger;
         _environment = environment;
+        _fotoGrupoUploadService = fotoGrupoUploadService;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -90,13 +93,18 @@ public class GroupModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Dados do grupo invalidos." });
+
         var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
         if (bloqueio != null)
             return bloqueio;
 
         var grupo = await _context.Grupos.FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (grupo == null)
+        {
             return NotFound(new { success = false, message = "Grupo não encontrado." });
+        }
 
         var nome = Limpar(request.Nome);
         var descricao = Limpar(request.Descricao);
@@ -111,7 +119,7 @@ public class GroupModel : PageModel
         if (!Enum.TryParse<EtiquetaCor>(request.EtiquetaCor, true, out var cor))
             return BadRequest(new { success = false, message = "Cor invalida." });
 
-        var config = await ObterOuCriarConfigAsync(usuarioId.Value);
+        var config = await ObterOuCriarConfigAsync(usuarioId.Value, false);
 
         if (!string.IsNullOrWhiteSpace(slug) &&
             await _context.GruposConfiguracoes.AnyAsync(c => c.GrupoId != GrupoId && c.Slug == slug))
@@ -119,22 +127,37 @@ public class GroupModel : PageModel
             return BadRequest(new { success = false, message = "Identificador já está em uso." });
         }
 
+        var strategy = _context.Database.CreateExecutionStrategy();
+
         try
         {
-            AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Nome", grupo.Nome, nome);
-            AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Descricao", grupo.DescricaoGrupo, descricao);
-            AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Cor", grupo.EtiquetaCor.ToString(), cor.ToString());
-            AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "Slug", config.Slug, slug);
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Nome", grupo.Nome, nome);
+                    AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Descricao", grupo.DescricaoGrupo, descricao);
+                    AuditarSeMudou(usuarioId.Value, "Grupo", grupo.Id, "Cor", grupo.EtiquetaCor.ToString(), cor.ToString());
+                    AuditarSeMudou(usuarioId.Value, "GrupoConfiguracao", GrupoId, "Slug", config.Slug, slug);
 
-            grupo.Nome = nome;
-            grupo.DescricaoGrupo = string.IsNullOrWhiteSpace(descricao) ? null : descricao;
-            grupo.EtiquetaCor = cor;
-            config.Slug = string.IsNullOrWhiteSpace(slug) ? null : slug;
-            config.AtualizadoPorUsuarioId = usuarioId.Value;
-            config.DataAtualizacao = DateTime.UtcNow;
+                    grupo.Nome = nome;
+                    grupo.DescricaoGrupo = string.IsNullOrWhiteSpace(descricao) ? null : descricao;
+                    grupo.EtiquetaCor = cor;
+                    config.Slug = string.IsNullOrWhiteSpace(slug) ? null : slug;
+                    config.AtualizadoPorUsuarioId = usuarioId.Value;
+                    config.DataAtualizacao = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
-            return new JsonResult(new { success = true, message = "Grupo salvo com sucesso." });
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return (IActionResult)new JsonResult(new { success = true, message = "Grupo salvo com sucesso." });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
         catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
         {
@@ -153,6 +176,9 @@ public class GroupModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Regras invalidas." });
+
         var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
         if (bloqueio != null)
             return bloqueio;
@@ -160,20 +186,34 @@ public class GroupModel : PageModel
         if (request.DiasParaFechamentoAutomatico is < 0 or > 365)
             return BadRequest(new { success = false, message = "Dias deve ficar entre 0 e 365." });
 
-        var config = await ObterOuCriarConfigAsync(usuarioId.Value);
-        config.ObrigarSetor = request.ObrigarSetor;
-        config.ObrigarTipoOcorrencia = request.ObrigarTipoOcorrencia;
-        config.ObrigarCategoria = request.ObrigarCategoria;
-        config.ObrigarSubcategoria = request.ObrigarSubcategoria;
-        config.PermitirChamadoPublico = request.PermitirChamadoPublico;
-        config.ExigirSolucaoParaConcluir = request.ExigirSolucaoParaConcluir;
-        config.DiasParaFechamentoAutomatico = request.DiasParaFechamentoAutomatico;
-        config.AtualizadoPorUsuarioId = usuarioId.Value;
-        config.DataAtualizacao = DateTime.UtcNow;
-        Auditar(usuarioId.Value, "Atualizar", "GrupoConfiguracao", GrupoId, "Regras", null, "Regras operacionais atualizadas");
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var config = await ObterOuCriarConfigAsync(usuarioId.Value);
+                config.ObrigarSetor = request.ObrigarSetor;
+                config.ObrigarTipoOcorrencia = request.ObrigarTipoOcorrencia;
+                config.ObrigarCategoria = request.ObrigarCategoria;
+                config.ObrigarSubcategoria = request.ObrigarSubcategoria;
+                config.PermitirChamadoPublico = request.PermitirChamadoPublico;
+                config.ExigirSolucaoParaConcluir = request.ExigirSolucaoParaConcluir;
+                config.DiasParaFechamentoAutomatico = request.DiasParaFechamentoAutomatico;
+                config.AtualizadoPorUsuarioId = usuarioId.Value;
+                config.DataAtualizacao = DateTime.UtcNow;
+                Auditar(usuarioId.Value, "Atualizar", "GrupoConfiguracao", GrupoId, "Regras", null, "Regras operacionais atualizadas");
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
-        return new JsonResult(new { success = true, message = "Regras salvas." });
+                return (IActionResult)new JsonResult(new { success = true, message = "Regras salvas." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostAlterarFotoGrupoAsync([FromForm] IFormFile? fotoGrupo)
@@ -189,8 +229,8 @@ public class GroupModel : PageModel
         if (fotoGrupo is not { Length: > 0 })
             return BadRequest(new { success = false, message = "Selecione uma imagem para o grupo." });
 
-        if (!FotoGrupoValida(fotoGrupo))
-            return BadRequest(new { success = false, message = "Envie uma imagem JPG, PNG ou WEBP com no máximo 2 MB." });
+        if (!await _fotoGrupoUploadService.FotoGrupoValidaAsync(fotoGrupo))
+            return BadRequest(new { success = false, message = FotoGrupoUploadService.MensagemArquivoInvalido });
 
         var grupo = await _context.Grupos.FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (grupo == null)
@@ -201,7 +241,7 @@ public class GroupModel : PageModel
 
         try
         {
-            novaFoto = await SalvarFotoGrupoAsync(fotoGrupo, GrupoId);
+            novaFoto = await _fotoGrupoUploadService.SalvarFotoGrupoAsync(fotoGrupo, GrupoId);
             var strategy = _context.Database.CreateExecutionStrategy();
             await strategy.ExecuteAsync(async () =>
             {
@@ -221,7 +261,7 @@ public class GroupModel : PageModel
                 }
             });
 
-            RemoverFotoGrupoSeExistir(fotoAnterior);
+            _fotoGrupoUploadService.RemoverFotoGrupoSeExistir(fotoAnterior);
 
             return new JsonResult(new
             {
@@ -232,7 +272,7 @@ public class GroupModel : PageModel
         }
         catch (Exception ex)
         {
-            RemoverFotoGrupoSeExistir(novaFoto);
+            _fotoGrupoUploadService.RemoverFotoGrupoSeExistir(novaFoto);
             _logger.LogError(ex, "Erro ao alterar foto do grupo {GrupoId}.", GrupoId);
             return StatusCode(500, new { success = false, message = "Não foi possível alterar a foto do grupo." });
         }
@@ -243,6 +283,9 @@ public class GroupModel : PageModel
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
         if (bloqueio != null)
@@ -375,6 +418,9 @@ public class GroupModel : PageModel
         if (usuarioId == null)
             return Unauthorized();
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "SLA invalido." });
+
         var bloqueio = await BloquearSeNaoAdminAsync(usuarioId.Value);
         if (bloqueio != null)
             return bloqueio;
@@ -385,20 +431,34 @@ public class GroupModel : PageModel
             return BadRequest(new { success = false, message = "Horas deve ficar entre 0 e 720." });
         }
 
-        var config = await ObterOuCriarConfigAsync(usuarioId.Value);
-        config.AutomatizarPendentePorPrazoConclusao = request.AutomatizarPendentePorPrazoConclusao;
-        config.HorasAposVencimentoParaPendente = request.HorasAposVencimentoParaPendente;
-        config.HorasAntesPrazoParaAlerta = request.HorasAntesPrazoParaAlerta;
-        config.NotificarAdministradoresSla = request.NotificarAdministradoresSla;
-        config.ExibirDataFinalizacaoModal = request.ExibirDataFinalizacaoModal;
-        config.ExibirPrazoRespostaModal = request.ExibirPrazoRespostaModal;
-        config.ExibirPrazoConclusaoModal = request.ExibirPrazoConclusaoModal;
-        config.AtualizadoPorUsuarioId = usuarioId.Value;
-        config.DataAtualizacao = DateTime.UtcNow;
-        Auditar(usuarioId.Value, "Atualizar", "GrupoConfiguracao", GrupoId, "SLA", null, "SLA atualizado");
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var config = await ObterOuCriarConfigAsync(usuarioId.Value);
+                config.AutomatizarPendentePorPrazoConclusao = request.AutomatizarPendentePorPrazoConclusao;
+                config.HorasAposVencimentoParaPendente = request.HorasAposVencimentoParaPendente;
+                config.HorasAntesPrazoParaAlerta = request.HorasAntesPrazoParaAlerta;
+                config.NotificarAdministradoresSla = request.NotificarAdministradoresSla;
+                config.ExibirDataFinalizacaoModal = request.ExibirDataFinalizacaoModal;
+                config.ExibirPrazoRespostaModal = request.ExibirPrazoRespostaModal;
+                config.ExibirPrazoConclusaoModal = request.ExibirPrazoConclusaoModal;
+                config.AtualizadoPorUsuarioId = usuarioId.Value;
+                config.DataAtualizacao = DateTime.UtcNow;
+                Auditar(usuarioId.Value, "Atualizar", "GrupoConfiguracao", GrupoId, "SLA", null, "SLA atualizado");
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
-        return new JsonResult(new { success = true, message = "SLA salvo." });
+                return (IActionResult)new JsonResult(new { success = true, message = "SLA salvo." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostCriarSetorAsync([FromBody] NomeRequest request)
@@ -406,6 +466,9 @@ public class GroupModel : PageModel
         var usuarioId = await ValidarPostAdminAsync();
         if (usuarioId.Result != null)
             return usuarioId.Result;
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var nome = Limpar(request.Nome);
         if (!NomeValido(nome, 50))
@@ -487,6 +550,9 @@ public class GroupModel : PageModel
         var usuarioId = await ValidarPostAdminAsync();
         if (usuarioId.Result != null)
             return usuarioId.Result;
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var tipo = await _context.OcorrenciasTipo.FirstOrDefaultAsync(t => t.Id == request.TipoId && t.GrupoId == GrupoId);
         if (tipo == null)
@@ -579,6 +645,9 @@ public class GroupModel : PageModel
         if (usuarioId.Result != null)
             return usuarioId.Result;
 
+        if (request == null)
+            return BadRequest(new { success = false, message = "Tipo de chamado invalido." });
+
         var nome = Limpar(request.Nome);
         if (!NomeValido(nome, 50))
             return BadRequest(new { success = false, message = "Nome inválido ou muito longo." });
@@ -587,16 +656,34 @@ public class GroupModel : PageModel
         if (descricao.Length > 160)
             return BadRequest(new { success = false, message = "Descrição deve ter até 160 caracteres." });
 
-        if (await _context.GruposTiposChamados.AnyAsync(t => t.GrupoId == GrupoId && t.Nome == nome))
-            return BadRequest(new { success = false, message = "Tipo de chamado duplicado." });
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (await _context.GruposTiposChamados.AnyAsync(t => t.GrupoId == GrupoId && t.Nome == nome))
+                    return (IActionResult)BadRequest(new { success = false, message = "Tipo de chamado duplicado." });
 
-        var posicao = (await _context.GruposTiposChamados.Where(t => t.GrupoId == GrupoId).MaxAsync(t => (int?)t.Posicao) ?? 0) + 1;
-        var tipo = new GrupoTipoChamado { GrupoId = GrupoId, Nome = nome, Descricao = descricao, Posicao = posicao, CriadoPorUsuarioId = usuarioId.Id };
-        _context.GruposTiposChamados.Add(tipo);
-        await _context.SaveChangesAsync();
-        Auditar(usuarioId.Id, "Criar", "GrupoTipoChamado", tipo.Id, null, null, nome);
-        await _context.SaveChangesAsync();
-        return new JsonResult(new { success = true, message = "Tipo de chamado criado." });
+                var posicao = (await _context.GruposTiposChamados.Where(t => t.GrupoId == GrupoId).MaxAsync(t => (int?)t.Posicao) ?? 0) + 1;
+                var tipo = new GrupoTipoChamado { GrupoId = GrupoId, Nome = nome, Descricao = descricao, Posicao = posicao, CriadoPorUsuarioId = usuarioId.Id };
+                _context.GruposTiposChamados.Add(tipo);
+                Auditar(usuarioId.Id, "Criar", "GrupoTipoChamado", null, null, null, nome);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return (IActionResult)new JsonResult(new { success = true, message = "Tipo de chamado criado." });
+            }
+            catch (DbUpdateException ex) when (EhErroDuplicidade(ex))
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { success = false, message = "Tipo de chamado duplicado." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public async Task<IActionResult> OnPostArquivarTipoChamadoAsync([FromBody] IdRequest request)
@@ -605,17 +692,34 @@ public class GroupModel : PageModel
         if (usuarioId.Result != null)
             return usuarioId.Result;
 
+        if (request == null || request.Id <= 0)
+            return BadRequest(new { success = false, message = "Tipo de chamado invalido." });
+
         var tipo = await _context.GruposTiposChamados.FirstOrDefaultAsync(t => t.Id == request.Id && t.GrupoId == GrupoId);
         if (tipo == null)
             return NotFound(new { success = false, message = "Tipo de chamado não encontrado." });
 
-        tipo.Ativo = false;
-        tipo.ArquivadoPorUsuarioId = usuarioId.Id;
-        tipo.DataArquivamento = DateTime.UtcNow;
-        Auditar(usuarioId.Id, "Arquivar", "GrupoTipoChamado", tipo.Id, null, tipo.Nome, null);
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                tipo.Ativo = false;
+                tipo.ArquivadoPorUsuarioId = usuarioId.Id;
+                tipo.DataArquivamento = DateTime.UtcNow;
+                Auditar(usuarioId.Id, "Arquivar", "GrupoTipoChamado", tipo.Id, null, tipo.Nome, null);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
-        return new JsonResult(new { success = true, message = "Tipo de chamado arquivado." });
+                return (IActionResult)new JsonResult(new { success = true, message = "Tipo de chamado arquivado." });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
     }
 
     public Task<IActionResult> OnPostEditarSetorAsync([FromBody] EditarNomeRequest request) =>
@@ -829,6 +933,9 @@ public class GroupModel : PageModel
         var usuarioId = await ValidarPostAdminAsync();
         if (usuarioId.Result != null)
             return usuarioId.Result;
+
+        if (request == null)
+            return BadRequest(new { success = false, message = "Requisição inválida." });
 
         var grupo = await _context.Grupos.FirstOrDefaultAsync(g => g.Id == GrupoId);
         if (grupo == null)
@@ -1079,7 +1186,7 @@ public class GroupModel : PageModel
         return bloqueio == null ? (usuarioId.Value, null) : (0, bloqueio);
     }
 
-    private async Task<GrupoConfiguracao> ObterOuCriarConfigAsync(int usuarioId)
+    private async Task<GrupoConfiguracao> ObterOuCriarConfigAsync(int usuarioId, bool salvarImediatamente = true)
     {
         var config = await _context.GruposConfiguracoes.FirstOrDefaultAsync(c => c.GrupoId == GrupoId);
         if (config != null)
@@ -1093,7 +1200,8 @@ public class GroupModel : PageModel
             DataAtualizacao = DateTime.UtcNow
         };
         _context.GruposConfiguracoes.Add(config);
-        await _context.SaveChangesAsync();
+        if (salvarImediatamente && _context.Database.CurrentTransaction == null)
+            await _context.SaveChangesAsync();
         return config;
     }
 
@@ -1103,7 +1211,17 @@ public class GroupModel : PageModel
         if (string.IsNullOrWhiteSpace(slugBase))
             return null;
 
-        if (!await _context.GruposConfiguracoes.AnyAsync(c => c.GrupoId != GrupoId && c.Slug == slugBase))
+        var prefixoBusca = slugBase.Length > 50 ? slugBase[..50].TrimEnd('-') : slugBase;
+        var slugsEncontrados = await _context.GruposConfiguracoes
+            .AsNoTracking()
+            .Where(c => c.GrupoId != GrupoId &&
+                        c.Slug != null &&
+                        (c.Slug == slugBase || c.Slug.StartsWith(prefixoBusca)))
+            .Select(c => c.Slug!)
+            .ToListAsync();
+        var slugsUsados = slugsEncontrados.ToHashSet(StringComparer.Ordinal);
+
+        if (!slugsUsados.Contains(slugBase))
             return slugBase;
 
         for (var sufixo = 2; sufixo < 10_000; sufixo++)
@@ -1112,7 +1230,7 @@ public class GroupModel : PageModel
             var tamanhoBase = Math.Min(slugBase.Length, 60 - textoSufixo.Length);
             var candidato = $"{slugBase[..tamanhoBase].TrimEnd('-')}{textoSufixo}";
 
-            if (!await _context.GruposConfiguracoes.AnyAsync(c => c.GrupoId != GrupoId && c.Slug == candidato))
+            if (!slugsUsados.Contains(candidato))
                 return candidato;
         }
 
@@ -1151,27 +1269,6 @@ public class GroupModel : PageModel
         var mensagem = ex.InnerException?.Message ?? ex.Message;
         return mensagem.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) ||
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private async Task<string> SalvarFotoGrupoAsync(IFormFile arquivo, int grupoId)
-    {
-        var extensao = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
-        var pasta = Path.Combine(_environment.WebRootPath, "uploads", "grupos");
-        Directory.CreateDirectory(pasta);
-
-        var nomeArquivo = $"grupo-{grupoId}-{Guid.NewGuid():N}{extensao}";
-        var caminho = Path.Combine(pasta, nomeArquivo);
-
-        await using var stream = new FileStream(caminho, FileMode.Create);
-        await arquivo.CopyToAsync(stream);
-
-        return $"/uploads/grupos/{nomeArquivo}";
-    }
-
-    private static bool FotoGrupoValida(IFormFile arquivo)
-    {
-        var extensao = Path.GetExtension(arquivo.FileName);
-        return arquivo.Length <= 2 * 1024 * 1024 && ExtensoesFotoGrupoPermitidas.Contains(extensao);
     }
 
     private IActionResult? ValidarAparencia(string? telaTipo, string? telaValor, string? sidebarTipo, string? sidebarValor, string? menuAtivoCor, string? sidebarTextoFundoCor)
@@ -1312,20 +1409,6 @@ public class GroupModel : PageModel
         await arquivo.CopyToAsync(stream);
 
         return $"/uploads/grupos/backgrounds/{nomeArquivo}";
-    }
-
-    private void RemoverFotoGrupoSeExistir(string? caminhoRelativo)
-    {
-        if (string.IsNullOrWhiteSpace(caminhoRelativo))
-            return;
-
-        var nomeArquivo = Path.GetFileName(caminhoRelativo);
-        if (string.IsNullOrWhiteSpace(nomeArquivo))
-            return;
-
-        var caminho = Path.Combine(_environment.WebRootPath, "uploads", "grupos", nomeArquivo);
-        if (System.IO.File.Exists(caminho))
-            System.IO.File.Delete(caminho);
     }
 
     private void RemoverImagemAparenciaSeExistir(string? caminhoRelativo)

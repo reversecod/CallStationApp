@@ -237,9 +237,14 @@ public class NotificationsModel : PageModel
         if (idUsuario == null)
             return Unauthorized();
 
-        var totalNaoLidas = await _context.Notificacoes
+        var queryNaoLidas = _context.Notificacoes
             .AsNoTracking()
-            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
+            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida);
+
+        if (grupoId > 0)
+            queryNaoLidas = queryNaoLidas.Where(n => n.GrupoId == grupoId);
+
+        var totalNaoLidas = await queryNaoLidas.CountAsync();
 
         return new JsonResult(new
         {
@@ -259,35 +264,49 @@ public class NotificationsModel : PageModel
             };
         }
 
-        var notificacoes = await _context.Notificacoes
-            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
-            .ToListAsync();
-
-        if (!notificacoes.Any())
-        {
-            return new JsonResult(new
-            {
-                success = true,
-                message = "Não há notificacoes pendentes."
-            });
-        }
-
         var agora = DateTime.UtcNow;
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-        foreach (var notificacao in notificacoes)
+        return await strategy.ExecuteAsync(async () =>
         {
-            notificacao.Lida = true;
-            notificacao.DataLeitura = agora;
-        }
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var notificacoes = await _context.Notificacoes
+                    .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida)
+                    .ToListAsync();
 
-        await _context.SaveChangesAsync();
+                if (!notificacoes.Any())
+                {
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        message = "Não há notificacoes pendentes."
+                    });
+                }
 
-        return new JsonResult(new
-        {
-            success = true,
-            message = "Notificacoes marcadas como lidas com sucesso.",
-            totalNaoLidas = 0,
-            dataLeituraTexto = ParaDataHoraRegionalDisplay(agora)
+                foreach (var notificacao in notificacoes)
+                {
+                    notificacao.Lida = true;
+                    notificacao.DataLeitura = agora;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (IActionResult)new JsonResult(new
+                {
+                    success = true,
+                    message = "Notificacoes marcadas como lidas com sucesso.",
+                    totalNaoLidas = 0,
+                    dataLeituraTexto = ParaDataHoraRegionalDisplay(agora)
+                });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         });
     }
 

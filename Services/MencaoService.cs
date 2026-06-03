@@ -194,7 +194,6 @@ public class MencaoService
             return;
 
         _context.MencoesTextos.AddRange(novas);
-        await _context.SaveChangesAsync();
 
         var autor = await _context.Usuarios
             .AsNoTracking()
@@ -223,7 +222,7 @@ public class MencaoService
                 ReferenciaId = entidadeId,
                 ReferenciaTipo = $"Mencao{entidadeTipo}{campoOrigem}",
                 LinkDestino = linkDestino,
-                MencaoId = m.Id
+                Mencao = m
             })
             .ToList();
 

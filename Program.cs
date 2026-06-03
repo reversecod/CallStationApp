@@ -1,5 +1,6 @@
 using CallStationApp.Authorization;
 using CallStationApp.Data;
+using CallStationApp.Middleware;
 using CallStationApp.Services;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,7 @@ builder.Services.AddScoped<GrupoAuthorizationService>();
 builder.Services.AddScoped<NotificacaoService>();
 builder.Services.AddScoped<MencaoService>();
 builder.Services.AddScoped<SlaPausaService>();
+builder.Services.AddScoped<FotoGrupoUploadService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddHostedService<ChamadoStatusAutomationService>();
 
@@ -113,6 +115,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRouting();
+app.UseRespostasAutorizacaoAjax();
 app.UseAuthentication();
 app.UseAuthorization();
 
