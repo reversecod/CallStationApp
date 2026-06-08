@@ -402,6 +402,8 @@
 
       .btn-comentarios-chamado {
         position: relative;
+        flex: 0 0 auto;
+        white-space: nowrap;
       }
 
       .comment-button-alert {
@@ -786,6 +788,27 @@
         gap: .75rem;
       }
 
+      .chamado-form-footer {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: .75rem;
+        padding-top: .25rem;
+      }
+
+      .chamado-form-footer-primary {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: .5rem;
+      }
+
+      .chamado-form-footer .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
       .chamado-vinculos-bar {
         min-width: min(100%, 18rem);
         flex: 1 1 18rem;
@@ -1050,6 +1073,13 @@
 
         .card-title {
           font-size: 1.7rem;
+        }
+
+        .btn-comentarios-chamado,
+        .chamado-form-footer,
+        .chamado-form-footer-primary,
+        .chamado-form-footer .btn {
+          width: 100%;
         }
       }
 
@@ -1516,12 +1546,12 @@
                                     <label class="form-check-label" for="editPublico">Chamado público</label>
                                 </div>
 
-                                <div class="d-flex justify-content-between gap-2">
+                                <div class="chamado-form-footer">
                                     <button type="button" class="btn btn-outline-danger" id="btnExcluirChamado">
                                         Cancelar chamado
                                     </button>
 
-                                    <div class="d-flex gap-2">
+                                    <div class="chamado-form-footer-primary">
                                         <button type="button" class="btn btn-outline-secondary" id="btnCancelarEdicao">Cancelar</button>
                                         <button type="button" class="btn btn-success" id="btnSalvarEdicao">Salvar</button>
                                     </div>
