@@ -736,10 +736,16 @@ public class HistoryModel : PageModel
         if (!string.IsNullOrWhiteSpace(termoNormalizado))
         {
             var padrao = $"%{EscaparLike(termoNormalizado)}%";
+            var termoNumeroChamado = termoNormalizado.StartsWith("#", StringComparison.Ordinal)
+                ? termoNormalizado[1..].Trim()
+                : termoNormalizado;
+            var pesquisarNumeroChamado = int.TryParse(termoNumeroChamado, out var numeroChamadoPesquisa);
+
             query = query.Where(x =>
                 EF.Functions.Like(x.Chamado.Titulo ?? string.Empty, padrao, "\\") ||
                 EF.Functions.Like(x.Chamado.Descricao ?? string.Empty, padrao, "\\") ||
-                EF.Functions.Like(x.Chamado.Solucao ?? string.Empty, padrao, "\\"));
+                EF.Functions.Like(x.Chamado.Solucao ?? string.Empty, padrao, "\\") ||
+                (pesquisarNumeroChamado && x.Chamado.NumeroChamadoGrupo == numeroChamadoPesquisa));
         }
 
         var resultado = await ObterPaginaHistoricoAsync(query, usuarioId.Value);
