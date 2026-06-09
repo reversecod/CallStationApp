@@ -7,7 +7,9 @@ let modalComentariosChamado = null;
 let modalVinculosChamado = null;
 let salvandoEdicaoChamado = false;
 let candidatosVinculoTimer = null;
+let filtrosVinculoTimer = null;
 let usuarioPodeAcessarVinculosChamado = false;
+let vinculosSelecionadosChamadoIds = new Set();
 let editorFechamentoTimer = null;
 let ticketLogoClickTimer = null;
 let chamadoCarregamentoAtual = 0;
@@ -1328,6 +1330,10 @@ function inicializarVinculosChamado() {
     const inputCandidato = document.getElementById("inputCandidatoVinculoChamado");
     const listaCandidatos = document.getElementById("listaCandidatosVinculoChamado");
     const listaVinculos = document.getElementById("listaVinculosChamado");
+    const inputFiltro = document.getElementById("inputFiltroVinculoChamado");
+    const selectFiltroSetor = document.getElementById("selectFiltroSetorVinculoChamado");
+    const selectFiltroTipo = document.getElementById("selectFiltroTipoVinculoChamado");
+    const btnLimparFiltros = document.getElementById("btnLimparFiltrosVinculoChamado");
 
     btnMostrar?.addEventListener("click", () => {
         formVinculo?.classList.toggle("d-none");
@@ -1355,6 +1361,48 @@ function inicializarVinculosChamado() {
 
         const chamadoVinculadoId = Number(btn.dataset.adicionarVinculoChamado || 0);
         await vincularChamado(chamadoVinculadoId);
+    });
+
+    inputFiltro?.addEventListener("input", () => {
+        window.clearTimeout(filtrosVinculoTimer);
+        filtrosVinculoTimer = window.setTimeout(() => {
+            const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value || 0);
+            if (chamadoId) {
+                carregarOpcoesVinculoChamado(chamadoId, false);
+            }
+        }, 250);
+    });
+
+    selectFiltroSetor?.addEventListener("change", () => {
+        const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value || 0);
+        if (chamadoId) {
+            carregarOpcoesVinculoChamado(chamadoId, false);
+        }
+    });
+
+    selectFiltroTipo?.addEventListener("change", () => {
+        const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value || 0);
+        if (chamadoId) {
+            carregarOpcoesVinculoChamado(chamadoId, false);
+        }
+    });
+
+    btnLimparFiltros?.addEventListener("click", () => limparFiltrosVinculoChamado(true));
+
+    listaVinculos?.addEventListener("change", event => {
+        const input = event.target.closest("[data-vinculo-chamado-opcao]");
+        if (!input) return;
+
+        const id = Number(input.value || 0);
+        if (!id) return;
+
+        if (input.checked) {
+            vinculosSelecionadosChamadoIds.add(id);
+        } else {
+            vinculosSelecionadosChamadoIds.delete(id);
+        }
+
+        atualizarResumoFiltroVinculo(document.querySelectorAll("[data-vinculo-chamado-opcao]").length, null);
     });
 
     listaVinculos?.addEventListener("click", async event => {
@@ -1417,7 +1465,63 @@ async function abrirVinculosChamado(chamadoId) {
     if (listaCandidatos) listaCandidatos.innerHTML = '<div class="text-muted small">Digite ao menos 2 caracteres.</div>';
 
     modalVinculosChamado.show();
-    await carregarOpcoesVinculoChamado(chamadoId);
+    limparFiltrosVinculoChamado(false);
+    await carregarOpcoesVinculoChamado(chamadoId, true);
+}
+
+function obterFiltrosVinculoChamado() {
+    return {
+        termo: (document.getElementById("inputFiltroVinculoChamado")?.value || "").trim(),
+        setorId: Number(document.getElementById("selectFiltroSetorVinculoChamado")?.value || 0),
+        tipoId: Number(document.getElementById("selectFiltroTipoVinculoChamado")?.value || 0)
+    };
+}
+
+function existeFiltroVinculoAtivo(filtros = obterFiltrosVinculoChamado()) {
+    return !!filtros.termo || filtros.setorId > 0 || filtros.tipoId > 0;
+}
+
+function montarUrlOpcoesVinculoChamado(chamadoId, filtros = obterFiltrosVinculoChamado()) {
+    const params = new URLSearchParams();
+    params.set("handler", "OpcoesVinculoChamado");
+    params.set("grupoId", document.getElementById("grupoIdAtual")?.value || "");
+    params.set("chamadoId", chamadoId);
+
+    if (filtros.termo) params.set("termo", filtros.termo);
+    if (filtros.setorId > 0) params.set("setorId", filtros.setorId);
+    if (filtros.tipoId > 0) params.set("tipoId", filtros.tipoId);
+
+    return `?${params.toString()}`;
+}
+
+function limparFiltrosVinculoChamado(recarregar = true) {
+    const inputTermo = document.getElementById("inputFiltroVinculoChamado");
+    const selectSetor = document.getElementById("selectFiltroSetorVinculoChamado");
+    const selectTipo = document.getElementById("selectFiltroTipoVinculoChamado");
+
+    if (inputTermo) inputTermo.value = "";
+    if (selectSetor) selectSetor.value = "";
+    if (selectTipo) selectTipo.value = "";
+
+    if (recarregar) {
+        const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value || 0);
+        if (chamadoId) {
+            carregarOpcoesVinculoChamado(chamadoId, false);
+        }
+    }
+}
+
+function atualizarResumoFiltroVinculo(total, limite, filtros = obterFiltrosVinculoChamado()) {
+    const resumo = document.getElementById("resumoFiltroVinculoChamado");
+    if (!resumo) return;
+
+    const selecionados = vinculosSelecionadosChamadoIds.size;
+    const base = existeFiltroVinculoAtivo(filtros)
+        ? `Mostrando ${total} resultado(s) filtrado(s)`
+        : `Mostrando ${total} chamado(s) recente(s)`;
+    const limiteTexto = limite && total >= limite ? `, limitado a ${limite}` : "";
+    const selecionadosTexto = selecionados ? `. ${selecionados} vínculo(s) selecionado(s).` : ".";
+    resumo.textContent = `${base}${limiteTexto}${selecionadosTexto}`;
 }
 
 async function carregarVinculosChamado(chamadoId) {
@@ -1573,7 +1677,7 @@ async function carregarResumoVinculosChamado(chamadoId) {
     }
 }
 
-async function carregarOpcoesVinculoChamado(chamadoId) {
+async function carregarOpcoesVinculoChamado(chamadoId, reiniciarSelecionados = false) {
     const lista = document.getElementById("listaVinculosChamado");
     const select = document.getElementById("selectVinculosChamado");
     if (!lista || !select) return;
@@ -1582,15 +1686,26 @@ async function carregarOpcoesVinculoChamado(chamadoId) {
     select.innerHTML = "";
 
     try {
-        const grupoId = document.getElementById("grupoIdAtual")?.value || "";
-        const response = await fetch(`?handler=OpcoesVinculoChamado&grupoId=${encodeURIComponent(grupoId)}&chamadoId=${encodeURIComponent(chamadoId)}`);
+        const filtros = obterFiltrosVinculoChamado();
+        const response = await fetch(montarUrlOpcoesVinculoChamado(chamadoId, filtros));
         const data = await response.json();
 
         if (!response.ok || !data.success) {
             throw new Error(data.message || "Não foi possível carregar os chamados.");
         }
 
-        renderizarOpcoesVinculoChamado(data.dados || []);
+        const dados = data.dados || {};
+        const chamados = Array.isArray(dados) ? dados : (dados.chamados || []);
+
+        if (reiniciarSelecionados) {
+            const selecionados = Array.isArray(dados)
+                ? chamados.filter(chamado => chamado.vinculado).map(chamado => Number(chamado.id || 0))
+                : (dados.chamadosSelecionadosIds || []);
+            vinculosSelecionadosChamadoIds = new Set(selecionados.map(Number).filter(id => id > 0));
+        }
+
+        renderizarOpcoesVinculoChamado(chamados);
+        atualizarResumoFiltroVinculo(chamados.length, dados.limite || null, filtros);
     } catch (error) {
         lista.innerHTML = `<div class="list-group-item text-danger">${escapeHtml(error.message || "Não foi possível carregar os chamados.")}</div>`;
     }
@@ -1608,7 +1723,7 @@ function renderizarOpcoesVinculoChamado(chamados) {
             const titulo = `#${chamado.numeroChamadoGrupo || "-"} - ${chamado.titulo || "Chamado"}`;
             return `
                 <label class="list-group-item d-flex gap-2 align-items-center">
-                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-vinculo-chamado-opcao ${chamado.vinculado ? "checked" : ""}>
+                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-vinculo-chamado-opcao ${vinculosSelecionadosChamadoIds.has(id) ? "checked" : ""}>
                     <span class="min-width-0 text-truncate">${escapeHtml(titulo)}</span>
                 </label>
             `;
@@ -1619,7 +1734,7 @@ function renderizarOpcoesVinculoChamado(chamados) {
         const option = document.createElement("option");
         option.value = chamado.id;
         option.textContent = `#${chamado.numeroChamadoGrupo || "-"} - ${chamado.titulo || "Chamado"}`;
-        option.selected = !!chamado.vinculado;
+        option.selected = vinculosSelecionadosChamadoIds.has(Number(chamado.id || 0));
         select.appendChild(option);
     });
 }
@@ -1628,9 +1743,9 @@ async function salvarVinculosChamado() {
     const chamadoId = Number(document.getElementById("vinculosChamadoId")?.value);
     if (!chamadoId) return;
 
-    const chamadosIds = [...document.querySelectorAll("[data-vinculo-chamado-opcao]:checked")]
-        .map(input => Number(input.value))
-        .filter(Number.isFinite);
+    const chamadosIds = [...vinculosSelecionadosChamadoIds]
+        .map(Number)
+        .filter(id => Number.isFinite(id) && id > 0);
 
     try {
         const grupoId = document.getElementById("grupoIdAtual")?.value || "";
@@ -1644,6 +1759,9 @@ async function salvarVinculosChamado() {
             return;
         }
 
+        vinculosSelecionadosChamadoIds = new Set((data.dados?.vinculos || [])
+            .map(vinculo => Number(vinculo.id || 0))
+            .filter(id => id > 0));
         atualizarResumoVinculosChamado(data.dados?.vinculos || []);
         modalVinculosChamado?.hide();
         mostrarToast(data.dados?.message || "Vínculos atualizados com sucesso.", "success");

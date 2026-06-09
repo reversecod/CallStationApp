@@ -806,7 +806,7 @@ public class HistoryModel : PageModel
         return new JsonResult(new { success = true, dados = membros });
     }
 
-    public async Task<IActionResult> OnGetCandidatosVinculoAsync(int chamadoId, string? termo)
+    public async Task<IActionResult> OnGetCandidatosVinculoAsync(int chamadoId, string? termo, int? setorId, int? tipoId)
     {
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
@@ -816,7 +816,8 @@ public class HistoryModel : PageModel
             return new JsonResult(new { success = false, message = "Chamado inválido." });
 
         var termoNormalizado = (termo ?? string.Empty).Trim();
-        if (termoNormalizado.Length < TamanhoMinimoPesquisa)
+        var temFiltro = (setorId.HasValue && setorId.Value > 0) || (tipoId.HasValue && tipoId.Value > 0);
+        if (termoNormalizado.Length < TamanhoMinimoPesquisa && !temFiltro)
             return new JsonResult(new { success = true, dados = Array.Empty<object>() });
 
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, chamadoId);
@@ -826,11 +827,25 @@ public class HistoryModel : PageModel
         var query = ConstruirQueryHistoricoPermitido(usuarioId.Value, GrupoId, resultadoAcesso.ContextoMembro!.Permissao, true)
             .Where(x => x.Chamado.Id != chamadoId);
 
-        var padrao = $"%{EscaparLike(termoNormalizado)}%";
-        query = query.Where(x =>
-            EF.Functions.Like(x.Chamado.Titulo ?? string.Empty, padrao, "\\") ||
-            EF.Functions.Like(x.Chamado.Descricao ?? string.Empty, padrao, "\\") ||
-            EF.Functions.Like(x.Chamado.Solucao ?? string.Empty, padrao, "\\"));
+        if (setorId.HasValue && setorId.Value > 0)
+            query = query.Where(x => x.Chamado.SetorId == setorId.Value);
+
+        if (tipoId.HasValue && tipoId.Value > 0)
+            query = query.Where(x => x.Chamado.OcorrenciaTipoId == tipoId.Value);
+
+        if (!string.IsNullOrWhiteSpace(termoNormalizado))
+        {
+            var termoNumeroChamado = termoNormalizado.StartsWith("#", StringComparison.Ordinal)
+                ? termoNormalizado[1..].Trim()
+                : termoNormalizado;
+            var pesquisarNumeroChamado = int.TryParse(termoNumeroChamado, out var numeroChamadoPesquisa);
+            var padrao = $"%{EscaparLike(termoNormalizado)}%";
+            query = query.Where(x =>
+                EF.Functions.Like(x.Chamado.Titulo ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(x.Chamado.Descricao ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(x.Chamado.Solucao ?? string.Empty, padrao, "\\") ||
+                (pesquisarNumeroChamado && x.Chamado.NumeroChamadoGrupo == numeroChamadoPesquisa));
+        }
 
         var candidatos = await query
             .OrderBy(x => x.Chamado.NumeroChamadoGrupo)

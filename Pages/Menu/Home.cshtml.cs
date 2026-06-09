@@ -20,6 +20,7 @@ public class HomeModel : PageModel
     private const int LimiteCaracteresComentario = 250;
     private const int TamanhoMinimoPesquisaVinculo = 2;
     private const int LimiteCandidatosVinculo = 12;
+    private const int LimiteOpcoesVinculo = 50;
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
 
     private static readonly StatusChamado[] StatusFinais =
@@ -2014,7 +2015,7 @@ public class HomeModel : PageModel
         return new JsonResult(new { success = true, dados = new { chamadoId, vinculos } });
     }
 
-    public async Task<IActionResult> OnGetOpcoesVinculoChamadoAsync(int chamadoId)
+    public async Task<IActionResult> OnGetOpcoesVinculoChamadoAsync(int chamadoId, string? termo, int? setorId, int? tipoId)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
@@ -2032,10 +2033,40 @@ public class HomeModel : PageModel
             .Select(v => v.ChamadoIdMenor == chamadoId ? v.ChamadoIdMaior : v.ChamadoIdMenor)
             .ToListAsync();
 
+        var idsVinculadosGerenciaveis = idsVinculados.Count == 0
+            ? new List<int>()
+            : await ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
+                .Where(c => idsVinculados.Contains(c.Id) && !StatusBloqueadosVinculo.Contains(c.Status))
+                .Select(c => c.Id)
+                .ToListAsync();
+
+        var termoNormalizado = (termo ?? string.Empty).Trim();
+        var termoNumeroChamado = termoNormalizado.StartsWith("#", StringComparison.Ordinal)
+            ? termoNormalizado[1..].Trim()
+            : termoNormalizado;
+        var pesquisarNumeroChamado = int.TryParse(termoNumeroChamado, out var numeroChamadoPesquisa);
+
         var vinculadosSet = idsVinculados.ToHashSet();
-        var chamados = await ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
-            .Where(c => c.Id != chamadoId && !StatusBloqueadosVinculo.Contains(c.Status))
-            .OrderByDescending(c => c.DataCriacao)
+        var query = ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
+            .Where(c => c.Id != chamadoId && !StatusBloqueadosVinculo.Contains(c.Status));
+
+        if (setorId.HasValue && setorId.Value > 0)
+            query = query.Where(c => c.SetorId == setorId.Value);
+
+        if (tipoId.HasValue && tipoId.Value > 0)
+            query = query.Where(c => c.OcorrenciaTipoId == tipoId.Value);
+
+        if (!string.IsNullOrWhiteSpace(termoNormalizado))
+        {
+            var padrao = $"%{EscaparLike(termoNormalizado)}%";
+            query = query.Where(c =>
+                EF.Functions.Like(c.Titulo ?? string.Empty, padrao, "\\") ||
+                (pesquisarNumeroChamado && c.NumeroChamadoGrupo == numeroChamadoPesquisa));
+        }
+
+        var chamados = await query
+            .OrderByDescending(c => idsVinculados.Contains(c.Id))
+            .ThenByDescending(c => c.DataCriacao)
             .ThenBy(c => c.Id)
             .Select(c => new
             {
@@ -2044,30 +2075,37 @@ public class HomeModel : PageModel
                 c.Titulo,
                 c.Status
             })
+            .Take(LimiteOpcoesVinculo)
             .ToListAsync();
 
         return new JsonResult(new
         {
             success = true,
-            dados = chamados.Select(c => new
+            dados = new
             {
-                c.Id,
-                c.NumeroChamadoGrupo,
-                titulo = c.Titulo,
-                status = FormatarStatusChamado(c.Status),
-                vinculado = vinculadosSet.Contains(c.Id)
-            })
+                chamados = chamados.Select(c => new
+                {
+                    c.Id,
+                    c.NumeroChamadoGrupo,
+                    titulo = c.Titulo,
+                    status = FormatarStatusChamado(c.Status),
+                    vinculado = vinculadosSet.Contains(c.Id)
+                }),
+                chamadosSelecionadosIds = idsVinculadosGerenciaveis,
+                limite = LimiteOpcoesVinculo
+            }
         });
     }
 
-    public async Task<IActionResult> OnGetCandidatosVinculoChamadoAsync(int chamadoId, string? termo)
+    public async Task<IActionResult> OnGetCandidatosVinculoChamadoAsync(int chamadoId, string? termo, int? setorId, int? tipoId)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
             return Unauthorized();
 
         var termoNormalizado = (termo ?? string.Empty).Trim();
-        if (termoNormalizado.Length < TamanhoMinimoPesquisaVinculo)
+        var temFiltro = (setorId.HasValue && setorId.Value > 0) || (tipoId.HasValue && tipoId.Value > 0);
+        if (termoNormalizado.Length < TamanhoMinimoPesquisaVinculo && !temFiltro)
             return new JsonResult(new { success = true, dados = Array.Empty<object>() });
 
         var acesso = await ObterChamadoComAcessoAsync(idUsuario.Value, GrupoId, chamadoId);
@@ -2079,11 +2117,25 @@ public class HomeModel : PageModel
         var query = ConstruirQueryChamadosPermitidos(idUsuario.Value, GrupoId, acesso.ContextoMembro!.Permissao)
             .Where(c => c.Id != chamadoId && !StatusBloqueadosVinculo.Contains(c.Status));
 
-        var padrao = $"%{EscaparLike(termoNormalizado)}%";
-        query = query.Where(c =>
-            EF.Functions.Like(c.Titulo ?? string.Empty, padrao, "\\") ||
-            EF.Functions.Like(c.Descricao ?? string.Empty, padrao, "\\") ||
-            EF.Functions.Like(c.Solucao ?? string.Empty, padrao, "\\"));
+        if (setorId.HasValue && setorId.Value > 0)
+            query = query.Where(c => c.SetorId == setorId.Value);
+
+        if (tipoId.HasValue && tipoId.Value > 0)
+            query = query.Where(c => c.OcorrenciaTipoId == tipoId.Value);
+
+        if (!string.IsNullOrWhiteSpace(termoNormalizado))
+        {
+            var termoNumeroChamado = termoNormalizado.StartsWith("#", StringComparison.Ordinal)
+                ? termoNormalizado[1..].Trim()
+                : termoNormalizado;
+            var pesquisarNumeroChamado = int.TryParse(termoNumeroChamado, out var numeroChamadoPesquisa);
+            var padrao = $"%{EscaparLike(termoNormalizado)}%";
+            query = query.Where(c =>
+                EF.Functions.Like(c.Titulo ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(c.Descricao ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(c.Solucao ?? string.Empty, padrao, "\\") ||
+                (pesquisarNumeroChamado && c.NumeroChamadoGrupo == numeroChamadoPesquisa));
+        }
 
         var candidatos = await query
             .OrderByDescending(c => c.DataCriacao)

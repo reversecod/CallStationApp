@@ -755,15 +755,83 @@
         gap: .5rem;
       }
 
+      .linked-call-modal {
+        border-radius: 1.35rem;
+      }
+
+      .linked-call-modal .modal-header,
+      .linked-call-modal .modal-footer {
+        border-color: #e5e7eb;
+        background: #f8fafc;
+        padding: .9rem 1rem;
+      }
+
+      .linked-call-modal .modal-footer {
+        flex-wrap: wrap;
+        gap: .55rem;
+      }
+
+      .linked-call-modal .modal-body {
+        padding: 1rem;
+      }
+
+      .linked-call-filter-panel {
+        border: 1px solid #dbe3ee;
+        border-radius: 1.15rem;
+        background: #f8fafc;
+        padding: .85rem;
+        margin-bottom: .85rem;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .85), 0 .45rem 1.05rem rgba(15, 23, 42, .06);
+      }
+
+      .linked-call-filter-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr) 2.35rem;
+        gap: .6rem;
+        align-items: center;
+      }
+
+      .linked-call-filter-grid > * {
+        min-width: 0;
+      }
+
+      .linked-call-filter-grid .form-control,
+      .linked-call-filter-grid .form-select {
+        border-radius: .85rem;
+      }
+
+      .linked-call-filter-grid .btn {
+        width: 2.35rem;
+        height: 2.35rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border-radius: .85rem;
+      }
+
       .linked-call-item {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: .75rem;
         border: 1px solid #e5e7eb;
-        border-radius: .75rem;
+        border-radius: 1rem;
         background: #fff;
-        padding: .65rem .75rem;
+        padding: .72rem .85rem;
+        box-shadow: 0 .35rem .85rem rgba(15, 23, 42, .045);
+      }
+
+      .linked-call-list > .list-group-item {
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        background: #fff;
+        padding: .72rem .85rem;
+        box-shadow: 0 .35rem .85rem rgba(15, 23, 42, .045);
+      }
+
+      .linked-call-list > .list-group-item + .list-group-item {
+        border-top-width: 1px;
       }
 
       .linked-call-open {
@@ -794,6 +862,7 @@
         max-height: min(60vh, calc(20 * 2.75rem));
         overflow-y: auto;
         overscroll-behavior: contain;
+        padding-right: .15rem;
       }
 
       .chamado-actions-row {
@@ -888,6 +957,14 @@
       @@media (max-width: 991.98px) {
         .comment-modal-grid {
           grid-template-columns: 1fr;
+        }
+
+        .linked-call-filter-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .linked-call-filter-grid input[type="search"] {
+          grid-column: 1 / -1;
         }
 
         .comment-timeline-panel {
@@ -1103,6 +1180,18 @@
         .chamado-form-footer,
         .chamado-form-footer-primary,
         .chamado-form-footer .btn {
+          width: 100%;
+        }
+
+        .linked-call-filter-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .linked-call-filter-grid input[type="search"] {
+          grid-column: auto;
+        }
+
+        .linked-call-filter-grid .btn {
           width: 100%;
         }
       }
@@ -1625,8 +1714,8 @@
     @if (Model.UsuarioLogadoPermissao != PermissaoUsuario.Colaborador)
     {
     <div class="modal fade" id="modalVinculosChamado" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content chamado-editor-card">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content chamado-editor-card linked-call-modal">
                 <div class="modal-header">
                     <h5 class="modal-title">Chamados vinculados</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -1634,6 +1723,37 @@
                 <div class="modal-body">
                     <input type="hidden" id="vinculosChamadoId" />
                     <select id="selectVinculosChamado" class="form-select d-none" multiple size="10"></select>
+                    <div class="linked-call-filter-panel">
+                        <div class="linked-call-filter-grid">
+                            <input type="search"
+                                   class="form-control form-control-sm"
+                                   id="inputFiltroVinculoChamado"
+                                   maxlength="80"
+                                   placeholder="Buscar por título ou número">
+                            <select class="form-select form-select-sm" id="selectFiltroSetorVinculoChamado">
+                                <option value="">Todos os setores</option>
+                                @foreach (var setor in Model.SetoresDisponiveis)
+                                {
+                                    <option value="@setor.Id">@setor.NomeSetor</option>
+                                }
+                            </select>
+                            <select class="form-select form-select-sm" id="selectFiltroTipoVinculoChamado">
+                                <option value="">Todos os tipos</option>
+                                @foreach (var tipo in Model.TiposOcorrenciaDisponiveis)
+                                {
+                                    <option value="@tipo.Id">@tipo.TipoOcorrencia</option>
+                                }
+                            </select>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    id="btnLimparFiltrosVinculoChamado"
+                                    title="Limpar filtros"
+                                    aria-label="Limpar filtros">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div class="text-muted small mt-2" id="resumoFiltroVinculoChamado">Mostrando chamados recentes. Use os filtros para refinar.</div>
+                    </div>
                     <div id="listaVinculosChamado" class="linked-call-list modal-linked-call-scroll">
                         <div class="text-muted small">Carregando vínculos...</div>
                     </div>
