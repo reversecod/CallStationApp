@@ -67,6 +67,62 @@ function serializarTextoCampo(campo) {
         : String(campo?.value || "");
 }
 
+function obterGrupoIdAtual() {
+    return document.getElementById("grupoIdAtual")?.value || "";
+}
+
+function normalizarStatusVinculo(status) {
+    return String(status || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "");
+}
+
+function statusVinculoEstaNoHistorico(status) {
+    return ["concluido", "fechado", "cancelado"].includes(normalizarStatusVinculo(status));
+}
+
+function vinculoEstaNoHistorico(vinculo) {
+    if (typeof vinculo?.estaNoHistorico === "boolean") {
+        return vinculo.estaNoHistorico;
+    }
+
+    return statusVinculoEstaNoHistorico(vinculo?.status);
+}
+
+function destinoVinculoEstaNoHistorico(elemento) {
+    const valor = String(elemento?.dataset?.estaNoHistorico || "").toLowerCase();
+    if (valor === "true") return true;
+    if (valor === "false") return false;
+
+    return statusVinculoEstaNoHistorico(elemento?.dataset?.status || "");
+}
+
+function montarUrlChamadoContexto(pagina, chamadoId) {
+    const params = new URLSearchParams();
+    const grupoId = obterGrupoIdAtual();
+    if (grupoId) {
+        params.set("grupoId", grupoId);
+    }
+    params.set("chamadoId", chamadoId);
+
+    return `/Menu/${pagina}?${params.toString()}`;
+}
+
+async function abrirChamadoVinculadoNoContexto(chamadoId, estaNoHistorico) {
+    if (!chamadoId) return;
+
+    if (estaNoHistorico) {
+        window.location.href = montarUrlChamadoContexto("History", chamadoId);
+        return;
+    }
+
+    modalVinculosChamado?.hide();
+    await carregarChamado(chamadoId);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     mostrarToastPendente();
 
@@ -1302,11 +1358,26 @@ function inicializarVinculosChamado() {
     });
 
     listaVinculos?.addEventListener("click", async event => {
-        const btn = event.target.closest("[data-remover-vinculo-chamado]");
-        if (!btn) return;
+        const btnRemover = event.target.closest("[data-remover-vinculo-chamado]");
+        if (btnRemover) {
+            const chamadoVinculadoId = Number(btnRemover.dataset.removerVinculoChamado || 0);
+            await removerVinculoChamado(chamadoVinculadoId);
+            return;
+        }
 
-        const chamadoVinculadoId = Number(btn.dataset.removerVinculoChamado || 0);
-        await removerVinculoChamado(chamadoVinculadoId);
+        const btnAbrir = event.target.closest("[data-abrir-vinculo-chamado]");
+        if (!btnAbrir) return;
+
+        const chamadoVinculadoId = Number(btnAbrir.dataset.abrirVinculoChamado || 0);
+        await abrirChamadoVinculadoNoContexto(chamadoVinculadoId, destinoVinculoEstaNoHistorico(btnAbrir));
+    });
+
+    document.getElementById("resumoVinculosChamado")?.addEventListener("click", async event => {
+        const btnAbrir = event.target.closest("[data-abrir-vinculo-chamado]");
+        if (!btnAbrir) return;
+
+        const chamadoVinculadoId = Number(btnAbrir.dataset.abrirVinculoChamado || 0);
+        await abrirChamadoVinculadoNoContexto(chamadoVinculadoId, destinoVinculoEstaNoHistorico(btnAbrir));
     });
 }
 
@@ -1458,17 +1529,27 @@ function renderizarVinculosChamado(vinculos) {
         return;
     }
 
-    lista.innerHTML = vinculos.map(vinculo => `
-        <div class="linked-call-item" data-vinculo-chamado-id="${Number(vinculo.id || 0)}">
-            <div class="min-width-0">
+    lista.innerHTML = vinculos.map(vinculo => {
+        const id = Number(vinculo.id || 0);
+        const estaNoHistorico = vinculoEstaNoHistorico(vinculo);
+
+        return `
+        <div class="linked-call-item" data-vinculo-chamado-id="${id}">
+            <button type="button"
+                    class="linked-call-open text-start"
+                    data-abrir-vinculo-chamado="${id}"
+                    data-esta-no-historico="${estaNoHistorico ? "true" : "false"}"
+                    data-status="${escapeHtml(vinculo.status || "")}"
+                    aria-label="Abrir chamado #${escapeHtml(vinculo.numeroChamadoGrupo || "")}">
                 <div class="linked-call-title">#${escapeHtml(vinculo.numeroChamadoGrupo || "-")} - ${escapeHtml(vinculo.titulo || "Chamado")}</div>
-                <div class="text-muted small">${escapeHtml(vinculo.status || "-")} · ${escapeHtml(formatDateTimeDisplay(vinculo.dataCriacao))}</div>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline-danger" data-remover-vinculo-chamado="${Number(vinculo.id || 0)}" aria-label="Remover vínculo">
+                <div class="text-muted small">${escapeHtml(vinculo.status || "-")} - ${escapeHtml(formatDateTimeDisplay(vinculo.dataCriacao))}</div>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-remover-vinculo-chamado="${id}" aria-label="Remover vínculo">
                 <i class="bi bi-x-lg"></i>
             </button>
         </div>
-    `).join("");
+    `;
+    }).join("");
 }
 
 async function carregarResumoVinculosChamado(chamadoId) {
@@ -1580,9 +1661,21 @@ function atualizarResumoVinculosChamado(vinculos) {
         return;
     }
 
-    resumo.innerHTML = vinculos.map(vinculo =>
-        `<span class="chamado-vinculo-chip">#${escapeHtml(vinculo.numeroChamadoGrupo || "-")}</span>`
-    ).join("");
+    resumo.innerHTML = vinculos.map(vinculo => {
+        const id = Number(vinculo.id || 0);
+        const estaNoHistorico = vinculoEstaNoHistorico(vinculo);
+
+        return `
+            <button type="button"
+                    class="chamado-vinculo-chip"
+                    data-abrir-vinculo-chamado="${id}"
+                    data-esta-no-historico="${estaNoHistorico ? "true" : "false"}"
+                    data-status="${escapeHtml(vinculo.status || "")}"
+                    title="Abrir chamado #${escapeHtml(vinculo.numeroChamadoGrupo || "-")}">
+                #${escapeHtml(vinculo.numeroChamadoGrupo || "-")}
+            </button>
+        `;
+    }).join("");
 }
 
 async function carregarComentariosChamado(chamadoId, pagina = 1, anexar = false) {

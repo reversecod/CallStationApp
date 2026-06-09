@@ -1979,7 +1979,8 @@ public class HistoryModel : PageModel
                 NumeroChamadoGrupo = v.NumeroChamadoGrupo,
                 Titulo = v.Titulo,
                 Status = FormatarStatusTexto(v.Status),
-                DataCriacao = ParaDataHoraRegionalIso(v.DataCriacao)
+                DataCriacao = ParaDataHoraRegionalIso(v.DataCriacao),
+                EstaNoHistorico = StatusFinais.Contains(v.Status)
             })
             .ToList();
     }
@@ -2736,6 +2737,7 @@ public class HistoryModel : PageModel
         public string? Titulo { get; set; }
         public string Status { get; set; } = string.Empty;
         public string DataCriacao { get; set; } = string.Empty;
+        public bool EstaNoHistorico { get; set; }
     }
 
     private sealed class ChamadoHistoricoAcessoResult

@@ -747,6 +747,26 @@
             padding:.55rem .65rem;
         }
 
+        button.linked-call-item {
+            width:100%;
+            color:inherit;
+            text-align:left;
+            cursor:pointer;
+        }
+
+        button.linked-call-item:hover,
+        button.linked-call-item:focus-visible {
+            border-color:#93c5fd;
+            background:#eff6ff;
+            outline:none;
+        }
+
+        button.linked-call-item:hover .linked-call-title,
+        button.linked-call-item:focus-visible .linked-call-title {
+            color:#1d4ed8;
+            text-decoration:underline;
+        }
+
         .linked-call-title {
             min-width:0;
             overflow:hidden;
@@ -1192,6 +1212,61 @@
             prioridade: "Considerando tudo, qual o peso geral deste chamado?\nA prioridade é sua avaliação final — leva em conta a criticidade, a urgência e qualquer outro fator que você considere relevante (cliente estratégico, compromisso contratual, prazo regulatório). Use-a para indicar ao time a ordem de atenção entre os chamados abertos."
         };
 
+        function montarUrlChamadoContexto(pagina, chamadoId) {
+            const params = new URLSearchParams();
+            params.set("grupoId", historyGrupoId);
+            params.set("chamadoId", chamadoId);
+            return `/Menu/${pagina}?${params.toString()}`;
+        }
+
+        function normalizarStatusVinculo(status) {
+            return String(status || "")
+                .trim()
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/\s+/g, "");
+        }
+
+        function statusVinculoEstaNoHistorico(status) {
+            return ["concluido", "fechado", "cancelado"].includes(normalizarStatusVinculo(status));
+        }
+
+        function vinculoEstaNoHistorico(vinculo) {
+            if (typeof vinculo?.estaNoHistorico === "boolean") {
+                return vinculo.estaNoHistorico;
+            }
+
+            return statusVinculoEstaNoHistorico(vinculo?.status);
+        }
+
+        function destinoVinculoEstaNoHistorico(elemento) {
+            const valor = String(elemento?.dataset?.estaNoHistorico || "").toLowerCase();
+            if (valor === "true") return true;
+            if (valor === "false") return false;
+
+            return statusVinculoEstaNoHistorico(elemento?.dataset?.status || "");
+        }
+
+        async function abrirChamadoVinculadoNoContexto(chamadoId, estaNoHistorico) {
+            if (!chamadoId) return;
+
+            if (estaNoHistorico) {
+                await abrirDetalhes(chamadoId);
+                return;
+            }
+
+            window.location.href = montarUrlChamadoContexto("Home", chamadoId);
+        }
+
+        async function abrirChamadoHistoricoDaUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const chamadoId = Number(params.get("chamadoId") || 0);
+            if (!chamadoId) return;
+
+            await abrirDetalhes(chamadoId);
+        }
+
         document.addEventListener("click", event => {
             const botao = event.target.closest("[data-preview-image]");
             if (!botao || !imagemPreview || !imagemPreviewModal) return;
@@ -1250,6 +1325,16 @@
             inputPesquisa?.focus();
         });
 
+        detalhesConteudo?.addEventListener("click", async event => {
+            if (event.target.closest("[data-remover-vinculo-chamado]")) return;
+
+            const btnAbrir = event.target.closest("[data-abrir-vinculo-chamado]");
+            if (!btnAbrir) return;
+
+            const chamadoVinculadoId = Number(btnAbrir.dataset.abrirVinculoChamado || 0);
+            await abrirChamadoVinculadoNoContexto(chamadoVinculadoId, destinoVinculoEstaNoHistorico(btnAbrir));
+        });
+
         historyList?.addEventListener("click", event => {
             const btnDetalhes = event.target.closest(".btn-abrir-detalhes");
             if (btnDetalhes) {
@@ -1276,6 +1361,8 @@
             }
 
         });
+
+        abrirChamadoHistoricoDaUrl();
 
         btnEnviarComentario?.addEventListener("click", async () => {
             const chamadoId = Number(comentariosChamadoIdInput?.value);
@@ -2155,14 +2242,25 @@
                 return '<div class="text-muted small">Nenhum chamado vinculado.</div>';
             }
 
-            return vinculos.map(vinculo => `
-                <div class="linked-call-item" data-vinculo-chamado-id="${Number(vinculo.id || 0)}">
+            return vinculos.map(vinculo => {
+                const id = Number(vinculo.id || 0);
+                const estaNoHistorico = vinculoEstaNoHistorico(vinculo);
+
+                return `
+                <button type="button"
+                        class="linked-call-item text-start"
+                        data-vinculo-chamado-id="${id}"
+                        data-abrir-vinculo-chamado="${id}"
+                        data-esta-no-historico="${estaNoHistorico ? "true" : "false"}"
+                        data-status="${escapeHtml(vinculo.status || "")}"
+                        aria-label="Abrir chamado #${escapeHtml(vinculo.numeroChamadoGrupo || "")}">
                     <div class="min-width-0">
                         <div class="linked-call-title">#${escapeHtml(vinculo.numeroChamadoGrupo || "-")} - ${escapeHtml(vinculo.titulo || "Chamado")}</div>
                         <div class="text-muted small">${escapeHtml(vinculo.status || "-")} · ${escapeHtml(formatDateTimeLocal(vinculo.dataCriacao))}</div>
                     </div>
-                </div>
-            `).join("");
+                </button>
+            `;
+            }).join("");
         }
 
         function inicializarVinculosChamado() {

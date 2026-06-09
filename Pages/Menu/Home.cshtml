@@ -766,6 +766,21 @@
         padding: .65rem .75rem;
       }
 
+      .linked-call-open {
+        min-width: 0;
+        flex: 1 1 auto;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+
+      .linked-call-open:hover .linked-call-title,
+      .linked-call-open:focus-visible .linked-call-title {
+        color: #0d6efd;
+        text-decoration: underline;
+      }
+
       .linked-call-title {
         min-width: 0;
         overflow: hidden;
@@ -855,6 +870,15 @@
         font-weight: 700;
         line-height: 1;
         padding: .35rem .5rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .chamado-vinculo-chip:hover,
+      .chamado-vinculo-chip:focus-visible {
+        border-color: #93c5fd;
+        background: #eff6ff;
+        color: #1d4ed8;
       }
 
       .min-width-0 {
