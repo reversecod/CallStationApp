@@ -78,8 +78,10 @@ public class NotificationsModel : PageModel
         public int NotificacaoId { get; set; }
     }
 
-    public async Task<IActionResult> OnGetNaoLidasAsync(int grupoId)
+    public async Task<IActionResult> OnGetNaoLidasAsync()
     {
+        Response.Headers.CacheControl = "no-store, no-cache";
+
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
             return Unauthorized();
@@ -231,20 +233,17 @@ public class NotificationsModel : PageModel
         return Page();
     }
 
-    public async Task<IActionResult> OnGetContarNaoLidasAsync(int grupoId)
+    public async Task<IActionResult> OnGetContarNaoLidasAsync()
     {
+        Response.Headers.CacheControl = "no-store, no-cache";
+
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
             return Unauthorized();
 
-        var queryNaoLidas = _context.Notificacoes
+        var totalNaoLidas = await _context.Notificacoes
             .AsNoTracking()
-            .Where(n => n.UsuarioId == idUsuario.Value && !n.Lida);
-
-        if (grupoId > 0)
-            queryNaoLidas = queryNaoLidas.Where(n => n.GrupoId == grupoId);
-
-        var totalNaoLidas = await queryNaoLidas.CountAsync();
+            .CountAsync(n => n.UsuarioId == idUsuario.Value && !n.Lida);
 
         return new JsonResult(new
         {

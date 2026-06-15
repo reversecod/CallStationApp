@@ -1224,26 +1224,19 @@
             }
 
             try {
-                const response = await fetch(url, { headers: { "Accept": "application/json" } });
+                const response = await fetch(url, {
+                    cache: "no-store",
+                    headers: { "Accept": "application/json" }
+                });
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
                     return;
                 }
 
-                const total = Number(data.dados?.totalNaoLidas || 0);
-                if (total > 0) {
-                    badge.textContent = total > 9 ? "9+" : String(total);
-                    badge.classList.remove("d-none");
-                    perfilNotificacaoIcone?.classList.remove("d-none");
-                } else {
-                    badge.textContent = "0";
-                    badge.classList.add("d-none");
-                    perfilNotificacaoIcone?.classList.add("d-none");
-                }
+                atualizarIndicadorNotificacoes(data.dados?.totalNaoLidas);
             } catch {
-                badge.classList.add("d-none");
-                perfilNotificacaoIcone?.classList.add("d-none");
+                // Mantém o último estado conhecido até ser possível consultar o servidor novamente.
             }
         }
 
@@ -1265,7 +1258,15 @@
         }
 
         function atualizarIndicadorNotificacoes(total) {
-            const valor = Number(total || 0);
+            if (total === null || total === undefined) {
+                return;
+            }
+
+            const valor = Number(total);
+            if (!Number.isFinite(valor) || valor < 0) {
+                return;
+            }
+
             if (valor > 0) {
                 if (badge) {
                     badge.textContent = valor > 9 ? "9+" : String(valor);
@@ -1339,7 +1340,10 @@
             listaNotificacoes.innerHTML = '<div class="text-muted small">Carregando notificações...</div>';
 
             try {
-                const response = await fetch(url, { headers: { "Accept": "application/json" } });
+                const response = await fetch(url, {
+                    cache: "no-store",
+                    headers: { "Accept": "application/json" }
+                });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || "Não foi possível carregar as notificações.");
@@ -1347,7 +1351,6 @@
 
                 const notificacoes = data.dados?.notificacoes || [];
                 renderizarNotificacoesSidebar(notificacoes);
-                atualizarIndicadorNotificacoes(data.dados?.totalNaoLidas || notificacoes.length);
             } catch (error) {
                 listaNotificacoes.innerHTML = `<div class="text-danger small">${escapeSidebarHtml(error.message || "Não foi possível carregar as notificações.")}</div>`;
             }
@@ -1391,7 +1394,7 @@
                 const data = await enviarSidebarJson(url, { notificacaoId });
                 notificacoesAlteradas = true;
                 listaNotificacoes?.querySelector(`[data-sidebar-notificacao-id="${notificacaoId}"]`)?.remove();
-                atualizarIndicadorNotificacoes(data.totalNaoLidas || 0);
+                atualizarIndicadorNotificacoes(data.totalNaoLidas);
 
                 if (!listaNotificacoes?.querySelector("[data-sidebar-notificacao-id]")) {
                     renderizarNotificacoesSidebar([]);
@@ -1528,7 +1531,10 @@
             modalNotificacoesElement.addEventListener("hidden.bs.modal", () => {
                 if (notificacoesAlteradas) {
                     window.location.reload();
+                    return;
                 }
+
+                carregarContadorNotificacoes();
             });
         }
     })();
