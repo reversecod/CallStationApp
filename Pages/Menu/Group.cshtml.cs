@@ -7,6 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Runtime.Versioning;
 using System.Text;
 
 namespace CallStationApp.Pages.Menu;
@@ -14,6 +18,10 @@ namespace CallStationApp.Pages.Menu;
 [Authorize]
 public class GroupModel : PageModel
 {
+    private const int LimiteImagemAparenciaBytes = 3 * 1024 * 1024;
+    private const int LarguraMaximaImagemAparencia = 2560;
+    private const int AlturaMaximaImagemAparencia = 1600;
+    private const long QualidadeJpegAparencia = 92L;
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _auth;
     private readonly IMemoryCache _memoryCache;
@@ -1361,7 +1369,7 @@ public class GroupModel : PageModel
     private static bool ImagemAparenciaValida(IFormFile arquivo)
     {
         var extensao = Path.GetExtension(arquivo.FileName);
-        return arquivo.Length <= 3 * 1024 * 1024 && ExtensoesFotoGrupoPermitidas.Contains(extensao);
+        return arquivo.Length <= LimiteImagemAparenciaBytes && ExtensoesFotoGrupoPermitidas.Contains(extensao);
     }
 
     private static async Task<bool> AssinaturaImagemValidaAsync(IFormFile arquivo)
@@ -1398,17 +1406,128 @@ public class GroupModel : PageModel
 
     private async Task<string> SalvarImagemAparenciaAsync(IFormFile arquivo, int grupoId)
     {
-        var extensao = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
+        var extensaoOriginal = Path.GetExtension(arquivo.FileName).ToLowerInvariant();
         var pasta = Path.Combine(_environment.WebRootPath, "uploads", "grupos", "backgrounds");
         Directory.CreateDirectory(pasta);
 
-        var nomeArquivo = $"grupo-bg-{grupoId}-{Guid.NewGuid():N}{extensao}";
+        var extensaoSaida = extensaoOriginal == ".png" ? ".png" : extensaoOriginal == ".webp" ? ".webp" : ".jpg";
+        var nomeArquivo = $"grupo-bg-{grupoId}-{Guid.NewGuid():N}{extensaoSaida}";
         var caminho = Path.Combine(pasta, nomeArquivo);
 
-        await using var stream = new FileStream(caminho, FileMode.Create);
-        await arquivo.CopyToAsync(stream);
+        if (extensaoOriginal == ".webp" || !OperatingSystem.IsWindows())
+        {
+            await CopiarImagemAparenciaOriginalAsync(arquivo, caminho);
+            return $"/uploads/grupos/backgrounds/{nomeArquivo}";
+        }
+
+        using var imagemOtimizada = CriarImagemAparenciaOtimizada(arquivo, extensaoSaida);
+        if (imagemOtimizada.Length < arquivo.Length)
+        {
+            imagemOtimizada.Position = 0;
+            await using var stream = new FileStream(caminho, FileMode.Create);
+            await imagemOtimizada.CopyToAsync(stream);
+        }
+        else
+        {
+            await CopiarImagemAparenciaOriginalAsync(arquivo, caminho);
+        }
 
         return $"/uploads/grupos/backgrounds/{nomeArquivo}";
+    }
+
+    private static async Task CopiarImagemAparenciaOriginalAsync(IFormFile arquivo, string caminho)
+    {
+        await using var stream = new FileStream(caminho, FileMode.Create);
+        await arquivo.CopyToAsync(stream);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static MemoryStream CriarImagemAparenciaOtimizada(IFormFile arquivo, string extensaoSaida)
+    {
+        using var input = arquivo.OpenReadStream();
+        using var imagemOriginal = Image.FromStream(input, useEmbeddedColorManagement: true, validateImageData: true);
+        using var imagemOrientada = AplicarOrientacaoExif(imagemOriginal);
+        var tamanho = CalcularTamanhoAparencia(imagemOrientada.Width, imagemOrientada.Height);
+        var preservarTransparencia = extensaoSaida == ".png";
+        var output = new MemoryStream();
+
+        using var imagemFinal = new Bitmap(
+            tamanho.Width,
+            tamanho.Height,
+            preservarTransparencia ? PixelFormat.Format32bppArgb : PixelFormat.Format24bppRgb);
+        imagemFinal.SetResolution(imagemOrientada.HorizontalResolution, imagemOrientada.VerticalResolution);
+
+        using (var graphics = Graphics.FromImage(imagemFinal))
+        {
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.CompositingQuality = CompositingQuality.HighQuality;
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.SmoothingMode = SmoothingMode.HighQuality;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.Clear(preservarTransparencia ? Color.Transparent : Color.White);
+            graphics.DrawImage(imagemOrientada, 0, 0, tamanho.Width, tamanho.Height);
+        }
+
+        if (extensaoSaida == ".png")
+        {
+            imagemFinal.Save(output, ImageFormat.Png);
+            return output;
+        }
+
+        var codec = ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
+        if (codec == null)
+        {
+            imagemFinal.Save(output, ImageFormat.Jpeg);
+            return output;
+        }
+
+        using var parametros = new EncoderParameters(1);
+        parametros.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, QualidadeJpegAparencia);
+        imagemFinal.Save(output, codec, parametros);
+        return output;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static Bitmap AplicarOrientacaoExif(Image imagem)
+    {
+        const int propriedadeOrientacaoExif = 0x0112;
+        var bitmap = new Bitmap(imagem);
+
+        if (!imagem.PropertyIdList.Contains(propriedadeOrientacaoExif))
+            return bitmap;
+
+        var propriedade = imagem.GetPropertyItem(propriedadeOrientacaoExif);
+        var orientacao = propriedade?.Value is { Length: > 0 } valor ? valor[0] : (byte)1;
+        var flip = orientacao switch
+        {
+            2 => RotateFlipType.RotateNoneFlipX,
+            3 => RotateFlipType.Rotate180FlipNone,
+            4 => RotateFlipType.Rotate180FlipX,
+            5 => RotateFlipType.Rotate90FlipX,
+            6 => RotateFlipType.Rotate90FlipNone,
+            7 => RotateFlipType.Rotate270FlipX,
+            8 => RotateFlipType.Rotate270FlipNone,
+            _ => RotateFlipType.RotateNoneFlipNone
+        };
+
+        if (flip != RotateFlipType.RotateNoneFlipNone)
+            bitmap.RotateFlip(flip);
+
+        return bitmap;
+    }
+
+    private static Size CalcularTamanhoAparencia(int largura, int altura)
+    {
+        if (largura <= LarguraMaximaImagemAparencia && altura <= AlturaMaximaImagemAparencia)
+            return new Size(largura, altura);
+
+        var escala = Math.Min(
+            (double)LarguraMaximaImagemAparencia / largura,
+            (double)AlturaMaximaImagemAparencia / altura);
+
+        return new Size(
+            Math.Max(1, (int)Math.Round(largura * escala)),
+            Math.Max(1, (int)Math.Round(altura * escala)));
     }
 
     private void RemoverImagemAparenciaSeExistir(string? caminhoRelativo)
