@@ -1344,14 +1344,21 @@ public class HistoryModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostAdicionarComentarioAsync([FromBody] AdicionarComentarioHistoricoRequest request)
+    public async Task<IActionResult> OnPostAdicionarComentarioAsync([FromForm] AdicionarComentarioHistoricoRequest request)
     {
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
             return Unauthorized();
 
-        if (request == null || request.ChamadoId <= 0 || string.IsNullOrWhiteSpace(request.Mensagem))
-            return new JsonResult(new { success = false, message = "Comentário inválido." });
+        if (request == null || request.ChamadoId <= 0)
+            return new JsonResult(new { success = false, message = "Chamado inválido." });
+
+        var mensagem = (request.Mensagem ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(mensagem) && request.AnexoImagem is not { Length: > 0 })
+            return new JsonResult(new { success = false, message = "Informe um comentário ou selecione uma imagem." });
+
+        if (mensagem.Length > LimiteCaracteresComentario)
+            return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
 
         var resultadoAcesso = await ObterChamadoHistoricoComAcessoAsync(usuarioId.Value, GrupoId, request.ChamadoId);
         if (!resultadoAcesso.Success)
@@ -1366,9 +1373,28 @@ public class HistoryModel : PageModel
             });
         }
 
-        var mensagem = request.Mensagem.Trim();
-        if (mensagem.Length > LimiteCaracteresComentario)
-            return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
+        string? nomeArquivo = null;
+        string? caminhoArquivoSalvo = null;
+        if (request.AnexoImagem is { Length: > 0 } anexoImagem)
+        {
+            if (anexoImagem.Length > 5 * 1024 * 1024)
+                return new JsonResult(new { success = false, message = "A imagem do comentário deve ter no máximo 5 MB." });
+
+            var extensao = Path.GetExtension(anexoImagem.FileName).ToLowerInvariant();
+            var extensoesPermitidas = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+            if (!extensoesPermitidas.Contains(extensao))
+                return new JsonResult(new { success = false, message = "Formato de imagem não permitido." });
+
+            if (!await AssinaturaArquivoPermitidaAsync(anexoImagem, extensao))
+                return new JsonResult(new { success = false, message = "Arquivo de imagem inválido." });
+
+            nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
+            var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
+            Directory.CreateDirectory(uploadsRoot);
+            caminhoArquivoSalvo = Path.Combine(uploadsRoot, nomeArquivo);
+            await using var stream = System.IO.File.Create(caminhoArquivoSalvo);
+            await anexoImagem.CopyToAsync(stream);
+        }
 
         var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -1387,7 +1413,8 @@ public class HistoryModel : PageModel
                         Chamado = resultadoAcesso.Chamado,
                         UsuarioId = usuarioId.Value,
                         Usuario = usuario,
-                        Mensagem = mensagem,
+                        Mensagem = string.IsNullOrWhiteSpace(mensagem) ? "Imagem anexada." : mensagem,
+                        AnexoComentario = nomeArquivo,
                         DataComentario = DateTime.UtcNow
                     };
 
@@ -1399,7 +1426,7 @@ public class HistoryModel : PageModel
                         GrupoId = resultadoAcesso.Chamado.GrupoId,
                         UsuarioId = usuarioId.Value,
                         CampoAlterado = "Comentario",
-                        ValorAlterado = mensagem,
+                        ValorAlterado = nomeArquivo == null ? comentario.Mensagem : $"{comentario.Mensagem} [anexo]",
                         TipoAlteracao = "ComentarioManual",
                         DataAlteracao = DateTime.UtcNow
                     });
@@ -1470,8 +1497,12 @@ public class HistoryModel : PageModel
                 }
             });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            if (!string.IsNullOrWhiteSpace(caminhoArquivoSalvo) && System.IO.File.Exists(caminhoArquivoSalvo))
+                System.IO.File.Delete(caminhoArquivoSalvo);
+
+            _logger.LogError(ex, "Erro ao adicionar comentario ao historico do chamado {ChamadoId}.", request.ChamadoId);
             return new JsonResult(new { success = false, message = "Não foi possível adicionar o comentário." });
         }
     }
@@ -2161,6 +2192,30 @@ public class HistoryModel : PageModel
         }
     }
 
+    private static async Task<bool> AssinaturaArquivoPermitidaAsync(IFormFile arquivo, string extensao)
+    {
+        var buffer = new byte[12];
+        await using var stream = arquivo.OpenReadStream();
+        var bytesLidos = await stream.ReadAsync(buffer);
+        if (bytesLidos < 4)
+            return false;
+
+        return extensao switch
+        {
+            ".jpg" or ".jpeg" => buffer[0] == 0xFF && buffer[1] == 0xD8 && buffer[2] == 0xFF,
+            ".png" => bytesLidos >= 8 &&
+                      buffer[0] == 0x89 && buffer[1] == 0x50 && buffer[2] == 0x4E && buffer[3] == 0x47 &&
+                      buffer[4] == 0x0D && buffer[5] == 0x0A && buffer[6] == 0x1A && buffer[7] == 0x0A,
+            ".gif" => bytesLidos >= 6 &&
+                      buffer[0] == 0x47 && buffer[1] == 0x49 && buffer[2] == 0x46 &&
+                      buffer[3] == 0x38 && (buffer[4] == 0x37 || buffer[4] == 0x39) && buffer[5] == 0x61,
+            ".webp" => bytesLidos >= 12 &&
+                       buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46 &&
+                       buffer[8] == 0x57 && buffer[9] == 0x45 && buffer[10] == 0x42 && buffer[11] == 0x50,
+            _ => false
+        };
+    }
+
     private static string? FormatarPrioridadeAuditoria(PrioridadeChamado? prioridade) => prioridade switch
     {
         PrioridadeChamado.Media => "Média",
@@ -2675,6 +2730,7 @@ public class HistoryModel : PageModel
     {
         public int ChamadoId { get; set; }
         public string? Mensagem { get; set; }
+        public IFormFile? AnexoImagem { get; set; }
     }
 
     public class EditarComentarioHistoricoRequest
