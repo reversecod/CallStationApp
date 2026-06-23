@@ -43,7 +43,6 @@ public class HomeModel : PageModel
     private readonly MencaoService _mencaoService;
     private readonly SlaPausaService _slaPausaService;
     private readonly ILogger<HomeModel> _logger;
-    private const int TamanhoPaginaChamados = 20;
 
     public HomeModel(
         AppDbContext context,
@@ -66,9 +65,6 @@ public class HomeModel : PageModel
     [BindProperty(SupportsGet = true)]
     public int GrupoId { get; set; }
 
-    [BindProperty(SupportsGet = true, Name = "page")]
-    public int PaginaAtual { get; set; } = 1;
-
     public string? NomeUsuarioLogado { get; set; }
     public string? FotoUsuarioLogado { get; set; }
     public Grupo? GrupoAtual { get; set; }
@@ -80,8 +76,6 @@ public class HomeModel : PageModel
     public bool UsuarioLogadoEhAdministrador { get; set; }
     public PermissaoUsuario UsuarioLogadoPermissao { get; set; } = PermissaoUsuario.Nenhuma;
     public long ServerNowUnixMs { get; set; }
-    public bool TemPaginaAnterior => PaginaAtual > 1;
-    public bool TemProximaPagina { get; set; }
 
     public class ChamadoListItemViewModel
     {
@@ -160,8 +154,6 @@ public class HomeModel : PageModel
 
         Chamados = await queryChamados
             .OrderByDescending(c => c.DataCriacao)
-            .Skip((Math.Max(PaginaAtual, 1) - 1) * TamanhoPaginaChamados)
-            .Take(TamanhoPaginaChamados + 1)
             .Select(c => new ChamadoListItemViewModel
             {
                 Id = c.Id,
@@ -172,12 +164,6 @@ public class HomeModel : PageModel
                 DataCriacao = c.DataCriacao
             })
             .ToListAsync();
-
-        TemProximaPagina = Chamados.Count > TamanhoPaginaChamados;
-        if (TemProximaPagina)
-        {
-            Chamados.RemoveAt(Chamados.Count - 1);
-        }
 
         if (Chamados.Count > 0)
         {
