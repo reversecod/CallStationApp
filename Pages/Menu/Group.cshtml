@@ -116,6 +116,7 @@
             gap: .75rem;
         }
         .aparencia-option {
+            position: relative;
             border: 1px solid #dbe3ec;
             border-radius: .9rem;
             background: #fff;
@@ -123,10 +124,41 @@
             display: grid;
             gap: .45rem;
             text-align: left;
+            cursor: pointer;
+            transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+        }
+        .aparencia-option:hover,
+        .aparencia-option:focus-visible {
+            border-color: #94a3b8;
         }
         .aparencia-option.is-selected {
-            border-color: var(--aparencia-selected-color, #2563eb);
-            box-shadow: 0 0 0 .18rem color-mix(in srgb, var(--aparencia-selected-color, #2563eb) 24%, transparent);
+            border-color: #0f172a;
+            box-shadow: 0 0 0 .18rem rgba(37, 99, 235, .22), 0 .45rem 1rem rgba(15, 23, 42, .12);
+            transform: translateY(-1px);
+        }
+        .aparencia-option.is-selected::before {
+            content: "";
+            position: absolute;
+            top: .45rem;
+            right: .45rem;
+            width: 1.35rem;
+            height: 1.35rem;
+            border-radius: 999px;
+            background: #0f172a;
+            box-shadow: 0 0 0 2px #fff;
+            z-index: 1;
+        }
+        .aparencia-option.is-selected::after {
+            content: "";
+            position: absolute;
+            top: .72rem;
+            right: .9rem;
+            width: .36rem;
+            height: .68rem;
+            border: solid #fff;
+            border-width: 0 .14rem .14rem 0;
+            transform: rotate(45deg);
+            z-index: 2;
         }
         .aparencia-preview {
             min-height: 4.2rem;
@@ -135,6 +167,10 @@
             background: var(--aparencia-preview-bg, #f8fafc);
             background-position: center;
             background-size: cover;
+        }
+        .aparencia-option.is-selected .aparencia-preview {
+            border-color: #0f172a;
+            box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .72);
         }
         .aparencia-option-title {
             font-size: .82rem;
@@ -782,6 +818,7 @@ function marcarAparenciaSelecionada() {
         const valor = area === "tela" ? aparenciaTelaValor?.value : aparenciaSidebarValor?.value;
         const selecionado = botao.dataset.aparenciaTipo === tipo && botao.dataset.aparenciaValor === valor;
         botao.classList.toggle("is-selected", selecionado);
+        botao.setAttribute("aria-pressed", selecionado ? "true" : "false");
 
         if (selecionado) {
             const corSelecionada = botao.dataset.aparenciaTipo === "cor"
@@ -1063,10 +1100,10 @@ function recolherSelectLongo(select) {
         new HtmlString($"<div class=\"col-md-4\"><div class=\"form-check form-switch\"><input class=\"form-check-input\" type=\"checkbox\" id=\"{id}\" {(value ? "checked" : "")}><label class=\"form-check-label\" for=\"{id}\">{label}</label></div></div>");
 
     private IHtmlContent AparenciaCor(string area, string cor, string titulo) =>
-        new HtmlString($"<button type=\"button\" class=\"aparencia-option\" data-aparencia-area=\"{area}\" data-aparencia-tipo=\"cor\" data-aparencia-valor=\"{cor}\"><span class=\"aparencia-preview\" style=\"--aparencia-preview-bg:{cor}\"></span><span class=\"aparencia-option-title\">{E(titulo)}</span></button>");
+        new HtmlString($"<button type=\"button\" class=\"aparencia-option\" data-aparencia-area=\"{area}\" data-aparencia-tipo=\"cor\" data-aparencia-valor=\"{cor}\" aria-pressed=\"false\"><span class=\"aparencia-preview\" style=\"--aparencia-preview-bg:{cor}\"></span><span class=\"aparencia-option-title\">{E(titulo)}</span></button>");
 
     private IHtmlContent AparenciaPreset(string area, string valor, string titulo) =>
-        new HtmlString($"<button type=\"button\" class=\"aparencia-option\" data-aparencia-area=\"{area}\" data-aparencia-tipo=\"preset\" data-aparencia-valor=\"{valor}\"><span class=\"aparencia-preview\" style=\"--aparencia-preview-bg:{PresetCss(valor)}\"></span><span class=\"aparencia-option-title\">{E(titulo)}</span></button>");
+        new HtmlString($"<button type=\"button\" class=\"aparencia-option\" data-aparencia-area=\"{area}\" data-aparencia-tipo=\"preset\" data-aparencia-valor=\"{valor}\" aria-pressed=\"false\"><span class=\"aparencia-preview\" style=\"--aparencia-preview-bg:{PresetCss(valor)}\"></span><span class=\"aparencia-option-title\">{E(titulo)}</span></button>");
 
     private static string PresetCss(string valor) => valor switch
     {

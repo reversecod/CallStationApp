@@ -87,55 +87,96 @@
 
         .member-card {
             border: 0;
-            border-radius: 1rem;
-            box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.06);
+            border-radius: 0.85rem;
+            box-shadow: 0 0.18rem 0.75rem rgba(0, 0, 0, 0.055);
             transition: transform 0.15s ease, box-shadow 0.15s ease;
             height: 100%;
         }
 
         .member-card:hover {
             transform: translateY(-0.125rem);
-            box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.08);
+            box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.075);
+        }
+
+        .member-card-header {
+            gap: 0.7rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .member-card .card-title {
+            font-size: 1rem;
+            line-height: 1.2;
+        }
+
+        .member-card .min-width-0 {
+            min-width: 0;
         }
 
         .member-avatar {
-            width: 4.5rem;
-            height: 4.5rem;
+            width: 3.15rem;
+            height: 3.15rem;
             object-fit: cover;
             border-radius: 50%;
-            border: 0.1875rem solid #e9ecef;
+            border: 0.125rem solid #e9ecef;
             background: #fff;
         }
 
         .member-avatar-placeholder {
-            width: 4.5rem;
-            height: 4.5rem;
+            width: 3.15rem;
+            height: 3.15rem;
             border-radius: 50%;
-            border: 0.1875rem solid #e9ecef;
+            border: 0.125rem solid #e9ecef;
             display: flex;
             align-items: center;
             justify-content: center;
             background: #ffffff;
-            font-size: 1.5rem;
+            font-size: 1.1rem;
             color: #6c757d;
+        }
+
+        .member-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.55rem 0.8rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .member-info-item-full {
+            grid-column: 1 / -1;
         }
 
         .member-info-label {
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             color: #6c757d;
-            margin-bottom: 0.15rem;
+            margin-bottom: 0.1rem;
         }
 
         .member-info-value {
-            font-size: 0.95rem;
+            font-size: 0.84rem;
             font-weight: 500;
+            line-height: 1.25;
             word-break: break-word;
         }
 
+        .member-info-value-clamp {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
         .badge-permissao {
-            font-size: 0.8rem;
-            padding: 0.45rem 0.7rem;
+            font-size: 0.72rem;
+            padding: 0.28rem 0.55rem;
             border-radius: 999px;
+        }
+
+        .member-card-footer {
+            padding-top: 0.55rem;
+        }
+
+        .member-card-footer small {
+            font-size: 0.74rem;
         }
 
         .top-actions {
@@ -144,6 +185,12 @@
 
         .members-grid .col {
             display: flex;
+            position: relative;
+            z-index: 1;
+        }
+
+        .members-grid .col.is-actions-open {
+            z-index: 1040;
         }
 
         @@media (max-width: 767.98px) {
@@ -159,12 +206,27 @@
             }
         }
 
+        @@media (max-width: 575.98px) {
+            .member-details {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .member-card {
             overflow: visible;
         }
 
+        .members-grid .col.is-actions-open .member-card {
+            transform: none;
+        }
+
+        .member-card .card-body {
+            overflow: visible;
+            padding: 0.9rem;
+        }
+
         .dropdown-menu {
-            z-index: 2000;
+            z-index: 1041;
         }
 
         .content-wrapper {
@@ -227,7 +289,7 @@
                 </div>
             </div>
 
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 members-grid">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 row-cols-xxl-4 g-3 members-grid">
                 @if (Model.Membros != null && Model.Membros.Any())
                 {
                     foreach (var membro in Model.Membros)
@@ -250,7 +312,7 @@
                         <div class="col">
                             <div class="card member-card w-100">
                                 <div class="card-body">
-                                    <div class="d-flex align-items-center gap-3 mb-4">
+                                    <div class="member-card-header d-flex align-items-center">
                                         @if (!string.IsNullOrWhiteSpace(foto))
                                         {
                                             <img src="@foto" alt="Foto do usuário" class="member-avatar" loading="lazy" />
@@ -262,40 +324,42 @@
                                             </div>
                                         }
 
-                                        <div class="flex-grow-1">
-                                            <h5 class="card-title mb-1">@membro.NomeCompleto</h5>
-                                            <div class="text-muted small">@@@membro.NomeUsuario</div>
+                                        <div class="flex-grow-1 min-width-0">
+                                            <h5 class="card-title mb-1 text-truncate">@membro.NomeCompleto</h5>
+                                            <div class="text-muted small text-truncate">@@@membro.NomeUsuario</div>
                                         </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <div class="member-info-label">E-mail</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Email) ? "Não informado" : membro.Email)</div>
+                                    <div class="member-details">
+                                        <div class="member-info-item member-info-item-full">
+                                            <div class="member-info-label">E-mail</div>
+                                            <div class="member-info-value text-truncate" title="@(string.IsNullOrWhiteSpace(membro.Email) ? "Não informado" : membro.Email)">@(string.IsNullOrWhiteSpace(membro.Email) ? "Não informado" : membro.Email)</div>
+                                        </div>
+
+                                        <div class="member-info-item">
+                                            <div class="member-info-label">Apelido</div>
+                                            <div class="member-info-value text-truncate" title="@(string.IsNullOrWhiteSpace(membro.Apelido) ? "Não definido" : membro.Apelido)">@(string.IsNullOrWhiteSpace(membro.Apelido) ? "Não definido" : membro.Apelido)</div>
+                                        </div>
+
+                                        <div class="member-info-item">
+                                            <div class="member-info-label">Permissão</div>
+                                            <span class="badge badge-permissao @permissaoClasse">
+                                                @membro.Permissao.ToString()
+                                            </span>
+                                        </div>
+
+                                        <div class="member-info-item">
+                                            <div class="member-info-label">ID interno</div>
+                                            <div class="member-info-value text-truncate" title="@(string.IsNullOrWhiteSpace(membro.IdentificadorInterno) ? "Não definido" : membro.IdentificadorInterno)">@(string.IsNullOrWhiteSpace(membro.IdentificadorInterno) ? "Não definido" : membro.IdentificadorInterno)</div>
+                                        </div>
+
+                                        <div class="member-info-item member-info-item-full">
+                                            <div class="member-info-label">Observação</div>
+                                            <div class="member-info-value member-info-value-clamp" title="@(string.IsNullOrWhiteSpace(membro.Observacao) ? "Sem observações" : membro.Observacao)">@(string.IsNullOrWhiteSpace(membro.Observacao) ? "Sem observações" : membro.Observacao)</div>
+                                        </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <div class="member-info-label">Apelido no grupo</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Apelido) ? "Não definido" : membro.Apelido)</div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <div class="member-info-label">Permissão</div>
-                                        <span class="badge badge-permissao @permissaoClasse">
-                                            @membro.Permissao.ToString()
-                                        </span>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <div class="member-info-label">Identificador interno</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.IdentificadorInterno) ? "Não definido" : membro.IdentificadorInterno)</div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <div class="member-info-label">Observação</div>
-                                        <div class="member-info-value">@(string.IsNullOrWhiteSpace(membro.Observacao) ? "Sem observações" : membro.Observacao)</div>
-                                    </div>
-
-                                    <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                                    <div class="member-card-footer d-flex justify-content-between align-items-center border-top">
                                         <small class="text-muted">
                                             Desde @membro.DataAdicao.ToString("dd/MM/yyyy")
                                         </small>
@@ -304,7 +368,9 @@
                                         {
                                             <div class="dropdown">
                                                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
-                                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                                        data-bs-toggle="dropdown"
+                                                        data-bs-boundary="viewport"
+                                                        aria-expanded="false">
                                                     Ações
                                                 </button>
                                                 <ul class="dropdown-menu dropdown-menu-end">
@@ -338,7 +404,8 @@
                                                                     data-usuario-id="@membro.UsuarioId"
                                                                     data-nome="@membro.NomeCompleto"
                                                                     data-saida-propria="true"
-                                                                    disabled="@(!administradorPodeSair)"
+                                                                    data-pode-sair="@(administradorPodeSair.ToString().ToLowerInvariant())"
+                                                                    data-bloqueio="Promova outro administrador ou exclua o grupo antes de sair."
                                                                     title="@(!administradorPodeSair ? "Promova outro administrador ou exclua o grupo." : null)">
                                                                 Sair do grupo
                                                             </button>
@@ -743,6 +810,17 @@
             limparFeedbackConvite();
         });
 
+        document.querySelectorAll(".members-grid .dropdown").forEach(dropdown => {
+            const resetActionsLayer = () => dropdown.closest(".col")?.classList.remove("is-actions-open");
+
+            dropdown.addEventListener("show.bs.dropdown", () => {
+                dropdown.closest(".col")?.classList.add("is-actions-open");
+            });
+
+            dropdown.addEventListener("hide.bs.dropdown", resetActionsLayer);
+            dropdown.addEventListener("hidden.bs.dropdown", resetActionsLayer);
+        });
+
         document.querySelectorAll(".btn-editar-apelido").forEach(btn => {
             btn.addEventListener("click", () => {
                 editarApelidoUsuarioId.value = btn.dataset.usuarioId || "";
@@ -763,25 +841,48 @@
             });
         });
 
-        document.querySelectorAll(".btn-remover-membro").forEach(btn => {
-            btn.addEventListener("click", () => {
-                removendoProprioUsuario = btn.dataset.saidaPropria === "true";
-                removerMembroUsuarioId.value = btn.dataset.usuarioId || "";
-                removerMembroNome.textContent = btn.dataset.nome || "";
-                if (modalRemoverMembroLabel) {
-                    modalRemoverMembroLabel.textContent = removendoProprioUsuario ? "Sair do grupo" : "Remover membro";
-                }
-                if (removerMembroTextoConfirmacao) {
-                    removerMembroTextoConfirmacao.textContent = removendoProprioUsuario
+        function abrirModalRemoverMembro(btn) {
+            removendoProprioUsuario = btn.dataset.saidaPropria === "true";
+            const saidaBloqueada = removendoProprioUsuario && btn.dataset.podeSair === "false";
+
+            removerMembroUsuarioId.value = btn.dataset.usuarioId || "";
+            removerMembroNome.textContent = btn.dataset.nome || "";
+
+            if (modalRemoverMembroLabel) {
+                modalRemoverMembroLabel.textContent = removendoProprioUsuario ? "Sair do grupo" : "Remover membro";
+            }
+
+            if (removerMembroTextoConfirmacao) {
+                removerMembroTextoConfirmacao.textContent = saidaBloqueada
+                    ? (btn.dataset.bloqueio || "Nao e possivel sair deste grupo no momento.")
+                    : (removendoProprioUsuario
                         ? "Tem certeza que deseja sair deste grupo?"
-                        : "Tem certeza que deseja remover este membro do grupo?";
-                }
-                if (btnConfirmarRemoverMembro) {
-                    btnConfirmarRemoverMembro.textContent = removendoProprioUsuario ? "Sair do grupo" : "Remover";
-                }
-                limparFeedbackElemento(feedbackRemoverMembro);
-                modalRemoverMembro?.show();
-            });
+                        : "Tem certeza que deseja remover este membro do grupo?");
+            }
+
+            if (btnConfirmarRemoverMembro) {
+                btnConfirmarRemoverMembro.textContent = removendoProprioUsuario ? "Sair do grupo" : "Remover";
+                btnConfirmarRemoverMembro.disabled = saidaBloqueada;
+            }
+
+            limparFeedbackElemento(feedbackRemoverMembro);
+            modalRemoverMembro?.show();
+        }
+
+        document.addEventListener("click", event => {
+            const btn = event.target.closest(".btn-remover-membro");
+            if (!btn) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const dropdown = btn.closest(".dropdown");
+            const toggle = dropdown?.querySelector("[data-bs-toggle='dropdown']");
+            if (toggle && window.bootstrap) {
+                bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+            }
+
+            abrirModalRemoverMembro(btn);
         });
 
         btnSalvarApelido?.addEventListener("click", async () => {
