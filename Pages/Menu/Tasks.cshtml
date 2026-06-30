@@ -299,11 +299,12 @@
                                 <h3><i class="bi bi-paperclip me-2"></i>Anexos</h3>
                                 <div id="listaAnexosTarefa" class="task-attachments"></div>
                                 <div class="input-group input-group-sm mt-3">
-                                    <input type="file" class="form-control" id="arquivoAnexoTarefa">
+                                    <input type="file" class="form-control" id="arquivoAnexoTarefa" accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.msg,.xlsx,.docx,.pdf,.mp4">
                                     <button type="button" class="btn btn-outline-primary" id="btnEnviarAnexoTarefa">
                                         <i class="bi bi-upload"></i>
                                     </button>
                                 </div>
+                                <div class="form-text">JPG, PNG, GIF, WEBP, TXT, MSG, XLSX, DOCX, PDF ou MP4. Limites por tipo: imagens 5 MB, TXT 1 MB, documentos 15 MB, PDF 25 MB e MP4 100 MB.</div>
                             </div>
 
                             <div class="row g-3">
@@ -486,11 +487,11 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content bg-dark text-light">
             <div class="modal-header border-secondary">
-                <h5 class="modal-title" id="modalVisualizarAnexoTarefaTitulo">Imagem</h5>
+                <h5 class="modal-title" id="modalVisualizarAnexoTarefaTitulo">Anexo</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body text-center">
-                <img id="imagemPreviewAnexoTarefa" class="img-fluid rounded" alt="Preview do anexo">
+            <div class="modal-body text-center" id="conteudoPreviewAnexoTarefa">
+                <div class="text-muted small">Carregando anexo...</div>
             </div>
         </div>
     </div>
@@ -583,6 +584,7 @@
 <input type="hidden" id="requestVerificationToken" value="@Antiforgery.GetAndStoreTokens(HttpContext).RequestToken" />
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" defer></script>
+<script src="~/js/site.js" asp-append-version="true" defer></script>
 <script src="~/js/mentions.js" asp-append-version="true" defer></script>
 <script src="~/js/tasks.js" asp-append-version="true" defer></script>
 </body>

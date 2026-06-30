@@ -1828,7 +1828,7 @@ async function enviarComentarioChamado() {
     const arquivo = anexoInput?.files?.[0] || null;
 
     if (!chamadoId || (!mensagemVisivel && !arquivo)) {
-        mostrarToast("Informe um comentário ou selecione uma imagem.");
+        mostrarToast("Informe um comentário ou selecione um arquivo.");
         return;
     }
 
@@ -1837,16 +1837,27 @@ async function enviarComentarioChamado() {
         return;
     }
 
-    if (arquivo && arquivo.size > 5 * 1024 * 1024) {
-        mostrarToast("A imagem do comentário deve ter no máximo 5 MB.");
-        return;
+    let arquivoEnvio = null;
+    if (arquivo) {
+        const validacao = window.CallStationAnexos?.validarArquivo(arquivo);
+        if (validacao && !validacao.ok) {
+            mostrarToast(validacao.mensagem);
+            return;
+        }
+
+        arquivoEnvio = window.CallStationAnexos
+            ? await window.CallStationAnexos.prepararParaEnvio(arquivo)
+            : { arquivo, compactado: false };
     }
 
     const formData = new FormData();
     const grupoId = document.getElementById("grupoIdAtual")?.value || "";
     formData.append("ChamadoId", chamadoId);
     if (mensagem) formData.append("Mensagem", mensagem);
-    if (arquivo) formData.append("AnexoImagem", arquivo);
+    if (arquivoEnvio?.arquivo) {
+        formData.append("AnexoImagem", arquivoEnvio.arquivo);
+        formData.append("AnexoCompactado", arquivoEnvio.compactado ? "true" : "false");
+    }
 
     try {
         const response = await fetch(`?handler=AdicionarComentarioChamado&grupoId=${encodeURIComponent(grupoId)}`, {
@@ -1953,7 +1964,7 @@ function renderizarComentariosChamado(comentarios) {
     }
 
     lista.innerHTML = comentarios.map(comentario => {
-        const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
+        const anexo = montarPreviewAnexoComentario(comentario.anexo, comentario.anexoUrl);
 
         return `
             <div class="comment-card">
@@ -1968,24 +1979,88 @@ function renderizarComentariosChamado(comentarios) {
     }).join("");
 }
 
-function montarPreviewAnexoComentario(anexoUrl) {
-    return anexoUrl
-        ? `<button type="button" class="comment-attachment comment-attachment-preview border-0 p-0" data-preview-image="${escapeHtml(anexoUrl)}"><img src="${escapeHtml(anexoUrl)}" alt="Imagem anexada ao comentário"></button>`
+function montarPreviewAnexoComentario(anexo, anexoUrl) {
+    const meta = window.CallStationAnexos?.normalizarMetadados(anexo, anexoUrl);
+    if (!meta) return "";
+
+    const nome = escapeHtml(meta.nome || "Anexo");
+    const extensao = escapeHtml((meta.extensao || "").toUpperCase().replace(".", ""));
+    const tipo = meta.tipoVisualizacao || "download";
+    const icone = window.CallStationAnexos?.iconePorExtensao(meta.extensao) || "bi-paperclip";
+    const visualizacao = escapeHtml(meta.visualizacaoUrl || "");
+    const download = escapeHtml(meta.downloadUrl || meta.visualizacaoUrl || "");
+
+    const preview = meta.podeVisualizar && tipo === "imagem"
+        ? `<button type="button" class="comment-attachment-thumb" data-preview-anexo="${visualizacao}" data-preview-anexo-tipo="${escapeHtml(tipo)}" data-preview-anexo-nome="${nome}" aria-label="Visualizar anexo"><img src="${visualizacao}" alt=""></button>`
+        : `<i class="bi ${escapeHtml(icone)} fs-4 text-primary"></i>`;
+
+    const botaoVisualizar = meta.podeVisualizar
+        ? tipo === "pdf"
+            ? `<a class="btn btn-sm btn-outline-primary" href="${visualizacao}" target="_blank" rel="noopener" title="Visualizar"><i class="bi bi-eye"></i></a>`
+            : `<button type="button" class="btn btn-sm btn-outline-primary" data-preview-anexo="${visualizacao}" data-preview-anexo-tipo="${escapeHtml(tipo)}" data-preview-anexo-nome="${nome}" title="Visualizar"><i class="bi bi-eye"></i></button>`
         : "";
+
+    return `
+        <div class="comment-attachment">
+            ${preview}
+            <div class="comment-attachment-name" title="${nome}">
+                <span class="fw-semibold">${nome}</span>
+                ${extensao ? `<span class="small text-muted ms-1">${extensao}</span>` : ""}
+            </div>
+            <div class="d-inline-flex gap-1 ms-auto">
+                ${botaoVisualizar}
+                <a class="btn btn-sm btn-outline-secondary" href="${download}" title="Baixar"><i class="bi bi-download"></i></a>
+            </div>
+        </div>
+    `;
 }
 
 function inicializarPreviewImagemChamado() {
     document.addEventListener("click", event => {
-        const botao = event.target.closest("[data-preview-image]");
+        const botao = event.target.closest("[data-preview-anexo], [data-preview-image]");
         if (!botao) return;
 
-        const imagem = document.getElementById("imagemVisualizacaoChamado");
+        const conteudo = document.getElementById("conteudoVisualizacaoAnexoChamado");
+        const titulo = document.getElementById("modalVisualizarAnexoChamadoTitulo");
         const modalElement = document.getElementById("modalVisualizarImagemChamado");
-        if (!imagem || !modalElement || !window.bootstrap) return;
+        if (!conteudo || !modalElement || !window.bootstrap) return;
 
-        imagem.src = botao.dataset.previewImage || "";
-        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+        abrirPreviewAnexoChamado({
+            url: botao.dataset.previewAnexo || botao.dataset.previewImage || "",
+            tipo: botao.dataset.previewAnexoTipo || "imagem",
+            nome: botao.dataset.previewAnexoNome || "Anexo",
+            conteudo,
+            titulo,
+            modalElement
+        });
     });
+}
+
+async function abrirPreviewAnexoChamado({ url, tipo, nome, conteudo, titulo, modalElement }) {
+    if (!url) return;
+
+    if (titulo) titulo.textContent = nome || "Anexo";
+    conteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
+
+    if (tipo === "imagem") {
+        conteudo.innerHTML = `<img class="modal-image-preview" src="${escapeHtml(url)}" alt="${escapeHtml(nome || "Anexo")}">`;
+    } else if (tipo === "video") {
+        conteudo.innerHTML = `<video class="modal-video-preview" controls preload="metadata" src="${escapeHtml(url)}"></video>`;
+    } else if (tipo === "texto") {
+        try {
+            const response = await fetch(url, { credentials: "same-origin" });
+            if (!response.ok) throw new Error("Nao foi possivel carregar o texto.");
+            const texto = await response.text();
+            conteudo.innerHTML = `<pre class="modal-text-preview">${escapeHtml(texto)}</pre>`;
+        } catch (error) {
+            conteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Nao foi possivel carregar o texto.")}</div>`;
+        }
+    } else {
+        window.open(url, "_blank", "noopener");
+        return;
+    }
+
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
 }
 
 function inicializarAtualizacaoAutomaticaHome() {
@@ -2038,7 +2113,7 @@ function renderizarComentariosChamadoPaginado(dados, anexar = false) {
 }
 
 function renderizarComentarioChamadoPaginado(comentario) {
-    const anexo = montarPreviewAnexoComentario(comentario.anexoUrl);
+    const anexo = montarPreviewAnexoComentario(comentario.anexo, comentario.anexoUrl);
     const acoes = comentario.podeEditar || comentario.podeExcluir
         ? `
             <div class="comment-actions ms-auto d-flex gap-1">

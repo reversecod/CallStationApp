@@ -42,6 +42,7 @@ public class HomeModel : PageModel
     private readonly NotificacaoService _notificacaoService;
     private readonly MencaoService _mencaoService;
     private readonly SlaPausaService _slaPausaService;
+    private readonly AnexoUploadService _anexoUploadService;
     private readonly ILogger<HomeModel> _logger;
 
     public HomeModel(
@@ -51,6 +52,7 @@ public class HomeModel : PageModel
         NotificacaoService notificacaoService,
         MencaoService mencaoService,
         SlaPausaService slaPausaService,
+        AnexoUploadService anexoUploadService,
         ILogger<HomeModel> logger)
     {
         _context = context;
@@ -59,6 +61,7 @@ public class HomeModel : PageModel
         _notificacaoService = notificacaoService;
         _mencaoService = mencaoService;
         _slaPausaService = slaPausaService;
+        _anexoUploadService = anexoUploadService;
         _logger = logger;
     }
 
@@ -1594,7 +1597,10 @@ public class HomeModel : PageModel
                     grupoId = chamado.GrupoId,
                     chamadoId = chamado.Id,
                     comentarioId = comentario.Id
-                })
+                }),
+            anexo = string.IsNullOrWhiteSpace(comentario.AnexoComentario)
+                ? null
+                : CriarMetadadosAnexoComentario(chamado.GrupoId, chamado.Id, comentario.Id, comentario.AnexoComentario)
         })
         .Reverse()
         .ToList();
@@ -1612,8 +1618,8 @@ public class HomeModel : PageModel
             return new JsonResult(new { success = false, message = "Chamado inválido." });
 
         var mensagem = (request.Mensagem ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(mensagem) && request.AnexoImagem == null)
-            return new JsonResult(new { success = false, message = "Informe um comentário ou selecione uma imagem." });
+        if (string.IsNullOrWhiteSpace(mensagem) && request.AnexoImagem is not { Length: > 0 })
+            return new JsonResult(new { success = false, message = "Informe um comentário ou selecione um arquivo." });
 
         if (mensagem.Length > LimiteCaracteresComentario)
             return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
@@ -1628,23 +1634,18 @@ public class HomeModel : PageModel
         string? caminhoArquivoSalvo = null;
         if (request.AnexoImagem != null && request.AnexoImagem.Length > 0)
         {
-            if (request.AnexoImagem.Length > 5 * 1024 * 1024)
-                return new JsonResult(new { success = false, message = "A imagem do comentário deve ter no máximo 5 MB." });
-
-            var extensao = Path.GetExtension(request.AnexoImagem.FileName).ToLowerInvariant();
-            var extensoesPermitidas = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
-            if (!extensoesPermitidas.Contains(extensao))
-                return new JsonResult(new { success = false, message = "Formato de imagem não permitido." });
-
-            if (!await AssinaturaArquivoPermitidaAsync(request.AnexoImagem, extensao))
-                return new JsonResult(new { success = false, message = "Arquivo de imagem inválido." });
-
-            nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
             var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
-            Directory.CreateDirectory(uploadsRoot);
-            caminhoArquivoSalvo = Path.Combine(uploadsRoot, nomeArquivo);
-            await using var stream = System.IO.File.Create(caminhoArquivoSalvo);
-            await request.AnexoImagem.CopyToAsync(stream);
+            var anexoSalvo = await _anexoUploadService.SalvarAsync(
+                request.AnexoImagem,
+                request.AnexoCompactado,
+                uploadsRoot,
+                HttpContext.RequestAborted);
+
+            if (!anexoSalvo.Sucesso)
+                return new JsonResult(new { success = false, message = anexoSalvo.Mensagem ?? "Arquivo invalido." });
+
+            nomeArquivo = anexoSalvo.NomeArquivo;
+            caminhoArquivoSalvo = anexoSalvo.CaminhoFisico;
         }
 
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -1664,7 +1665,7 @@ public class HomeModel : PageModel
                         Chamado = acesso.Chamado,
                         UsuarioId = idUsuario.Value,
                         Usuario = usuario,
-                        Mensagem = string.IsNullOrWhiteSpace(mensagem) ? "Imagem anexada." : mensagem,
+                        Mensagem = string.IsNullOrWhiteSpace(mensagem) ? "Arquivo anexado." : mensagem,
                         AnexoComentario = nomeArquivo,
                         DataComentario = DateTime.UtcNow
                     };
@@ -1894,7 +1895,7 @@ public class HomeModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnGetAnexoComentarioChamadoAsync(int chamadoId, int comentarioId)
+    public async Task<IActionResult> OnGetAnexoComentarioChamadoAsync(int chamadoId, int comentarioId, bool download = false)
     {
         var idUsuario = GetUsuarioLogadoId();
         if (idUsuario == null)
@@ -1913,11 +1914,58 @@ public class HomeModel : PageModel
         if (comentario == null || string.IsNullOrWhiteSpace(comentario.AnexoComentario))
             return NotFound();
 
-        var caminho = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios", comentario.AnexoComentario);
+        var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
+        var caminho = _anexoUploadService.ObterCaminhoSeguro(uploadsRoot, comentario.AnexoComentario);
         if (!System.IO.File.Exists(caminho))
             return NotFound();
 
-        return PhysicalFile(caminho, ObterContentTypeAnexo(comentario.AnexoComentario));
+        var regra = _anexoUploadService.ObterRegra(Path.GetExtension(comentario.AnexoComentario));
+        if (regra == null)
+            return NotFound();
+
+        if (!download && !regra.PermiteVisualizacao)
+            return BadRequest(new { success = false, message = "Este anexo nao possui visualizacao segura." });
+
+        _anexoUploadService.AplicarCabecalhosDownloadSeguro(Response, inline: !download);
+        return download
+            ? PhysicalFile(caminho, regra.ContentType, $"anexo{regra.Extensao}")
+            : PhysicalFile(caminho, regra.ContentType);
+    }
+
+    private object? CriarMetadadosAnexoComentario(int grupoId, int chamadoId, int comentarioId, string? nomeArquivo)
+    {
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return null;
+
+        var regra = _anexoUploadService.ObterRegra(Path.GetExtension(nomeArquivo));
+        if (regra == null)
+            return null;
+
+        var visualizacaoUrl = Url.Page("/Menu/Home", "AnexoComentarioChamado", new
+        {
+            grupoId,
+            chamadoId,
+            comentarioId
+        });
+
+        var downloadUrl = Url.Page("/Menu/Home", "AnexoComentarioChamado", new
+        {
+            grupoId,
+            chamadoId,
+            comentarioId,
+            download = true
+        });
+
+        return new
+        {
+            nome = _anexoUploadService.ObterNomeExibicaoComentario(nomeArquivo),
+            extensao = regra.Extensao,
+            tipoArquivo = regra.ContentType,
+            tipoVisualizacao = regra.TipoVisualizacao,
+            podeVisualizar = regra.PermiteVisualizacao,
+            visualizacaoUrl,
+            downloadUrl
+        };
     }
 
     public async Task<IActionResult> OnPostMarcarComentariosVisualizadosAsync([FromBody] MarcarComentariosVisualizadosRequest request)
@@ -2658,7 +2706,8 @@ public class HomeModel : PageModel
         if (string.IsNullOrWhiteSpace(nomeArquivo))
             return;
 
-        var caminho = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios", nomeArquivo);
+        var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
+        var caminho = _anexoUploadService.ObterCaminhoSeguro(uploadsRoot, nomeArquivo);
         if (!System.IO.File.Exists(caminho))
             return;
 
@@ -3042,6 +3091,7 @@ public class HomeModel : PageModel
         public int ChamadoId { get; set; }
         public string? Mensagem { get; set; }
         public IFormFile? AnexoImagem { get; set; }
+        public bool AnexoCompactado { get; set; }
     }
 
     public class EditarComentarioChamadoRequest

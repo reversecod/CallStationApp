@@ -626,6 +626,28 @@ body.sidebar-collapsed .tasks-content {
     min-width: 0;
 }
 
+.task-attachment-row .btn {
+    flex-shrink: 0;
+}
+
+.task-modal-text-preview {
+    max-height: 65vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-align: left;
+    background: #fff;
+    color: #111827;
+    border-radius: .5rem;
+    padding: 1rem;
+}
+
+.task-modal-video-preview {
+    width: 100%;
+    max-height: 75vh;
+    background: #000;
+}
+
 .task-checklist {
     padding: .55rem;
 }

@@ -1836,7 +1836,20 @@ function renderizarAnexosTarefa(anexos) {
     cartaoAtualEstado.anexos = anexos || [];
     const container = document.getElementById("listaAnexosTarefa");
     if (!container) return;
-    container.innerHTML = cartaoAtualEstado.anexos.length ? cartaoAtualEstado.anexos.map(anexo => `<div class="task-attachment-row"><div class="min-w-0"><div class="fw-semibold text-truncate">${escapeHtml(anexo.nomeOriginal)}</div><div class="small text-muted">${escapeHtml(formatarTamanhoArquivo(anexo.tamanhoBytes))} - ${escapeHtml(anexo.usuario || "")} - ${escapeHtml(formatActivityDateTime(anexo.dataUpload))}</div></div><div class="d-flex gap-1">${anexo.ehImagem ? `<button type="button" class="btn btn-sm btn-outline-light" data-preview-anexo="${anexo.id}"><i class="bi bi-eye"></i></button>` : ""}<a class="btn btn-sm btn-outline-light" href="?handler=BaixarAnexoTarefa&anexoId=${encodeURIComponent(anexo.id)}&grupoId=${encodeURIComponent(getGrupoId())}"><i class="bi bi-download"></i></a><button type="button" class="btn btn-sm btn-outline-danger" data-excluir-anexo="${anexo.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"}><i class="bi bi-trash"></i></button></div></div>`).join("") : '<div class="text-muted small">Nenhum anexo enviado.</div>';
+    container.innerHTML = cartaoAtualEstado.anexos.length ? cartaoAtualEstado.anexos.map(anexo => {
+        const tipo = anexo.tipoVisualizacao || window.CallStationAnexos?.tipoPorExtensao(anexo.extensao) || "download";
+        const podeVisualizar = Boolean(anexo.podeVisualizar);
+        const icone = window.CallStationAnexos?.iconePorExtensao(anexo.extensao) || "bi-paperclip";
+        const urlPreview = `?handler=VisualizarAnexoTarefa&anexoId=${encodeURIComponent(anexo.id)}&grupoId=${encodeURIComponent(getGrupoId())}`;
+        const urlDownload = `?handler=BaixarAnexoTarefa&anexoId=${encodeURIComponent(anexo.id)}&grupoId=${encodeURIComponent(getGrupoId())}`;
+        const botaoPreview = podeVisualizar
+            ? tipo === "pdf"
+                ? `<a class="btn btn-sm btn-outline-light" href="${urlPreview}" target="_blank" rel="noopener" title="Visualizar"><i class="bi bi-eye"></i></a>`
+                : `<button type="button" class="btn btn-sm btn-outline-light" data-preview-anexo="${anexo.id}" title="Visualizar"><i class="bi bi-eye"></i></button>`
+            : "";
+
+        return `<div class="task-attachment-row"><div class="min-w-0"><div class="fw-semibold text-truncate"><i class="bi ${escapeHtml(icone)} me-1"></i>${escapeHtml(anexo.nomeOriginal)}</div><div class="small text-muted">${escapeHtml(formatarTamanhoArquivo(anexo.tamanhoBytes))} - ${escapeHtml(anexo.usuario || "")} - ${escapeHtml(formatActivityDateTime(anexo.dataUpload))}</div></div><div class="d-flex gap-1">${botaoPreview}<a class="btn btn-sm btn-outline-light" href="${urlDownload}" title="Baixar"><i class="bi bi-download"></i></a><button type="button" class="btn btn-sm btn-outline-danger" data-excluir-anexo="${anexo.id}" ${cartaoAtualEstado.podeEditar ? "" : "disabled"} title="Excluir"><i class="bi bi-trash"></i></button></div></div>`;
+    }).join("") : '<div class="text-muted small">Nenhum anexo enviado.</div>';
     container.querySelectorAll("[data-preview-anexo]").forEach(btn => btn.addEventListener("click", visualizarAnexoTarefa));
     container.querySelectorAll("[data-excluir-anexo]").forEach(btn => btn.addEventListener("click", excluirAnexoTarefa));
 }
@@ -1845,10 +1858,22 @@ async function enviarAnexoTarefa() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
     const input = document.getElementById("arquivoAnexoTarefa");
     if (!cartaoId || !input?.files?.length) return;
+    const arquivo = input.files[0];
+    const validacao = window.CallStationAnexos?.validarArquivo(arquivo);
+    if (validacao && !validacao.ok) {
+        mostrarToast(validacao.mensagem);
+        return;
+    }
+
+    const arquivoEnvio = window.CallStationAnexos
+        ? await window.CallStationAnexos.prepararParaEnvio(arquivo)
+        : { arquivo, compactado: false };
+
     const formData = new FormData();
     formData.append("grupoId", getGrupoId());
     formData.append("cartaoId", cartaoId);
-    formData.append("arquivo", input.files[0]);
+    formData.append("arquivo", arquivoEnvio.arquivo);
+    formData.append("arquivoCompactado", arquivoEnvio.compactado ? "true" : "false");
     try {
         const response = await fetch("?handler=EnviarAnexoTarefa", { method: "POST", body: formData, headers: { "RequestVerificationToken": getToken() } });
         const data = await response.json();
@@ -1861,11 +1886,36 @@ async function enviarAnexoTarefa() {
     }
 }
 
-function visualizarAnexoTarefa(event) {
+async function visualizarAnexoTarefa(event) {
     const anexoId = Number(event.currentTarget.dataset.previewAnexo);
     const anexo = cartaoAtualEstado.anexos.find(a => Number(a.id) === anexoId);
-    document.getElementById("modalVisualizarAnexoTarefaTitulo").textContent = anexo?.nomeOriginal || "Imagem";
-    document.getElementById("imagemPreviewAnexoTarefa").src = `?handler=VisualizarAnexoTarefa&anexoId=${encodeURIComponent(anexoId)}&grupoId=${encodeURIComponent(getGrupoId())}`;
+    const tipo = anexo?.tipoVisualizacao || window.CallStationAnexos?.tipoPorExtensao(anexo?.extensao) || "download";
+    const url = `?handler=VisualizarAnexoTarefa&anexoId=${encodeURIComponent(anexoId)}&grupoId=${encodeURIComponent(getGrupoId())}`;
+    const titulo = document.getElementById("modalVisualizarAnexoTarefaTitulo");
+    const conteudo = document.getElementById("conteudoPreviewAnexoTarefa");
+    if (!conteudo) return;
+
+    if (titulo) titulo.textContent = anexo?.nomeOriginal || "Anexo";
+    conteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
+
+    if (tipo === "imagem") {
+        conteudo.innerHTML = `<img class="img-fluid rounded" src="${url}" alt="${escapeHtml(anexo?.nomeOriginal || "Anexo")}">`;
+    } else if (tipo === "video") {
+        conteudo.innerHTML = `<video class="task-modal-video-preview" controls preload="metadata" src="${url}"></video>`;
+    } else if (tipo === "texto") {
+        try {
+            const response = await fetch(url, { credentials: "same-origin" });
+            if (!response.ok) throw new Error("Nao foi possivel carregar o texto.");
+            const texto = await response.text();
+            conteudo.innerHTML = `<pre class="task-modal-text-preview">${escapeHtml(texto)}</pre>`;
+        } catch (error) {
+            conteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Nao foi possivel carregar o texto.")}</div>`;
+        }
+    } else {
+        window.open(url, "_blank", "noopener");
+        return;
+    }
+
     modalVisualizarAnexoTarefa?.show();
 }
 

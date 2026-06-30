@@ -16,30 +16,23 @@ public class TasksModel : PageModel
     private const decimal OrdemBase = 1024m;
     private const string PrefixoColunaArquivoSistema = "__callstation_archive__";
     private const int LimiteCaracteresComentario = 250;
-    private const long LimiteAnexoTarefaBytes = 10 * 1024 * 1024;
     private static readonly Regex CorHexRegex = new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
-    private static readonly HashSet<string> ExtensoesAnexoTarefaPermitidas = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".xls", ".xlsx", ".csv"
-    };
-    private static readonly HashSet<string> ExtensoesImagemTarefaPermitidas = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg", ".jpeg", ".png", ".gif", ".webp"
-    };
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly MencaoService _mencaoService;
     private readonly SlaPausaService _slaPausaService;
+    private readonly AnexoUploadService _anexoUploadService;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<TasksModel> _logger;
 
-    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, SlaPausaService slaPausaService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
+    public TasksModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, SlaPausaService slaPausaService, AnexoUploadService anexoUploadService, IWebHostEnvironment environment, ILogger<TasksModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
         _mencaoService = mencaoService;
         _slaPausaService = slaPausaService;
+        _anexoUploadService = anexoUploadService;
         _environment = environment;
         _logger = logger;
     }
@@ -1062,39 +1055,22 @@ public class TasksModel : PageModel
         if (acesso.Resultado != null)
             return acesso.Resultado;
 
-        if (request.Arquivo.Length > LimiteAnexoTarefaBytes)
-            return BadRequest(new { success = false, message = "O anexo deve ter no maximo 10 MB." });
-
-        var extensao = Path.GetExtension(request.Arquivo.FileName).ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(extensao) || !ExtensoesAnexoTarefaPermitidas.Contains(extensao))
-            return BadRequest(new { success = false, message = "Tipo de arquivo nao permitido." });
-
-        var ehImagem = ExtensoesImagemTarefaPermitidas.Contains(extensao);
-        if (ehImagem && !await AssinaturaAnexoTarefaPermitidaAsync(request.Arquivo, extensao))
-            return BadRequest(new { success = false, message = "Arquivo de imagem invalido." });
-
-        if (extensao == ".pdf" && !await AssinaturaAnexoTarefaPermitidaAsync(request.Arquivo, extensao))
-            return BadRequest(new { success = false, message = "Arquivo PDF invalido." });
-
-        var nomeOriginal = Path.GetFileName(request.Arquivo.FileName);
-        if (string.IsNullOrWhiteSpace(nomeOriginal))
-            nomeOriginal = $"anexo{extensao}";
-        if (nomeOriginal.Length > 255)
-            nomeOriginal = nomeOriginal[..255];
-
-        var nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
-        var caminhoRelativo = Path.Combine("tarefas", "anexos", nomeArquivo).Replace('\\', '/');
         var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "tarefas", "anexos");
-        Directory.CreateDirectory(uploadsRoot);
-        var caminhoFisico = Path.Combine(uploadsRoot, nomeArquivo);
+        var anexoSalvo = await _anexoUploadService.SalvarAsync(
+            request.Arquivo,
+            request.ArquivoCompactado,
+            uploadsRoot,
+            HttpContext.RequestAborted);
+
+        if (!anexoSalvo.Sucesso)
+            return BadRequest(new { success = false, message = anexoSalvo.Mensagem ?? "Arquivo invalido." });
+
+        var nomeArquivo = anexoSalvo.NomeArquivo!;
+        var caminhoFisico = anexoSalvo.CaminhoFisico!;
+        var caminhoRelativo = Path.Combine("tarefas", "anexos", nomeArquivo).Replace('\\', '/');
 
         try
         {
-            await using (var stream = System.IO.File.Create(caminhoFisico))
-            {
-                await request.Arquivo.CopyToAsync(stream);
-            }
-
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {
@@ -1105,13 +1081,13 @@ public class TasksModel : PageModel
                     {
                         CartaoTarefaId = request.CartaoId,
                         UsuarioId = usuarioId.Value,
-                        NomeOriginal = nomeOriginal,
+                        NomeOriginal = anexoSalvo.NomeOriginal!,
                         NomeArquivo = nomeArquivo,
                         CaminhoArquivo = caminhoRelativo,
-                        TipoArquivo = ObterContentTypeAnexoTarefa(extensao),
-                        Extensao = extensao,
-                        TamanhoBytes = request.Arquivo.Length,
-                        EhImagem = ehImagem,
+                        TipoArquivo = anexoSalvo.ContentType,
+                        Extensao = anexoSalvo.Extensao,
+                        TamanhoBytes = anexoSalvo.TamanhoBytes,
+                        EhImagem = anexoSalvo.EhImagem,
                         EhCapa = false,
                         DataUpload = DateTime.UtcNow
                     };
@@ -1150,6 +1126,7 @@ public class TasksModel : PageModel
         if (!System.IO.File.Exists(caminho))
             return NotFound();
 
+        _anexoUploadService.AplicarCabecalhosDownloadSeguro(Response, inline: false);
         return PhysicalFile(caminho, acesso.Anexo.TipoArquivo ?? "application/octet-stream", acesso.Anexo.NomeOriginal);
     }
 
@@ -1159,14 +1136,16 @@ public class TasksModel : PageModel
         if (acesso.Resultado != null)
             return acesso.Resultado;
 
-        if (!acesso.Anexo!.EhImagem)
-            return BadRequest(new { success = false, message = "Este anexo nao e uma imagem." });
+        var regra = _anexoUploadService.ObterRegra(acesso.Anexo!.Extensao);
+        if (regra == null || !regra.PermiteVisualizacao)
+            return BadRequest(new { success = false, message = "Este anexo nao possui visualizacao segura." });
 
         var caminho = ObterCaminhoFisicoAnexoTarefa(acesso.Anexo.CaminhoArquivo);
         if (!System.IO.File.Exists(caminho))
             return NotFound();
 
-        return PhysicalFile(caminho, acesso.Anexo.TipoArquivo ?? ObterContentTypeAnexoTarefa(acesso.Anexo.Extensao));
+        _anexoUploadService.AplicarCabecalhosDownloadSeguro(Response, inline: true);
+        return PhysicalFile(caminho, regra.ContentType);
     }
 
     public async Task<IActionResult> OnPostExcluirAnexoTarefaAsync([FromBody] AnexoTarefaRequest request)
@@ -2757,7 +2736,7 @@ public class TasksModel : PageModel
 
     private async Task<List<AnexoTarefaDto>> ObterAnexosCartaoAsync(int cartaoId)
     {
-        return await (
+        var anexos = await (
             from anexo in _context.AnexosTarefas.AsNoTracking()
             join usuario in _context.Usuarios.AsNoTracking()
                 on anexo.UsuarioId equals usuario.Id
@@ -2775,6 +2754,15 @@ public class TasksModel : PageModel
                 DataUpload = ParaDataHoraRegionalIso(anexo.DataUpload)
             })
             .ToListAsync();
+
+        foreach (var anexo in anexos)
+        {
+            var regra = _anexoUploadService.ObterRegra(anexo.Extensao);
+            anexo.TipoVisualizacao = regra?.TipoVisualizacao ?? "download";
+            anexo.PodeVisualizar = regra?.PermiteVisualizacao ?? false;
+        }
+
+        return anexos;
     }
 
     private string ObterCaminhoFisicoAnexoTarefa(string caminhoRelativo)
@@ -2787,42 +2775,6 @@ public class TasksModel : PageModel
             .ToArray();
 
         return Path.Combine(new[] { _environment.ContentRootPath, "uploads_privados" }.Concat(partes).ToArray());
-    }
-
-    private static string ObterContentTypeAnexoTarefa(string? extensao)
-    {
-        return (extensao ?? string.Empty).ToLowerInvariant() switch
-        {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            ".pdf" => "application/pdf",
-            ".txt" => "text/plain",
-            ".csv" => "text/csv",
-            ".doc" => "application/msword",
-            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".xls" => "application/vnd.ms-excel",
-            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            _ => "application/octet-stream"
-        };
-    }
-
-    private static async Task<bool> AssinaturaAnexoTarefaPermitidaAsync(IFormFile arquivo, string extensao)
-    {
-        var buffer = new byte[12];
-        await using var stream = arquivo.OpenReadStream();
-        var bytesLidos = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length));
-
-        return extensao switch
-        {
-            ".jpg" or ".jpeg" => bytesLidos >= 3 && buffer[0] == 0xFF && buffer[1] == 0xD8 && buffer[2] == 0xFF,
-            ".png" => bytesLidos >= 8 && buffer[0] == 0x89 && buffer[1] == 0x50 && buffer[2] == 0x4E && buffer[3] == 0x47 && buffer[4] == 0x0D && buffer[5] == 0x0A && buffer[6] == 0x1A && buffer[7] == 0x0A,
-            ".gif" => bytesLidos >= 6 && buffer[0] == 0x47 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x38 && (buffer[4] == 0x37 || buffer[4] == 0x39) && buffer[5] == 0x61,
-            ".webp" => bytesLidos >= 12 && buffer[0] == 0x52 && buffer[1] == 0x49 && buffer[2] == 0x46 && buffer[3] == 0x46 && buffer[8] == 0x57 && buffer[9] == 0x45 && buffer[10] == 0x42 && buffer[11] == 0x50,
-            ".pdf" => bytesLidos >= 4 && buffer[0] == 0x25 && buffer[1] == 0x50 && buffer[2] == 0x44 && buffer[3] == 0x46,
-            _ => true
-        };
     }
 
     private async Task<ColunaQuadro> ObterOuCriarColunaArquivoSistemaAsync(int quadroId)
@@ -3837,6 +3789,8 @@ public class TasksModel : PageModel
         public string? Extensao { get; set; }
         public long? TamanhoBytes { get; set; }
         public bool EhImagem { get; set; }
+        public string TipoVisualizacao { get; set; } = "download";
+        public bool PodeVisualizar { get; set; }
         public string Usuario { get; set; } = string.Empty;
         public string? DataUpload { get; set; }
     }
@@ -3980,6 +3934,7 @@ public class TasksModel : PageModel
         public int GrupoId { get; set; }
         public int CartaoId { get; set; }
         public IFormFile? Arquivo { get; set; }
+        public bool ArquivoCompactado { get; set; }
     }
 
     public class AnexoTarefaRequest

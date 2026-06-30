@@ -2,12 +2,18 @@ using CallStationApp.Authorization;
 using CallStationApp.Data;
 using CallStationApp.Middleware;
 using CallStationApp.Services;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.IO.Compression; //necessário para definir nível de compressão
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = AnexoUploadService.LimiteRequisicaoBytes;
+});
 
 // CONFIGURAÇÕES INICIAIS
 builder.Configuration
@@ -53,11 +59,16 @@ builder.Services.AddScoped<NotificacaoService>();
 builder.Services.AddScoped<MencaoService>();
 builder.Services.AddScoped<SlaPausaService>();
 builder.Services.AddScoped<FotoGrupoUploadService>();
+builder.Services.AddScoped<AnexoUploadService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddHostedService<ChamadoStatusAutomationService>();
 
 // SERVIÇOS
 builder.Services.AddRazorPages();
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = AnexoUploadService.LimiteRequisicaoBytes;
+});
 
 // HABILITA COMPRESSION GZIP/BROTLI COM NÍVEL DEFINIDO
 builder.Services.AddResponseCompression(options =>

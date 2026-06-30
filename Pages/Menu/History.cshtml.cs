@@ -39,14 +39,16 @@ public class HistoryModel : PageModel
     private readonly AppDbContext _context;
     private readonly GrupoAuthorizationService _grupoAuthorizationService;
     private readonly MencaoService _mencaoService;
+    private readonly AnexoUploadService _anexoUploadService;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<HistoryModel> _logger;
 
-    public HistoryModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, IWebHostEnvironment environment, ILogger<HistoryModel> logger)
+    public HistoryModel(AppDbContext context, GrupoAuthorizationService grupoAuthorizationService, MencaoService mencaoService, AnexoUploadService anexoUploadService, IWebHostEnvironment environment, ILogger<HistoryModel> logger)
     {
         _context = context;
         _grupoAuthorizationService = grupoAuthorizationService;
         _mencaoService = mencaoService;
+        _anexoUploadService = anexoUploadService;
         _environment = environment;
         _logger = logger;
     }
@@ -1100,7 +1102,10 @@ public class HistoryModel : PageModel
                     grupoId = chamado.GrupoId,
                     chamadoId = chamado.Id,
                     comentarioId = comentario.id
-                })
+                }),
+            anexo = string.IsNullOrWhiteSpace(comentario.anexo)
+                ? null
+                : CriarMetadadosAnexoComentario(chamado.GrupoId, chamado.Id, comentario.id, comentario.anexo)
         })
         .Reverse()
         .ToList();
@@ -1117,6 +1122,42 @@ public class HistoryModel : PageModel
                 temMais
             }
         });
+    }
+
+    private object? CriarMetadadosAnexoComentario(int grupoId, int chamadoId, int comentarioId, string? nomeArquivo)
+    {
+        if (string.IsNullOrWhiteSpace(nomeArquivo))
+            return null;
+
+        var regra = _anexoUploadService.ObterRegra(Path.GetExtension(nomeArquivo));
+        if (regra == null)
+            return null;
+
+        var visualizacaoUrl = Url.Page("/Menu/Home", "AnexoComentarioChamado", new
+        {
+            grupoId,
+            chamadoId,
+            comentarioId
+        });
+
+        var downloadUrl = Url.Page("/Menu/Home", "AnexoComentarioChamado", new
+        {
+            grupoId,
+            chamadoId,
+            comentarioId,
+            download = true
+        });
+
+        return new
+        {
+            nome = _anexoUploadService.ObterNomeExibicaoComentario(nomeArquivo),
+            extensao = regra.Extensao,
+            tipoArquivo = regra.ContentType,
+            tipoVisualizacao = regra.TipoVisualizacao,
+            podeVisualizar = regra.PermiteVisualizacao,
+            visualizacaoUrl,
+            downloadUrl
+        };
     }
 
     public async Task<IActionResult> OnPostMarcarComentariosVisualizadosAsync([FromBody] ChamadoHistoricoRequest request)
@@ -1355,7 +1396,7 @@ public class HistoryModel : PageModel
 
         var mensagem = (request.Mensagem ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(mensagem) && request.AnexoImagem is not { Length: > 0 })
-            return new JsonResult(new { success = false, message = "Informe um comentário ou selecione uma imagem." });
+            return new JsonResult(new { success = false, message = "Informe um comentário ou selecione um arquivo." });
 
         if (mensagem.Length > LimiteCaracteresComentario)
             return new JsonResult(new { success = false, message = $"O comentário não pode exceder {LimiteCaracteresComentario} caracteres." });
@@ -1377,23 +1418,18 @@ public class HistoryModel : PageModel
         string? caminhoArquivoSalvo = null;
         if (request.AnexoImagem is { Length: > 0 } anexoImagem)
         {
-            if (anexoImagem.Length > 5 * 1024 * 1024)
-                return new JsonResult(new { success = false, message = "A imagem do comentário deve ter no máximo 5 MB." });
-
-            var extensao = Path.GetExtension(anexoImagem.FileName).ToLowerInvariant();
-            var extensoesPermitidas = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
-            if (!extensoesPermitidas.Contains(extensao))
-                return new JsonResult(new { success = false, message = "Formato de imagem não permitido." });
-
-            if (!await AssinaturaArquivoPermitidaAsync(anexoImagem, extensao))
-                return new JsonResult(new { success = false, message = "Arquivo de imagem inválido." });
-
-            nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
             var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
-            Directory.CreateDirectory(uploadsRoot);
-            caminhoArquivoSalvo = Path.Combine(uploadsRoot, nomeArquivo);
-            await using var stream = System.IO.File.Create(caminhoArquivoSalvo);
-            await anexoImagem.CopyToAsync(stream);
+            var anexoSalvo = await _anexoUploadService.SalvarAsync(
+                anexoImagem,
+                request.AnexoCompactado,
+                uploadsRoot,
+                HttpContext.RequestAborted);
+
+            if (!anexoSalvo.Sucesso)
+                return new JsonResult(new { success = false, message = anexoSalvo.Mensagem ?? "Arquivo invalido." });
+
+            nomeArquivo = anexoSalvo.NomeArquivo;
+            caminhoArquivoSalvo = anexoSalvo.CaminhoFisico;
         }
 
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -1413,7 +1449,7 @@ public class HistoryModel : PageModel
                         Chamado = resultadoAcesso.Chamado,
                         UsuarioId = usuarioId.Value,
                         Usuario = usuario,
-                        Mensagem = string.IsNullOrWhiteSpace(mensagem) ? "Imagem anexada." : mensagem,
+                        Mensagem = string.IsNullOrWhiteSpace(mensagem) ? "Arquivo anexado." : mensagem,
                         AnexoComentario = nomeArquivo,
                         DataComentario = DateTime.UtcNow
                     };
@@ -2178,7 +2214,8 @@ public class HistoryModel : PageModel
         if (string.IsNullOrWhiteSpace(nomeArquivo))
             return;
 
-        var caminho = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios", nomeArquivo);
+        var uploadsRoot = Path.Combine(_environment.ContentRootPath, "uploads_privados", "chamados", "comentarios");
+        var caminho = _anexoUploadService.ObterCaminhoSeguro(uploadsRoot, nomeArquivo);
         if (!System.IO.File.Exists(caminho))
             return;
 
@@ -2731,6 +2768,7 @@ public class HistoryModel : PageModel
         public int ChamadoId { get; set; }
         public string? Mensagem { get; set; }
         public IFormFile? AnexoImagem { get; set; }
+        public bool AnexoCompactado { get; set; }
     }
 
     public class EditarComentarioHistoricoRequest
