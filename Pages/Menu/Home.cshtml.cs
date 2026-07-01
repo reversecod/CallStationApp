@@ -1717,6 +1717,13 @@ public class HomeModel : PageModel
                 }
             });
         }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            if (!string.IsNullOrWhiteSpace(caminhoArquivoSalvo) && System.IO.File.Exists(caminhoArquivoSalvo))
+                System.IO.File.Delete(caminhoArquivoSalvo);
+
+            return new EmptyResult();
+        }
         catch (Exception ex)
         {
             if (!string.IsNullOrWhiteSpace(caminhoArquivoSalvo) && System.IO.File.Exists(caminhoArquivoSalvo))
@@ -1927,9 +1934,11 @@ public class HomeModel : PageModel
             return BadRequest(new { success = false, message = "Este anexo nao possui visualizacao segura." });
 
         _anexoUploadService.AplicarCabecalhosDownloadSeguro(Response, inline: !download);
-        return download
-            ? PhysicalFile(caminho, regra.ContentType, $"anexo{regra.Extensao}")
-            : PhysicalFile(caminho, regra.ContentType);
+        return new PhysicalFileResult(caminho, regra.ContentType)
+        {
+            FileDownloadName = download ? $"anexo{regra.Extensao}" : null,
+            EnableRangeProcessing = true
+        };
     }
 
     private object? CriarMetadadosAnexoComentario(int grupoId, int chamadoId, int comentarioId, string? nomeArquivo)

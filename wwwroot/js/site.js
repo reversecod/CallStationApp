@@ -56,6 +56,11 @@
             return { arquivo, compactado: false };
         }
 
+        const extensao = obterExtensao(arquivo.name);
+        if (extensao !== ".txt") {
+            return { arquivo, compactado: false };
+        }
+
         try {
             const compactado = await new Response(arquivo.stream().pipeThrough(new CompressionStream("gzip"))).blob();
             if (!compactado.size || compactado.size >= arquivo.size) {

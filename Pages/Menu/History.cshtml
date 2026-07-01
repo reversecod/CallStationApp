@@ -1263,6 +1263,8 @@
         const slaModal = slaModalElement ? bootstrap.Modal.getOrCreateInstance(slaModalElement) : null;
         const statusModal = statusModalElement ? bootstrap.Modal.getOrCreateInstance(statusModalElement) : null;
         const imagemPreviewModal = imagemPreviewElement ? bootstrap.Modal.getOrCreateInstance(imagemPreviewElement) : null;
+        comentariosModalElement?.addEventListener("hide.bs.modal", cancelarUploadComentarioHistorico);
+        imagemPreviewElement?.addEventListener("hide.bs.modal", limparPreviewAnexoHistorico);
         const listaComentarios = document.getElementById("listaComentariosHistorico");
         const detalhesTitulo = document.getElementById("detalhesHistoricoTitulo");
         const detalhesConteudo = document.getElementById("detalhesHistoricoConteudo");
@@ -1272,6 +1274,8 @@
         const textoNovoComentario = document.getElementById("textoNovoComentarioHistorico");
         const anexoNovoComentario = document.getElementById("anexoNovoComentarioHistorico");
         const btnEnviarComentario = document.getElementById("btnEnviarComentarioHistorico");
+        let uploadComentarioHistoricoController = null;
+        let previewAnexoHistoricoController = null;
         const statusChamadoIdInput = document.getElementById("statusHistoricoChamadoId");
         const selectNovoStatus = document.getElementById("selectNovoStatusHistorico");
         const btnSalvarStatus = document.getElementById("btnSalvarStatusHistorico");
@@ -1449,6 +1453,11 @@
         abrirChamadoHistoricoDaUrl();
 
         btnEnviarComentario?.addEventListener("click", async () => {
+            if (uploadComentarioHistoricoController) {
+                cancelarUploadComentarioHistorico();
+                return;
+            }
+
             const chamadoId = Number(comentariosChamadoIdInput?.value);
             const mensagemVisivel = (textoNovoComentario?.value || "").trim();
             const mensagem = serializarTextoCampo(textoNovoComentario).trim();
@@ -1485,12 +1494,17 @@
                     formData.append("AnexoCompactado", arquivoEnvio.compactado ? "true" : "false");
                 }
 
+                uploadComentarioHistoricoController = new AbortController();
+                const textoOriginalBotao = btnEnviarComentario?.textContent || "Enviar comentário";
+                if (btnEnviarComentario) btnEnviarComentario.textContent = "Cancelar envio";
+
                 const response = await fetch(`?handler=AdicionarComentario&grupoId=${encodeURIComponent(historyGrupoId)}`, {
                     method: "POST",
                     headers: {
                         "RequestVerificationToken": getToken()
                     },
-                    body: formData
+                    body: formData,
+                    signal: uploadComentarioHistoricoController.signal
                 });
 
                 let data = null;
@@ -1513,7 +1527,15 @@
                 mostrarToast(data.dados?.message || "Comentário adicionado com sucesso.", "success");
                 await carregarComentarios(chamadoId, true);
             } catch (error) {
+                if (error.name === "AbortError") {
+                    mostrarToast("Envio cancelado.", "warning");
+                    return;
+                }
+
                 mostrarToast(error.message || "Não foi possível adicionar o comentário.");
+            } finally {
+                uploadComentarioHistoricoController = null;
+                if (btnEnviarComentario) btnEnviarComentario.textContent = "Enviar comentário";
             }
         });
 
@@ -2815,6 +2837,8 @@
         async function abrirPreviewAnexoHistorico({ url, tipo, nome }) {
             if (!url || !anexoPreviewConteudo) return;
 
+            limparPreviewAnexoHistorico();
+
             if (anexoPreviewTitulo) anexoPreviewTitulo.textContent = nome || "Anexo";
             anexoPreviewConteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
 
@@ -2823,13 +2847,20 @@
             } else if (tipo === "video") {
                 anexoPreviewConteudo.innerHTML = `<video class="modal-video-preview" controls preload="metadata" src="${escapeHtml(url)}"></video>`;
             } else if (tipo === "texto") {
+                previewAnexoHistoricoController = new AbortController();
                 try {
-                    const response = await fetch(url, { credentials: "same-origin" });
+                    const response = await fetch(url, {
+                        credentials: "same-origin",
+                        signal: previewAnexoHistoricoController.signal
+                    });
                     if (!response.ok) throw new Error("Nao foi possivel carregar o texto.");
                     const texto = await response.text();
                     anexoPreviewConteudo.innerHTML = `<pre class="modal-text-preview">${escapeHtml(texto)}</pre>`;
                 } catch (error) {
+                    if (error.name === "AbortError") return;
                     anexoPreviewConteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Nao foi possivel carregar o texto.")}</div>`;
+                } finally {
+                    previewAnexoHistoricoController = null;
                 }
             } else {
                 window.open(url, "_blank", "noopener");
@@ -2837,6 +2868,29 @@
             }
 
             imagemPreviewModal?.show();
+        }
+
+        function cancelarUploadComentarioHistorico() {
+            uploadComentarioHistoricoController?.abort();
+        }
+
+        function limparPreviewAnexoHistorico() {
+            previewAnexoHistoricoController?.abort();
+            previewAnexoHistoricoController = null;
+
+            if (!anexoPreviewConteudo) return;
+
+            anexoPreviewConteudo.querySelectorAll("video, audio").forEach(media => {
+                media.pause();
+                media.removeAttribute("src");
+                media.load();
+            });
+
+            anexoPreviewConteudo.querySelectorAll("img").forEach(imagem => {
+                imagem.removeAttribute("src");
+            });
+
+            anexoPreviewConteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
         }
 
         function removerIndicadorComentario(chamadoId) {

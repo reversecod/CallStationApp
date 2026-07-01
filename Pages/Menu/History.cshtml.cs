@@ -1533,6 +1533,13 @@ public class HistoryModel : PageModel
                 }
             });
         }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            if (!string.IsNullOrWhiteSpace(caminhoArquivoSalvo) && System.IO.File.Exists(caminhoArquivoSalvo))
+                System.IO.File.Delete(caminhoArquivoSalvo);
+
+            return new EmptyResult();
+        }
         catch (Exception ex)
         {
             if (!string.IsNullOrWhiteSpace(caminhoArquivoSalvo) && System.IO.File.Exists(caminhoArquivoSalvo))

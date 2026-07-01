@@ -1106,6 +1106,13 @@ public class TasksModel : PageModel
                 }
             });
         }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            if (System.IO.File.Exists(caminhoFisico))
+                System.IO.File.Delete(caminhoFisico);
+
+            return new EmptyResult();
+        }
         catch (Exception ex)
         {
             if (System.IO.File.Exists(caminhoFisico))
@@ -1127,7 +1134,11 @@ public class TasksModel : PageModel
             return NotFound();
 
         _anexoUploadService.AplicarCabecalhosDownloadSeguro(Response, inline: false);
-        return PhysicalFile(caminho, acesso.Anexo.TipoArquivo ?? "application/octet-stream", acesso.Anexo.NomeOriginal);
+        return new PhysicalFileResult(caminho, acesso.Anexo.TipoArquivo ?? "application/octet-stream")
+        {
+            FileDownloadName = acesso.Anexo.NomeOriginal,
+            EnableRangeProcessing = true
+        };
     }
 
     public async Task<IActionResult> OnGetVisualizarAnexoTarefaAsync(int anexoId, int grupoId)
@@ -1145,7 +1156,10 @@ public class TasksModel : PageModel
             return NotFound();
 
         _anexoUploadService.AplicarCabecalhosDownloadSeguro(Response, inline: true);
-        return PhysicalFile(caminho, regra.ContentType);
+        return new PhysicalFileResult(caminho, regra.ContentType)
+        {
+            EnableRangeProcessing = true
+        };
     }
 
     public async Task<IActionResult> OnPostExcluirAnexoTarefaAsync([FromBody] AnexoTarefaRequest request)

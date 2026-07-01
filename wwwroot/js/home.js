@@ -13,6 +13,8 @@ let vinculosSelecionadosChamadoIds = new Set();
 let editorFechamentoTimer = null;
 let ticketLogoClickTimer = null;
 let chamadoCarregamentoAtual = 0;
+let uploadComentarioChamadoController = null;
+let previewAnexoChamadoController = null;
 const CHAMADOS_ORDEM_STORAGE_PREFIX = "callstation.home.ordemChamados";
 const camposDataHoraChamado = [
     { id: "editDataFinalizacao", nome: "Finalizacao" },
@@ -136,7 +138,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalComentariosElement = document.getElementById("modalComentariosChamado");
     if (modalComentariosElement && window.bootstrap) {
         modalComentariosChamado = new bootstrap.Modal(modalComentariosElement);
+        modalComentariosElement.addEventListener("hide.bs.modal", cancelarUploadComentarioChamado);
     }
+
+    document.getElementById("modalVisualizarImagemChamado")?.addEventListener("hide.bs.modal", () => {
+        const conteudo = document.getElementById("conteudoVisualizacaoAnexoChamado");
+        limparPreviewAnexoChamado(conteudo);
+    });
 
     const modalVinculosElement = document.getElementById("modalVinculosChamado");
     if (modalVinculosElement && window.bootstrap) {
@@ -1820,9 +1828,15 @@ async function carregarComentariosChamado(chamadoId, pagina = 1, anexar = false)
 }
 
 async function enviarComentarioChamado() {
+    if (uploadComentarioChamadoController) {
+        cancelarUploadComentarioChamado();
+        return;
+    }
+
     const chamadoId = Number(document.getElementById("comentariosChamadoId")?.value);
     const textoInput = document.getElementById("textoNovoComentarioChamado");
     const anexoInput = document.getElementById("anexoNovoComentarioChamado");
+    const botao = document.getElementById("btnEnviarComentarioChamado");
     const mensagemVisivel = (textoInput?.value || "").trim();
     const mensagem = serializarTextoCampo(textoInput).trim();
     const arquivo = anexoInput?.files?.[0] || null;
@@ -1859,13 +1873,18 @@ async function enviarComentarioChamado() {
         formData.append("AnexoCompactado", arquivoEnvio.compactado ? "true" : "false");
     }
 
+    uploadComentarioChamadoController = new AbortController();
+    const textoOriginalBotao = botao?.textContent || "Enviar comentario";
+    if (botao) botao.textContent = "Cancelar envio";
+
     try {
         const response = await fetch(`?handler=AdicionarComentarioChamado&grupoId=${encodeURIComponent(grupoId)}`, {
             method: "POST",
             headers: {
                 "RequestVerificationToken": getToken()
             },
-            body: formData
+            body: formData,
+            signal: uploadComentarioChamadoController.signal
         });
 
         const data = await response.json();
@@ -1879,8 +1898,20 @@ async function enviarComentarioChamado() {
         atualizarEstadoComentarioRegistrado(chamadoId, true);
         await carregarComentariosChamado(chamadoId, 1, false);
     } catch (error) {
+        if (error.name === "AbortError") {
+            mostrarToast("Envio cancelado.", "warning");
+            return;
+        }
+
         mostrarToast(error.message || "Não foi possível adicionar o comentário.");
+    } finally {
+        uploadComentarioChamadoController = null;
+        if (botao) botao.textContent = textoOriginalBotao;
     }
+}
+
+function cancelarUploadComentarioChamado() {
+    uploadComentarioChamadoController?.abort();
 }
 
 async function marcarComentariosVisualizados(chamadoId) {
@@ -2039,6 +2070,8 @@ function inicializarPreviewImagemChamado() {
 async function abrirPreviewAnexoChamado({ url, tipo, nome, conteudo, titulo, modalElement }) {
     if (!url) return;
 
+    limparPreviewAnexoChamado(conteudo);
+
     if (titulo) titulo.textContent = nome || "Anexo";
     conteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
 
@@ -2047,13 +2080,20 @@ async function abrirPreviewAnexoChamado({ url, tipo, nome, conteudo, titulo, mod
     } else if (tipo === "video") {
         conteudo.innerHTML = `<video class="modal-video-preview" controls preload="metadata" src="${escapeHtml(url)}"></video>`;
     } else if (tipo === "texto") {
+        previewAnexoChamadoController = new AbortController();
         try {
-            const response = await fetch(url, { credentials: "same-origin" });
+            const response = await fetch(url, {
+                credentials: "same-origin",
+                signal: previewAnexoChamadoController.signal
+            });
             if (!response.ok) throw new Error("Nao foi possivel carregar o texto.");
             const texto = await response.text();
             conteudo.innerHTML = `<pre class="modal-text-preview">${escapeHtml(texto)}</pre>`;
         } catch (error) {
+            if (error.name === "AbortError") return;
             conteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Nao foi possivel carregar o texto.")}</div>`;
+        } finally {
+            previewAnexoChamadoController = null;
         }
     } else {
         window.open(url, "_blank", "noopener");
@@ -2061,6 +2101,25 @@ async function abrirPreviewAnexoChamado({ url, tipo, nome, conteudo, titulo, mod
     }
 
     bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function limparPreviewAnexoChamado(conteudo) {
+    previewAnexoChamadoController?.abort();
+    previewAnexoChamadoController = null;
+
+    if (!conteudo) return;
+
+    conteudo.querySelectorAll("video, audio").forEach(media => {
+        media.pause();
+        media.removeAttribute("src");
+        media.load();
+    });
+
+    conteudo.querySelectorAll("img").forEach(imagem => {
+        imagem.removeAttribute("src");
+    });
+
+    conteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
 }
 
 function inicializarAtualizacaoAutomaticaHome() {

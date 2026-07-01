@@ -11,6 +11,8 @@ let modalAcoesLista = null;
 let painelTemplates = null;
 let colunaTemplatesAtual = null;
 let listaAcoesAtualId = null;
+let uploadAnexoTarefaController = null;
+let previewAnexoTarefaController = null;
 let templatesAtuais = [];
 let snapshotBoardAntesDrag = null;
 let snapshotListasAntesDrag = null;
@@ -60,11 +62,14 @@ function mostrarToast(mensagem, tipo = "danger") {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    const modalCartaoElement = document.getElementById("modalCartao");
+    const modalVisualizarAnexoElement = document.getElementById("modalVisualizarAnexoTarefa");
+
     modalLista = new bootstrap.Modal(document.getElementById("modalLista"));
-    modalCartao = new bootstrap.Modal(document.getElementById("modalCartao"));
+    modalCartao = new bootstrap.Modal(modalCartaoElement);
     modalMembrosCartao = new bootstrap.Modal(document.getElementById("modalMembrosCartao"));
     modalChamadosCartao = new bootstrap.Modal(document.getElementById("modalChamadosCartao"));
-    modalVisualizarAnexoTarefa = new bootstrap.Modal(document.getElementById("modalVisualizarAnexoTarefa"));
+    modalVisualizarAnexoTarefa = new bootstrap.Modal(modalVisualizarAnexoElement);
     modalTemplateCartao = new bootstrap.Modal(document.getElementById("modalTemplateCartao"));
     modalSelecionarTemplate = new bootstrap.Modal(document.getElementById("modalSelecionarTemplate"));
     modalAcoesLista = new bootstrap.Modal(document.getElementById("modalAcoesLista"));
@@ -96,6 +101,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btnCriarEtiquetaTarefa")?.addEventListener("click", criarEtiquetaTarefa);
     document.getElementById("btnCriarChecklistTarefa")?.addEventListener("click", criarChecklistTarefa);
     document.getElementById("btnEnviarAnexoTarefa")?.addEventListener("click", enviarAnexoTarefa);
+    modalCartaoElement?.addEventListener("hide.bs.modal", cancelarUploadAnexoTarefa);
+    modalVisualizarAnexoElement?.addEventListener("hide.bs.modal", limparPreviewAnexoTarefa);
     document.getElementById("cartaoGrupoTodoModal")?.addEventListener("change", atualizarMembrosModalGrupoTodo);
     document.getElementById("cartaoMembros")?.addEventListener("change", () => {
         atualizarResumoMembros();
@@ -1855,8 +1862,14 @@ function renderizarAnexosTarefa(anexos) {
 }
 
 async function enviarAnexoTarefa() {
+    if (uploadAnexoTarefaController) {
+        cancelarUploadAnexoTarefa();
+        return;
+    }
+
     const cartaoId = toNullableInt(getValue("cartaoId"));
     const input = document.getElementById("arquivoAnexoTarefa");
+    const botao = document.getElementById("btnEnviarAnexoTarefa");
     if (!cartaoId || !input?.files?.length) return;
     const arquivo = input.files[0];
     const validacao = window.CallStationAnexos?.validarArquivo(arquivo);
@@ -1874,19 +1887,44 @@ async function enviarAnexoTarefa() {
     formData.append("cartaoId", cartaoId);
     formData.append("arquivo", arquivoEnvio.arquivo);
     formData.append("arquivoCompactado", arquivoEnvio.compactado ? "true" : "false");
+    uploadAnexoTarefaController = new AbortController();
+    const htmlOriginal = botao?.innerHTML;
+    const tituloOriginal = botao?.title || "";
+    if (botao) {
+        botao.innerHTML = '<i class="bi bi-x-lg"></i>';
+        botao.title = "Cancelar envio";
+    }
+
     try {
-        const response = await fetch("?handler=EnviarAnexoTarefa", { method: "POST", body: formData, headers: { "RequestVerificationToken": getToken() } });
+        const response = await fetch("?handler=EnviarAnexoTarefa", { method: "POST", body: formData, signal: uploadAnexoTarefaController.signal, headers: { "RequestVerificationToken": getToken() } });
         const data = await response.json();
         if (!response.ok || !data.success) return mostrarToast(data.message || "Nao foi possivel enviar o anexo.");
         input.value = "";
         renderizarAnexosTarefa(data.dados || []);
         mostrarToast("Anexo enviado.", "success");
     } catch (error) {
+        if (error.name === "AbortError") {
+            mostrarToast("Envio cancelado.", "warning");
+            return;
+        }
+
         mostrarToast(error.message || "Nao foi possivel enviar o anexo.");
+    } finally {
+        uploadAnexoTarefaController = null;
+        if (botao) {
+            botao.innerHTML = htmlOriginal || '<i class="bi bi-upload"></i>';
+            botao.title = tituloOriginal;
+        }
     }
 }
 
+function cancelarUploadAnexoTarefa() {
+    uploadAnexoTarefaController?.abort();
+}
+
 async function visualizarAnexoTarefa(event) {
+    limparPreviewAnexoTarefa();
+
     const anexoId = Number(event.currentTarget.dataset.previewAnexo);
     const anexo = cartaoAtualEstado.anexos.find(a => Number(a.id) === anexoId);
     const tipo = anexo?.tipoVisualizacao || window.CallStationAnexos?.tipoPorExtensao(anexo?.extensao) || "download";
@@ -1903,13 +1941,20 @@ async function visualizarAnexoTarefa(event) {
     } else if (tipo === "video") {
         conteudo.innerHTML = `<video class="task-modal-video-preview" controls preload="metadata" src="${url}"></video>`;
     } else if (tipo === "texto") {
+        previewAnexoTarefaController = new AbortController();
         try {
-            const response = await fetch(url, { credentials: "same-origin" });
+            const response = await fetch(url, {
+                credentials: "same-origin",
+                signal: previewAnexoTarefaController.signal
+            });
             if (!response.ok) throw new Error("Nao foi possivel carregar o texto.");
             const texto = await response.text();
             conteudo.innerHTML = `<pre class="task-modal-text-preview">${escapeHtml(texto)}</pre>`;
         } catch (error) {
+            if (error.name === "AbortError") return;
             conteudo.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || "Nao foi possivel carregar o texto.")}</div>`;
+        } finally {
+            previewAnexoTarefaController = null;
         }
     } else {
         window.open(url, "_blank", "noopener");
@@ -1917,6 +1962,26 @@ async function visualizarAnexoTarefa(event) {
     }
 
     modalVisualizarAnexoTarefa?.show();
+}
+
+function limparPreviewAnexoTarefa() {
+    previewAnexoTarefaController?.abort();
+    previewAnexoTarefaController = null;
+
+    const conteudo = document.getElementById("conteudoPreviewAnexoTarefa");
+    if (!conteudo) return;
+
+    conteudo.querySelectorAll("video, audio").forEach(media => {
+        media.pause();
+        media.removeAttribute("src");
+        media.load();
+    });
+
+    conteudo.querySelectorAll("img").forEach(imagem => {
+        imagem.removeAttribute("src");
+    });
+
+    conteudo.innerHTML = '<div class="text-muted small">Carregando anexo...</div>';
 }
 
 async function excluirAnexoTarefa(event) {
