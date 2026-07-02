@@ -13,12 +13,18 @@ let colunaTemplatesAtual = null;
 let listaAcoesAtualId = null;
 let uploadAnexoTarefaController = null;
 let previewAnexoTarefaController = null;
+let buscaChamadosCartaoTimer = null;
+let buscaChamadosCartaoController = null;
 let templatesAtuais = [];
 let snapshotBoardAntesDrag = null;
 let snapshotListasAntesDrag = null;
+let chamadosSelecionadosModal = new Set();
+let chamadosRemovidosModal = new Set();
 let cartaoAtualEstado = {
     membros: [],
+    membrosVisiveis: [],
     chamados: [],
+    chamadosVinculados: [],
     compartilharGrupo: false,
     arquivado: false,
     podeEditar: false,
@@ -64,11 +70,12 @@ function mostrarToast(mensagem, tipo = "danger") {
 document.addEventListener("DOMContentLoaded", () => {
     const modalCartaoElement = document.getElementById("modalCartao");
     const modalVisualizarAnexoElement = document.getElementById("modalVisualizarAnexoTarefa");
+    const modalChamadosCartaoElement = document.getElementById("modalChamadosCartao");
 
     modalLista = new bootstrap.Modal(document.getElementById("modalLista"));
     modalCartao = new bootstrap.Modal(modalCartaoElement);
     modalMembrosCartao = new bootstrap.Modal(document.getElementById("modalMembrosCartao"));
-    modalChamadosCartao = new bootstrap.Modal(document.getElementById("modalChamadosCartao"));
+    modalChamadosCartao = new bootstrap.Modal(modalChamadosCartaoElement);
     modalVisualizarAnexoTarefa = new bootstrap.Modal(modalVisualizarAnexoElement);
     modalTemplateCartao = new bootstrap.Modal(document.getElementById("modalTemplateCartao"));
     modalSelecionarTemplate = new bootstrap.Modal(document.getElementById("modalSelecionarTemplate"));
@@ -97,12 +104,17 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btnFocoChamados")?.addEventListener("click", abrirModalChamadosCartao);
     document.getElementById("btnSalvarMembrosCartao")?.addEventListener("click", salvarMembrosCartao);
     document.getElementById("btnSalvarChamadosCartao")?.addEventListener("click", salvarChamadosCartao);
+    document.getElementById("cartaoChamadosBusca")?.addEventListener("input", event => {
+        clearTimeout(buscaChamadosCartaoTimer);
+        buscaChamadosCartaoTimer = setTimeout(() => carregarChamadosModal(String(event.target.value || "")), 250);
+    });
     document.getElementById("btnAlternarEtiquetasTarefa")?.addEventListener("click", alternarPainelEtiquetasTarefa);
     document.getElementById("btnCriarEtiquetaTarefa")?.addEventListener("click", criarEtiquetaTarefa);
     document.getElementById("btnCriarChecklistTarefa")?.addEventListener("click", criarChecklistTarefa);
     document.getElementById("btnEnviarAnexoTarefa")?.addEventListener("click", enviarAnexoTarefa);
     modalCartaoElement?.addEventListener("hide.bs.modal", cancelarUploadAnexoTarefa);
     modalVisualizarAnexoElement?.addEventListener("hide.bs.modal", limparPreviewAnexoTarefa);
+    modalChamadosCartaoElement?.addEventListener("hide.bs.modal", cancelarBuscaChamadosModal);
     document.getElementById("cartaoGrupoTodoModal")?.addEventListener("change", atualizarMembrosModalGrupoTodo);
     document.getElementById("cartaoMembros")?.addEventListener("change", () => {
         atualizarResumoMembros();
@@ -148,6 +160,7 @@ function inicializarBoard() {
     document.querySelectorAll(".task-card").forEach(inicializarCard);
     document.querySelectorAll(".task-cards").forEach(inicializarDropZone);
     inicializarOrdenacaoListas();
+    inicializarPopoversMembros(document);
 }
 
 function inicializarLista(lista) {
@@ -209,6 +222,7 @@ function inicializarOrdenacaoListas() {
 
 function inicializarCard(card) {
     card.addEventListener("click", () => abrirModalCartaoExistente(Number(card.dataset.cardId)));
+    inicializarInteracoesPopoverMembros(card);
     card.querySelector("[data-toggle-done]")?.addEventListener("click", async event => {
         event.preventDefault();
         event.stopPropagation();
@@ -234,6 +248,31 @@ function inicializarCard(card) {
         }
 
         snapshotBoardAntesDrag = null;
+    });
+}
+
+function inicializarPopoversMembros(root) {
+    inicializarInteracoesPopoverMembros(root);
+    if (!window.bootstrap?.Popover) return;
+
+    root.querySelectorAll("[data-task-members-popover], [data-task-calls-popover]").forEach(elemento => {
+        bootstrap.Popover.getOrCreateInstance(elemento, {
+            container: "body",
+            customClass: "task-member-popover",
+            html: true,
+            placement: "top",
+            trigger: "hover focus"
+        });
+    });
+}
+
+function inicializarInteracoesPopoverMembros(root) {
+    root.querySelectorAll("[data-task-members-popover], [data-task-calls-popover]").forEach(botao => {
+        if (botao.dataset.taskMembersEventsInitialized === "true") return;
+
+        botao.dataset.taskMembersEventsInitialized = "true";
+        botao.addEventListener("click", event => event.stopPropagation());
+        botao.addEventListener("mousedown", event => event.stopPropagation());
     });
 }
 
@@ -471,7 +510,9 @@ async function abrirModalCartaoNovo(colunaId) {
     substituirOpcoesChamados([]);
     cartaoAtualEstado = {
         membros: [],
+        membrosVisiveis: [],
         chamados: [],
+        chamadosVinculados: [],
         compartilharGrupo: false,
         arquivado: false,
         podeEditar: true,
@@ -543,7 +584,9 @@ async function abrirModalCartaoExistente(id) {
     selecionarMultiplos("cartaoChamados", data.chamados || []);
     cartaoAtualEstado = {
         membros: data.membros || [],
+        membrosVisiveis: data.membrosVisiveis || [],
         chamados: data.chamados || [],
+        chamadosVinculados: data.chamadosVinculados || [],
         compartilharGrupo: !!data.compartilharGrupo,
         arquivado: !!data.arquivado,
         podeEditar: !!data.podeEditar,
@@ -559,7 +602,7 @@ async function abrirModalCartaoExistente(id) {
     cartaoSnapshotSalvar = normalizarPayloadCartao(montarPayloadSalvarCartao(data.id));
     atualizarEstadoModalCartao();
     atualizarResumoMembros();
-    atualizarResumoChamados(data.chamadosVinculados || []);
+    atualizarResumoChamados(cartaoAtualEstado.chamadosVinculados);
     renderizarEtiquetasTarefa(data.etiquetasDisponiveis || [], data.etiquetasAplicadas || []);
     renderizarChecklistsTarefa(data.checklists || []);
     renderizarAnexosTarefa(data.anexos || []);
@@ -810,7 +853,9 @@ async function restaurarCartao(cartaoId) {
             inserirCardNoBoard(cartaoId, {
                 colunaId: data.colunaId,
                 titulo: cartaoAtualEstado.titulo || getValue("cartaoTitulo") || "Cartão",
-                compartilharGrupo: cartaoAtualEstado.compartilharGrupo
+                compartilharGrupo: cartaoAtualEstado.compartilharGrupo,
+                membrosVisiveis: data.membrosVisiveis || cartaoAtualEstado.membrosVisiveis || [],
+                chamadosVinculados: data.chamadosVinculados || cartaoAtualEstado.chamadosVinculados || []
             });
             mostrarToast("Cartao restaurado com sucesso.", "success");
         } else {
@@ -969,6 +1014,7 @@ function inserirCardNoBoard(id, payload) {
     card.draggable = true;
     card.dataset.cardId = id;
     card.dataset.concluido = "false";
+    card.dataset.compartilharGrupo = String(!!payload.compartilharGrupo);
     const capa = payload.corCapa ? `<div class="task-cover" style="background:${normalizarCorTemplate(payload.corCapa)}"></div>` : "";
     card.innerHTML = `
         ${capa}
@@ -979,13 +1025,15 @@ function inserirCardNoBoard(id, payload) {
             <div class="task-title">${escapeHtml(payload.titulo)}</div>
         </div>
         <div class="task-meta">
+            ${renderizarChamadosCard(payload.chamadosVinculados || payload.chamados || [])}
             ${renderizarIndicadorChecklistMeta(payload.checklistsConcluidos || 0, payload.checklistsTotal || 0)}
-            <span><i class="bi bi-lock"></i> ${payload.compartilharGrupo ? "Grupo" : "Privado"}</span>
+            ${renderizarAcessoCard(payload.membrosVisiveis || [], !!payload.compartilharGrupo)}
         </div>
     `;
 
     colunaCards.appendChild(card);
     inicializarCard(card);
+    inicializarPopoversMembros(card);
     atualizarContadorLista(colunaCards.closest(".task-list"));
 }
 
@@ -1013,6 +1061,125 @@ function atualizarCardNoBoard(id, payload) {
             Number(payload.checklistsConcluidos || 0),
             Number(payload.checklistsTotal || 0));
     }
+
+    if (Array.isArray(payload.membrosVisiveis)) {
+        const compartilharGrupo = typeof payload.compartilharGrupo === "boolean"
+            ? payload.compartilharGrupo
+            : card.dataset.compartilharGrupo === "true";
+        atualizarIndicadorAcessoCard(id, payload.membrosVisiveis, compartilharGrupo);
+    }
+
+    if (Array.isArray(payload.chamadosVinculados)) {
+        atualizarIndicadorChamadosCard(id, payload.chamadosVinculados);
+    }
+}
+
+function renderizarChamadosCard(chamadosVinculados) {
+    const chamados = Array.isArray(chamadosVinculados) ? chamadosVinculados : [];
+    if (!chamados.length) return "";
+
+    const preview = chamados.slice(0, 3)
+        .map(chamado => Number(chamado.numeroChamadoGrupo))
+        .filter(Number.isFinite)
+        .map(numero => `#${numero}`)
+        .join(", ");
+    if (!preview) return "";
+
+    const restantes = chamados.slice(3);
+    const extras = restantes.length
+        ? `<button type="button"
+                   class="task-calls-more"
+                   data-task-calls-popover
+                   data-bs-content="${escapeHtml(renderizarPopoverChamados(restantes))}"
+                   aria-label="Ver outros chamados vinculados">...</button>`
+        : "";
+
+    return `<span class="task-calls-summary" data-card-calls-meta><i class="bi bi-ticket-detailed"></i><span>${escapeHtml(preview)}</span>${extras}</span>`;
+}
+
+function renderizarPopoverChamados(chamados) {
+    return chamados.map(chamado => {
+        const numero = Number(chamado.numeroChamadoGrupo);
+        const prefixo = Number.isFinite(numero) ? `#${numero}` : "Chamado";
+        return `
+            <div class="task-call-popover-row">
+                <i class="bi bi-ticket-detailed"></i>
+                <span>${escapeHtml(`${prefixo} - ${chamado.titulo || "Chamado"}`)}</span>
+            </div>
+        `;
+    }).join("");
+}
+
+function atualizarIndicadorChamadosCard(cartaoId, chamadosVinculados) {
+    const card = document.querySelector(`.task-card[data-card-id="${cartaoId}"]`);
+    const meta = card?.querySelector(".task-meta");
+    if (!card || !meta) return;
+
+    const existente = meta.querySelector("[data-card-calls-meta]");
+    const popoverExistente = existente?.querySelector("[data-task-calls-popover]");
+    if (popoverExistente && window.bootstrap?.Popover) {
+        bootstrap.Popover.getInstance(popoverExistente)?.dispose();
+    }
+    existente?.remove();
+    meta.insertAdjacentHTML("afterbegin", renderizarChamadosCard(chamadosVinculados));
+    inicializarPopoversMembros(meta);
+}
+
+function renderizarAcessoCard(membrosVisiveis, compartilharGrupo = false) {
+    if (compartilharGrupo) {
+        return '<span data-card-access-meta><i class="bi bi-people"></i> Grupo</span>';
+    }
+
+    const membros = Array.isArray(membrosVisiveis) ? membrosVisiveis : [];
+    if (membros.length <= 1) {
+        return '<span data-card-access-meta><i class="bi bi-lock"></i> Privado</span>';
+    }
+
+    const preview = membros.slice(0, 3)
+        .map(membro => `<img src="${escapeHtml(obterFotoMembro(membro))}" alt="${escapeHtml(membro.nomeExibicao || "Membro")}" class="task-avatar-mini" loading="lazy">`)
+        .join("");
+    const excedente = membros.length > 3
+        ? '<span class="task-avatar-more" aria-hidden="true">...</span>'
+        : "";
+    const popover = membros.map(membro => `
+        <div class="task-member-popover-row">
+            <img src="${escapeHtml(obterFotoMembro(membro))}" alt="">
+            <span>${escapeHtml(membro.nomeExibicao || "Membro")}</span>
+        </div>
+    `).join("");
+
+    return `
+        <span class="task-access-meta task-shared-summary" data-card-access-meta>
+            <button type="button"
+                    class="task-avatar-stack"
+                    data-task-members-popover
+                    data-bs-content="${escapeHtml(popover)}"
+                    aria-label="Ver membros compartilhados">
+                ${preview}${excedente}
+            </button>
+            <span>Compartilhado</span>
+        </span>
+    `;
+}
+
+function obterFotoMembro(membro) {
+    return membro?.fotoUsuario || "/images/default-user.png";
+}
+
+function atualizarIndicadorAcessoCard(cartaoId, membrosVisiveis, compartilharGrupo = false) {
+    const card = document.querySelector(`.task-card[data-card-id="${cartaoId}"]`);
+    const meta = card?.querySelector(".task-meta");
+    if (!card || !meta) return;
+
+    card.dataset.compartilharGrupo = String(!!compartilharGrupo);
+    const existente = meta.querySelector("[data-card-access-meta]");
+    const popoverExistente = existente?.querySelector("[data-task-members-popover]");
+    if (popoverExistente && window.bootstrap?.Popover) {
+        bootstrap.Popover.getInstance(popoverExistente)?.dispose();
+    }
+    existente?.remove();
+    meta.insertAdjacentHTML("beforeend", renderizarAcessoCard(membrosVisiveis, compartilharGrupo));
+    inicializarPopoversMembros(meta);
 }
 
 function renderizarIndicadorChecklistMeta(concluidos, total) {
@@ -1223,7 +1390,8 @@ async function usarTemplate(templateId) {
             colunaId: data.colunaId || colunaId,
             titulo: data.titulo || "Template",
             corCapa: data.corCapa,
-            compartilharGrupo: !!data.compartilharGrupo
+            compartilharGrupo: !!data.compartilharGrupo,
+            membrosVisiveis: data.membrosVisiveis || []
         });
         modalSelecionarTemplate?.hide();
         fecharPainelTemplates();
@@ -1450,8 +1618,17 @@ async function salvarMembrosCartao() {
         }
 
         cartaoAtualEstado.membros = membrosIds;
+        cartaoAtualEstado.membrosVisiveis = data.membrosVisiveis || [];
+        if (Array.isArray(data.chamadosVinculados)) {
+            cartaoAtualEstado.chamadosVinculados = data.chamadosVinculados;
+            cartaoAtualEstado.chamados = data.chamadosVinculados.map(chamado => Number(chamado.id)).filter(Number.isFinite);
+            atualizarIndicadorChamadosCard(cartaoId, cartaoAtualEstado.chamadosVinculados);
+            selecionarMultiplos("cartaoChamados", cartaoAtualEstado.chamados);
+            atualizarResumoChamados(cartaoAtualEstado.chamadosVinculados);
+        }
         cartaoAtualEstado.compartilharGrupo = grupoTodo;
         atualizarEstadoModalCartao();
+        atualizarIndicadorAcessoCard(cartaoId, cartaoAtualEstado.membrosVisiveis, grupoTodo);
         document.getElementById("cartaoCompartilharGrupo").checked = grupoTodo;
         document.getElementById("cartaoPrivacidadeBadge").textContent = grupoTodo ? "Grupo" : "Privado";
         selecionarMultiplos("cartaoMembros", membrosIds);
@@ -1470,6 +1647,14 @@ async function abrirModalChamadosCartao() {
         return;
     }
 
+    chamadosSelecionadosModal = new Set((cartaoAtualEstado.chamados || []).map(Number).filter(Number.isFinite));
+    chamadosRemovidosModal = new Set();
+    setValue("cartaoChamadosBusca", "");
+    await carregarChamadosModal("");
+    modalChamadosCartao?.show();
+    return;
+    /*
+
     try {
         const response = await fetch(`?handler=ChamadosVisivelParaTodos&cartaoId=${encodeURIComponent(cartaoId)}&grupoId=${encodeURIComponent(getGrupoId())}`);
         if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
@@ -1485,6 +1670,59 @@ async function abrirModalChamadosCartao() {
     } catch (error) {
         mostrarToast(error.message || "Não foi possível carregar os chamados.");
     }
+    */
+}
+
+function cancelarBuscaChamadosModal() {
+    clearTimeout(buscaChamadosCartaoTimer);
+    buscaChamadosCartaoController?.abort();
+    buscaChamadosCartaoController = null;
+}
+
+async function carregarChamadosModal(termo = "") {
+    const cartaoId = toNullableInt(getValue("cartaoId"));
+    if (!cartaoId) return;
+
+    sincronizarSelecionadosChamadosModal();
+
+    try {
+        buscaChamadosCartaoController?.abort();
+        buscaChamadosCartaoController = new AbortController();
+        const query = new URLSearchParams({
+            handler: "ChamadosVisivelParaTodos",
+            cartaoId: String(cartaoId),
+            grupoId: String(getGrupoId()),
+            termo: String(termo || "")
+        });
+        const response = await fetch(`?${query.toString()}`, { signal: buscaChamadosCartaoController.signal });
+        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+
+        const data = await response.json();
+        if (!data.success) {
+            mostrarToast(data.message || "Nao foi possivel carregar os chamados.");
+            return;
+        }
+
+        renderizarChamadosCartao(data.chamados || []);
+    } catch (error) {
+        if (error.name === "AbortError") return;
+        mostrarToast(error.message || "Nao foi possivel carregar os chamados.");
+    }
+}
+
+function sincronizarSelecionadosChamadosModal() {
+    document.querySelectorAll("[data-chamado-cartao]").forEach(input => {
+        const id = Number(input.value);
+        if (!Number.isFinite(id)) return;
+
+        if (input.checked) {
+            chamadosSelecionadosModal.add(id);
+            chamadosRemovidosModal.delete(id);
+        } else {
+            chamadosSelecionadosModal.delete(id);
+            chamadosRemovidosModal.add(id);
+        }
+    });
 }
 
 function renderizarChamadosCartao(chamados) {
@@ -1497,21 +1735,43 @@ function renderizarChamadosCartao(chamados) {
         ? chamados.map(chamado => {
             const id = Number(chamado.id);
             const titulo = `#${chamado.numeroChamadoGrupo} - ${chamado.titulo}`;
+            const selecionado = (chamadosSelecionadosModal.has(id) || !!chamado.vinculado) && !chamadosRemovidosModal.has(id);
+            if (selecionado) {
+                chamadosSelecionadosModal.add(id);
+            } else {
+                chamadosSelecionadosModal.delete(id);
+            }
             return `
                 <label class="list-group-item d-flex gap-2 align-items-center">
-                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-chamado-cartao ${chamado.vinculado ? "checked" : ""}>
+                    <input class="form-check-input m-0" type="checkbox" value="${id}" data-chamado-cartao ${selecionado ? "checked" : ""}>
                     <span>${escapeHtml(titulo)}</span>
                 </label>
             `;
         }).join("")
-        : '<div class="list-group-item text-muted">Nenhum chamado visivel para todos os membros.</div>';
+        : '<div class="list-group-item text-muted">Nenhum chamado encontrado para esta busca.</div>';
 
     chamados.forEach(chamado => {
+        const id = Number(chamado.id);
         const option = document.createElement("option");
-        option.value = chamado.id;
+        option.value = id;
         option.textContent = `#${chamado.numeroChamadoGrupo} - ${chamado.titulo}`;
-        option.selected = !!chamado.vinculado;
+        option.selected = chamadosSelecionadosModal.has(id);
         select.appendChild(option);
+    });
+
+    lista.querySelectorAll("[data-chamado-cartao]").forEach(input => {
+        input.addEventListener("change", () => {
+            const id = Number(input.value);
+            if (!Number.isFinite(id)) return;
+
+            if (input.checked) {
+                chamadosSelecionadosModal.add(id);
+                chamadosRemovidosModal.delete(id);
+            } else {
+                chamadosSelecionadosModal.delete(id);
+                chamadosRemovidosModal.add(id);
+            }
+        });
     });
 }
 
@@ -1519,8 +1779,10 @@ async function salvarChamadosCartao() {
     const cartaoId = toNullableInt(getValue("cartaoId"));
     if (!cartaoId) return;
 
-    const chamadosIds = [...document.querySelectorAll("[data-chamado-cartao]:checked")]
-        .map(input => Number(input.value))
+    sincronizarSelecionadosChamadosModal();
+
+    const chamadosIds = [...chamadosSelecionadosModal]
+        .map(Number)
         .filter(Number.isFinite);
 
     try {
@@ -1536,9 +1798,11 @@ async function salvarChamadosCartao() {
         }
 
         cartaoAtualEstado.chamados = chamadosIds;
+        cartaoAtualEstado.chamadosVinculados = data.chamadosVinculados || [];
         atualizarEstadoModalCartao();
         selecionarMultiplos("cartaoChamados", chamadosIds);
-        atualizarResumoChamados();
+        atualizarResumoChamados(cartaoAtualEstado.chamadosVinculados);
+        atualizarIndicadorChamadosCard(cartaoId, cartaoAtualEstado.chamadosVinculados);
         modalChamadosCartao?.hide();
         mostrarToast("Chamados atualizados com sucesso.", "success");
     } catch (error) {

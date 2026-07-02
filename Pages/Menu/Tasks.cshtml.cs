@@ -16,6 +16,7 @@ public class TasksModel : PageModel
     private const decimal OrdemBase = 1024m;
     private const string PrefixoColunaArquivoSistema = "__callstation_archive__";
     private const int LimiteCaracteresComentario = 250;
+    private const int LimiteOpcoesChamadosTarefa = 200;
     private static readonly Regex CorHexRegex = new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
     private readonly AppDbContext _context;
@@ -403,31 +404,7 @@ public class TasksModel : PageModel
             .Select(x => x.UsuarioId)
             .ToListAsync();
 
-        var chamadosVisiveis = await (
-            from vinculo in _context.CartoesTarefasChamados.AsNoTracking()
-            join chamado in _context.Chamados.AsNoTracking()
-                on vinculo.ChamadoId equals chamado.Id
-            where vinculo.CartaoTarefaId == id && vinculo.Ativo
-            orderby chamado.NumeroChamadoGrupo descending
-            select new
-            {
-                chamado.Id,
-                chamado.NumeroChamadoGrupo,
-                chamado.Titulo,
-                chamado.Publico,
-                chamado.CriadorChamadoId
-            })
-            .ToListAsync();
-
-        var chamados = chamadosVisiveis
-            .Where(chamado => UsuarioPodeVerChamado(contexto.Permissao, usuarioId.Value, chamado.Publico, chamado.CriadorChamadoId))
-            .Select(chamado => new ChamadoOpcaoViewModel
-            {
-                Id = chamado.Id,
-                NumeroChamadoGrupo = chamado.NumeroChamadoGrupo,
-                Titulo = chamado.Titulo ?? "Chamado"
-            })
-            .ToList();
+        var chamados = await ObterChamadosVinculadosVisiveisAsync(cartao);
 
         var chamadosOpcoes = await ObterChamadosPermitidosParaCartaoAsync(cartao);
 
@@ -481,6 +458,7 @@ public class TasksModel : PageModel
         var checklists = await ObterChecklistsCartaoAsync(id);
         var anexos = await ObterAnexosCartaoAsync(id);
         var podeEditar = PodeEditarCartao(cartao, usuarioId.Value, membros);
+        var membrosVisiveis = await ObterMembrosVisiveisParaCardAsync(grupoId, cartao.Privado, membros.Append(cartao.CriadorId));
 
         return new JsonResult(new
         {
@@ -500,6 +478,7 @@ public class TasksModel : PageModel
             arquivado = cartao.Status == StatusCartaoTarefa.Arquivada,
             compartilharGrupo = !cartao.Privado,
             membros,
+            membrosVisiveis,
             chamados = chamados.Select(c => c.Id).ToList(),
             chamadosVinculados = chamados,
             chamadosOpcoes,
@@ -1362,7 +1341,7 @@ public class TasksModel : PageModel
         return new JsonResult(new { success = true, dados = membros });
     }
 
-    public async Task<IActionResult> OnGetChamadosVisivelParaTodosAsync(int cartaoId, int grupoId)
+    public async Task<IActionResult> OnGetChamadosVisivelParaTodosAsync(int cartaoId, int grupoId, string? termo)
     {
         var usuarioId = GetUsuarioLogadoId();
         if (usuarioId == null)
@@ -1388,17 +1367,19 @@ public class TasksModel : PageModel
         if (!PodeVerCartao(cartao, usuarioId.Value, membrosAtuais))
             return Forbid();
 
-        var usuariosComAcesso = await ObterUsuariosComAcessoCartaoAsync(cartao);
-        var chamadosPermitidos = await ObterChamadosPermitidosAsync(grupoId, usuariosComAcesso, limitar: false);
-        var chamadosIds = chamadosPermitidos.Select(c => c.Id).ToList();
+        var vinculados = await _context.CartoesTarefasChamados
+            .AsNoTracking()
+            .Where(x => x.CartaoTarefaId == cartao.Id && x.Ativo)
+            .Select(x => x.ChamadoId)
+            .ToListAsync();
 
-        var vinculados = chamadosIds.Any()
-            ? await _context.CartoesTarefasChamados
-                .AsNoTracking()
-                .Where(x => x.CartaoTarefaId == cartao.Id && x.Ativo && chamadosIds.Contains(x.ChamadoId))
-                .Select(x => x.ChamadoId)
-                .ToListAsync()
-            : new List<int>();
+        var usuariosComAcesso = await ObterUsuariosComAcessoCartaoAsync(cartao);
+        var chamadosPermitidos = await ObterChamadosPermitidosAsync(
+            grupoId,
+            usuariosComAcesso,
+            limitar: true,
+            termo: termo,
+            idsSempreIncluir: vinculados);
 
         var vinculadosSet = vinculados.ToHashSet();
         var chamados = chamadosPermitidos.Select(c => new
@@ -1465,7 +1446,17 @@ public class TasksModel : PageModel
 
                         await transaction.CommitAsync();
 
-                        return (IActionResult)new JsonResult(new { success = true, id = cartao.Id });
+                        var membrosVisiveis = await ObterMembrosVisiveisParaCardAsync(
+                            request.GrupoId,
+                            cartao.Privado,
+                            (request.MembrosIds ?? new List<int>()).Append(cartao.CriadorId));
+
+                        return (IActionResult)new JsonResult(new
+                        {
+                            success = true,
+                            id = cartao.Id,
+                            membrosVisiveis
+                        });
                     }
                     catch
                     {
@@ -1572,11 +1563,22 @@ public class TasksModel : PageModel
                         });
                     }
 
+                    await DesvincularchamadosSemPermissaoAsync(cartao.Id, request.GrupoId, idsDesejados.ToList(), usuarioId.Value);
                     RegistrarHistorico(cartao.Id, usuarioId.Value, "Membros atualizados");
                     await _context.SaveChangesAsync();
+                    var membrosVisiveis = await ObterMembrosVisiveisParaCardAsync(
+                        request.GrupoId,
+                        cartao.Privado,
+                        idsDesejados);
+                    var chamadosVinculados = await ObterChamadosVinculadosVisiveisAsync(cartao);
                     await transaction.CommitAsync();
 
-                    return (IActionResult)new JsonResult(new { success = true });
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        membrosVisiveis,
+                        chamadosVinculados
+                    });
                 }
                 catch
                 {
@@ -1669,9 +1671,14 @@ public class TasksModel : PageModel
 
                     RegistrarHistorico(cartao.Id, usuarioId.Value, "Chamados vinculados atualizados");
                     await _context.SaveChangesAsync();
+                    var chamadosVinculados = await ObterChamadosVinculadosVisiveisAsync(cartao);
                     await transaction.CommitAsync();
 
-                    return (IActionResult)new JsonResult(new { success = true });
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        chamadosVinculados
+                    });
                 }
                 catch
                 {
@@ -2197,7 +2204,20 @@ public class TasksModel : PageModel
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    return (IActionResult)new JsonResult(new { success = true, colunaId = coluna.Id, colunaNome = coluna.Nome });
+                    var membrosVisiveis = await ObterMembrosVisiveisParaCardAsync(
+                        request.GrupoId,
+                        cartao.Privado,
+                        membrosAtuais.Append(cartao.CriadorId));
+                    var chamadosVinculados = await ObterChamadosVinculadosVisiveisAsync(cartao);
+
+                    return (IActionResult)new JsonResult(new
+                    {
+                        success = true,
+                        colunaId = coluna.Id,
+                        colunaNome = coluna.Nome,
+                        membrosVisiveis,
+                        chamadosVinculados
+                    });
                 }
                 catch
                 {
@@ -2893,6 +2913,7 @@ public class TasksModel : PageModel
             {
                 Id = c.Id,
                 ColunaId = c.ColunaId,
+                CriadorId = c.CriadorId,
                 Titulo = c.Titulo,
                 CorCapa = c.CorCapa,
                 DataVencimento = c.DataVencimento,
@@ -2902,6 +2923,51 @@ public class TasksModel : PageModel
             .ToListAsync();
 
         var cartaoIds = cartoes.Select(c => c.Id).ToList();
+        var membrosPorId = Membros
+            .GroupBy(m => m.UsuarioId)
+            .ToDictionary(g => g.Key, g => g.First());
+        var todosMembrosGrupo = Membros
+            .OrderBy(m => m.NomeExibicao)
+            .ToList();
+
+        var membrosCartoes = cartaoIds.Count == 0
+            ? new List<BoardMembroCartaoViewModel>()
+            : await _context.CartoesTarefasUsuarios
+                .AsNoTracking()
+                .Where(vinculo => cartaoIds.Contains(vinculo.CartaoTarefaId))
+                .Select(vinculo => new BoardMembroCartaoViewModel
+                {
+                    CartaoTarefaId = vinculo.CartaoTarefaId,
+                    UsuarioId = vinculo.UsuarioId
+                })
+                .ToListAsync();
+
+        var membrosIdsPorCartao = membrosCartoes
+            .GroupBy(m => m.CartaoTarefaId)
+            .ToDictionary(g => g.Key, g => g.Select(m => m.UsuarioId).Distinct().ToList());
+
+        foreach (var cartao in cartoes)
+        {
+            if (!cartao.Privado)
+            {
+                cartao.MembrosVisiveis = todosMembrosGrupo;
+                continue;
+            }
+
+            var ids = membrosIdsPorCartao.TryGetValue(cartao.Id, out var idsCartao)
+                ? idsCartao
+                : new List<int>();
+
+            cartao.MembrosVisiveis = ids
+                .Append(cartao.CriadorId)
+                .Distinct()
+                .Select(id => membrosPorId.TryGetValue(id, out var membro) ? membro : null)
+                .Where(membro => membro != null)
+                .Select(membro => membro!)
+                .OrderBy(membro => membro.NomeExibicao)
+                .ToList();
+        }
+
         var chamados = cartaoIds.Count == 0
             ? new List<BoardChamadoVinculadoViewModel>()
             : await (
@@ -2924,8 +2990,14 @@ public class TasksModel : PageModel
                 })
                 .ToListAsync();
 
+        var cartoesPorId = cartoes.ToDictionary(c => c.Id);
         var chamadosPorCartao = chamados
-            .Where(c => UsuarioPodeVerChamado(permissao, usuarioId, c.Publico, c.CriadorChamadoId))
+            .Where(chamado =>
+                cartoesPorId.TryGetValue(chamado.CartaoTarefaId, out var cartao) &&
+                MembrosPodemVerChamado(
+                    cartao.Privado ? cartao.MembrosVisiveis : todosMembrosGrupo,
+                    chamado.Publico,
+                    chamado.CriadorChamadoId))
             .GroupBy(c => c.CartaoTarefaId)
             .ToDictionary(
                 g => g.Key,
@@ -3441,7 +3513,28 @@ public class TasksModel : PageModel
         return await ObterChamadosPermitidosAsync(cartao.GrupoId, usuariosComAcesso);
     }
 
-    private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosPermitidosAsync(int grupoId, List<int> usuariosIds, IEnumerable<int>? chamadosIds = null, bool limitar = true)
+    private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosVinculadosVisiveisAsync(CartaoTarefa cartao)
+    {
+        var chamadosIds = await _context.CartoesTarefasChamados
+            .AsNoTracking()
+            .Where(vinculo => vinculo.CartaoTarefaId == cartao.Id && vinculo.Ativo)
+            .Select(vinculo => vinculo.ChamadoId)
+            .ToListAsync();
+
+        if (chamadosIds.Count == 0)
+            return new List<ChamadoOpcaoViewModel>();
+
+        var usuariosComAcesso = await ObterUsuariosComAcessoCartaoAsync(cartao);
+        return await ObterChamadosPermitidosAsync(cartao.GrupoId, usuariosComAcesso, chamadosIds, limitar: false);
+    }
+
+    private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosPermitidosAsync(
+        int grupoId,
+        List<int> usuariosIds,
+        IEnumerable<int>? chamadosIds = null,
+        bool limitar = true,
+        string? termo = null,
+        IEnumerable<int>? idsSempreIncluir = null)
     {
         usuariosIds = usuariosIds.Distinct().ToList();
         if (!usuariosIds.Any())
@@ -3457,6 +3550,12 @@ public class TasksModel : PageModel
             return new List<ChamadoOpcaoViewModel>();
 
         var idsFiltro = chamadosIds?.Distinct().ToList();
+        var idsFixos = idsSempreIncluir?.Distinct().ToList() ?? new List<int>();
+        var termoNormalizado = (termo ?? string.Empty).Trim();
+        var termoNumero = termoNormalizado.StartsWith("#", StringComparison.Ordinal)
+            ? termoNormalizado[1..].Trim()
+            : termoNormalizado;
+        var pesquisarNumeroChamado = int.TryParse(termoNumero, out var numeroChamadoPesquisa);
         var query = _context.Chamados.AsNoTracking()
             .Where(c => c.GrupoId == grupoId &&
                         c.Status != StatusChamado.Cancelado &&
@@ -3464,6 +3563,16 @@ public class TasksModel : PageModel
 
         if (idsFiltro is { Count: > 0 })
             query = query.Where(c => idsFiltro.Contains(c.Id));
+        else if (!string.IsNullOrWhiteSpace(termoNormalizado))
+        {
+            var padrao = $"%{EscaparLike(termoNormalizado)}%";
+            query = query.Where(c =>
+                idsFixos.Contains(c.Id) ||
+                EF.Functions.Like(c.Titulo ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(c.Descricao ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(c.Solucao ?? string.Empty, padrao, "\\") ||
+                (pesquisarNumeroChamado && c.NumeroChamadoGrupo == numeroChamadoPesquisa));
+        }
 
         var membrosRestritos = membros
             .Where(m => m.Permissao is PermissaoUsuario.Nenhuma or PermissaoUsuario.Colaborador)
@@ -3473,12 +3582,15 @@ public class TasksModel : PageModel
         if (membrosRestritos.Count > 0)
             query = query.Where(c => c.Publico || membrosRestritos.Contains(c.CriadorChamadoId));
 
-        IQueryable<Chamado> chamadosQuery = query.OrderByDescending(c => c.DataCriacao);
+        IQueryable<Chamado> chamadosQuery = query
+            .OrderByDescending(c => idsFixos.Contains(c.Id))
+            .ThenByDescending(c => c.DataCriacao)
+            .ThenBy(c => c.Id);
 
         if (idsFiltro is { Count: > 0 })
             chamadosQuery = chamadosQuery.Take(idsFiltro.Count);
         else if (limitar)
-            chamadosQuery = chamadosQuery.Take(200);
+            chamadosQuery = chamadosQuery.Take(LimiteOpcoesChamadosTarefa + idsFixos.Count);
 
         var chamados = await chamadosQuery
             .Select(c => new
@@ -3574,6 +3686,19 @@ public class TasksModel : PageModel
         };
     }
 
+    private static bool MembrosPodemVerChamado(IEnumerable<MembroViewModel> membros, bool chamadoPublico, int criadorChamadoId)
+    {
+        var membrosLista = membros.ToList();
+        return membrosLista.Count > 0 &&
+               membrosLista.All(membro =>
+                   Enum.TryParse<PermissaoUsuario>(membro.Permissao, out var permissao) &&
+                   GrupoPermissionService.PodeVerChamado(
+                       permissao,
+                       chamadoPublico,
+                       membro.UsuarioId,
+                       criadorChamadoId));
+    }
+
     private static List<int> ParseIds(string? valor)
     {
         if (string.IsNullOrWhiteSpace(valor))
@@ -3619,9 +3744,23 @@ public class TasksModel : PageModel
                 NomeExibicao = infoUsuario != null && !string.IsNullOrWhiteSpace(infoUsuario.Apelido)
                     ? infoUsuario.Apelido
                     : usuario.NomeUsuario,
-                Permissao = usuarioGrupo.Permissao.ToString()
+                Permissao = usuarioGrupo.Permissao.ToString(),
+                FotoUsuario = usuario.FotoUsuario
             })
             .ToListAsync();
+    }
+
+    private async Task<List<MembroViewModel>> ObterMembrosVisiveisParaCardAsync(int grupoId, bool privado, IEnumerable<int> membrosIds)
+    {
+        var membrosGrupo = await ObterMembrosAsync(grupoId);
+        if (!privado)
+            return membrosGrupo.OrderBy(membro => membro.NomeExibicao).ToList();
+
+        var ids = membrosIds.Distinct().ToHashSet();
+        return membrosGrupo
+            .Where(membro => ids.Contains(membro.UsuarioId))
+            .OrderBy(membro => membro.NomeExibicao)
+            .ToList();
     }
 
     private async Task<List<ChamadoOpcaoViewModel>> ObterChamadosDisponiveisAsync(int grupoId, int usuarioId, PermissaoUsuario permissao)
@@ -3717,6 +3856,12 @@ public class TasksModel : PageModel
                mensagem.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string EscaparLike(string valor) =>
+        valor
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
+
     public class ColunaBoardViewModel
     {
         public int Id { get; set; }
@@ -3728,6 +3873,7 @@ public class TasksModel : PageModel
     {
         public int Id { get; set; }
         public int ColunaId { get; set; }
+        public int CriadorId { get; set; }
         public string Titulo { get; set; } = string.Empty;
         public string? CorCapa { get; set; }
         public DateTime? DataVencimento { get; set; }
@@ -3737,6 +3883,7 @@ public class TasksModel : PageModel
         public int ChecklistItensConcluidos { get; set; }
         public List<ChamadoOpcaoViewModel> Chamados { get; set; } = new();
         public List<EtiquetaTarefaDto> Etiquetas { get; set; } = new();
+        public List<MembroViewModel> MembrosVisiveis { get; set; } = new();
     }
 
     public class MembroViewModel
@@ -3744,6 +3891,7 @@ public class TasksModel : PageModel
         public int UsuarioId { get; set; }
         public string NomeExibicao { get; set; } = string.Empty;
         public string Permissao { get; set; } = string.Empty;
+        public string? FotoUsuario { get; set; }
     }
 
     public class ChamadoOpcaoViewModel
@@ -3776,6 +3924,12 @@ public class TasksModel : PageModel
         public int CartaoTarefaId { get; set; }
         public int Total { get; set; }
         public int Concluidos { get; set; }
+    }
+
+    private class BoardMembroCartaoViewModel
+    {
+        public int CartaoTarefaId { get; set; }
+        public int UsuarioId { get; set; }
     }
 
     public record EtiquetaTarefaDto(int Id, string Nome, string Cor);

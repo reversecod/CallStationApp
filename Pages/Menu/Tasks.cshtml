@@ -99,7 +99,8 @@
                             <article class="task-card @(cartao.Concluido ? "task-card-done" : "")"
                                      draggable="true"
                                      data-card-id="@cartao.Id"
-                                     data-concluido="@cartao.Concluido.ToString().ToLowerInvariant()">
+                                     data-concluido="@cartao.Concluido.ToString().ToLowerInvariant()"
+                                     data-compartilhar-grupo="@((!cartao.Privado).ToString().ToLowerInvariant())">
                                 @if (!string.IsNullOrWhiteSpace(cartao.CorCapa))
                                 {
                                     <div class="task-cover" style="background:@cartao.CorCapa"></div>
@@ -127,7 +128,32 @@
                                 <div class="task-meta">
                                     @if (cartao.Chamados.Any())
                                     {
-                                        <span><i class="bi bi-ticket-detailed"></i> @string.Join(", ", cartao.Chamados.Select(c => $"#{c.NumeroChamadoGrupo}"))</span>
+                                        var chamadosPreview = cartao.Chamados.Take(3).ToList();
+                                        var chamadosRestantes = cartao.Chamados.Skip(3).ToList();
+                                        var chamadosPopover = string.Join("", chamadosRestantes.Select(chamado =>
+                                        {
+                                            var tituloChamadoSeguro = System.Net.WebUtility.HtmlEncode(chamado.Titulo);
+                                            return $"<div class='task-call-popover-row'><i class='bi bi-ticket-detailed'></i><span>#{chamado.NumeroChamadoGrupo} - {tituloChamadoSeguro}</span></div>";
+                                        }));
+                                        <span class="task-calls-summary" data-card-calls-meta>
+                                            <i class="bi bi-ticket-detailed"></i>
+                                            <span>@string.Join(", ", chamadosPreview.Select(c => $"#{c.NumeroChamadoGrupo}"))</span>
+                                            @if (chamadosRestantes.Any())
+                                            {
+                                                <button type="button"
+                                                        class="task-calls-more"
+                                                        data-task-calls-popover
+                                                        data-bs-toggle="popover"
+                                                        data-bs-trigger="hover focus"
+                                                        data-bs-placement="top"
+                                                        data-bs-container="body"
+                                                        data-bs-html="true"
+                                                        data-bs-content="@chamadosPopover"
+                                                        aria-label="Ver outros chamados vinculados">
+                                                    ...
+                                                </button>
+                                            }
+                                        </span>
                                     }
                                     @if (cartao.ChecklistItensTotal > 0)
                                     {
@@ -141,11 +167,49 @@
                                     }
                                     @if (!cartao.Privado)
                                     {
-                                        <span><i class="bi bi-people"></i> Grupo</span>
+                                        <span data-card-access-meta><i class="bi bi-people"></i> Grupo</span>
+                                    }
+                                    else if (cartao.MembrosVisiveis.Count > 1)
+                                    {
+                                        var membrosPreview = cartao.MembrosVisiveis.Take(3).ToList();
+                                        var membrosPopover = string.Join("", cartao.MembrosVisiveis.Select(membro =>
+                                        {
+                                            var fotoPopover = string.IsNullOrWhiteSpace(membro.FotoUsuario)
+                                                ? Url.Content("~/images/default-user.png")
+                                                : Url.Content(membro.FotoUsuario);
+                                            var fotoPopoverSeguro = System.Net.WebUtility.HtmlEncode(fotoPopover);
+                                            var nomePopoverSeguro = System.Net.WebUtility.HtmlEncode(membro.NomeExibicao);
+                                            return $"<div class='task-member-popover-row'><img src='{fotoPopoverSeguro}' alt=''><span>{nomePopoverSeguro}</span></div>";
+                                        }));
+                                        <span class="task-access-meta task-shared-summary" data-card-access-meta>
+                                            <button type="button"
+                                                    class="task-avatar-stack"
+                                                    data-task-members-popover
+                                                    data-bs-toggle="popover"
+                                                    data-bs-trigger="hover focus"
+                                                    data-bs-placement="top"
+                                                    data-bs-container="body"
+                                                    data-bs-html="true"
+                                                    data-bs-content="@membrosPopover"
+                                                    aria-label="Ver membros compartilhados">
+                                                @foreach (var membro in membrosPreview)
+                                                {
+                                                    var foto = string.IsNullOrWhiteSpace(membro.FotoUsuario)
+                                                        ? Url.Content("~/images/default-user.png")
+                                                        : Url.Content(membro.FotoUsuario);
+                                                    <img src="@foto" alt="@membro.NomeExibicao" class="task-avatar-mini" loading="lazy" />
+                                                }
+                                                @if (cartao.MembrosVisiveis.Count > 3)
+                                                {
+                                                    <span class="task-avatar-more" aria-hidden="true">...</span>
+                                                }
+                                            </button>
+                                            <span>Compartilhado</span>
+                                        </span>
                                     }
                                     else
                                     {
-                                        <span><i class="bi bi-lock"></i> Privado</span>
+                                        <span data-card-access-meta><i class="bi bi-lock"></i> Privado</span>
                                     }
                                 </div>
                             </article>
@@ -471,6 +535,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <input type="search"
+                       class="form-control mb-3"
+                       id="cartaoChamadosBusca"
+                       placeholder="Buscar por numero, titulo, descricao ou solucao..."
+                       autocomplete="off" />
                 <select id="cartaoChamados" class="form-select d-none" multiple size="10"></select>
                 <div id="cartaoChamadosLista" class="list-group modal-linked-call-scroll"></div>
                 <div class="form-text">A lista mostra apenas chamados visiveis para todos os membros da tarefa.</div>

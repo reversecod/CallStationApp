@@ -2104,6 +2104,8 @@ public class HomeModel : PageModel
             var padrao = $"%{EscaparLike(termoNormalizado)}%";
             query = query.Where(c =>
                 EF.Functions.Like(c.Titulo ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(c.Descricao ?? string.Empty, padrao, "\\") ||
+                EF.Functions.Like(c.Solucao ?? string.Empty, padrao, "\\") ||
                 (pesquisarNumeroChamado && c.NumeroChamadoGrupo == numeroChamadoPesquisa));
         }
 

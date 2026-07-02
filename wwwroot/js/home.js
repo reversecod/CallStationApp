@@ -8,6 +8,7 @@ let modalVinculosChamado = null;
 let salvandoEdicaoChamado = false;
 let candidatosVinculoTimer = null;
 let filtrosVinculoTimer = null;
+let opcoesVinculoController = null;
 let usuarioPodeAcessarVinculosChamado = false;
 let vinculosSelecionadosChamadoIds = new Set();
 let editorFechamentoTimer = null;
@@ -149,6 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalVinculosElement = document.getElementById("modalVinculosChamado");
     if (modalVinculosElement && window.bootstrap) {
         modalVinculosChamado = new bootstrap.Modal(modalVinculosElement);
+        modalVinculosElement.addEventListener("hide.bs.modal", cancelarCarregamentoOpcoesVinculoChamado);
     }
 
     document.getElementById("btnConfirmarListaTarefa")?.addEventListener("click", async () => {
@@ -1532,6 +1534,12 @@ function atualizarResumoFiltroVinculo(total, limite, filtros = obterFiltrosVincu
     resumo.textContent = `${base}${limiteTexto}${selecionadosTexto}`;
 }
 
+function cancelarCarregamentoOpcoesVinculoChamado() {
+    window.clearTimeout(filtrosVinculoTimer);
+    opcoesVinculoController?.abort();
+    opcoesVinculoController = null;
+}
+
 async function carregarVinculosChamado(chamadoId) {
     const lista = document.getElementById("listaVinculosChamado");
     if (!lista) return;
@@ -1695,7 +1703,11 @@ async function carregarOpcoesVinculoChamado(chamadoId, reiniciarSelecionados = f
 
     try {
         const filtros = obterFiltrosVinculoChamado();
-        const response = await fetch(montarUrlOpcoesVinculoChamado(chamadoId, filtros));
+        opcoesVinculoController?.abort();
+        opcoesVinculoController = new AbortController();
+        const response = await fetch(montarUrlOpcoesVinculoChamado(chamadoId, filtros), {
+            signal: opcoesVinculoController.signal
+        });
         const data = await response.json();
 
         if (!response.ok || !data.success) {
@@ -1715,6 +1727,7 @@ async function carregarOpcoesVinculoChamado(chamadoId, reiniciarSelecionados = f
         renderizarOpcoesVinculoChamado(chamados);
         atualizarResumoFiltroVinculo(chamados.length, dados.limite || null, filtros);
     } catch (error) {
+        if (error.name === "AbortError") return;
         lista.innerHTML = `<div class="list-group-item text-danger">${escapeHtml(error.message || "Não foi possível carregar os chamados.")}</div>`;
     }
 }

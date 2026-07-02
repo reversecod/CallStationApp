@@ -309,6 +309,131 @@ body.sidebar-collapsed .tasks-content {
     gap: .25rem;
 }
 
+.task-access-meta {
+    min-width: 0;
+}
+
+.task-shared-summary {
+    gap: .4rem;
+}
+
+.task-calls-summary {
+    gap: .28rem;
+}
+
+.task-calls-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 .18rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, .22);
+    color: #e5e7eb;
+    font-size: .72rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.task-avatar-stack {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-width: 1.35rem;
+    max-width: 4.5rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: default;
+}
+
+.task-avatar-mini,
+.task-avatar-more {
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 50%;
+    border: 2px solid #242933;
+    background: #374151;
+    color: #e5e7eb;
+    object-fit: cover;
+    flex: 0 0 auto;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .28);
+}
+
+.task-avatar-mini + .task-avatar-mini,
+.task-avatar-mini + .task-avatar-more,
+.task-avatar-more + .task-avatar-mini {
+    margin-left: -.62rem;
+}
+
+.task-avatar-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+}
+
+.task-member-popover {
+    --bs-popover-max-width: 16rem;
+}
+
+.task-member-popover .popover-body {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    padding: .65rem;
+}
+
+.task-member-popover-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 0;
+    color: #111827;
+    font-size: .86rem;
+}
+
+.task-member-popover-row img {
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+}
+
+.task-member-popover-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-call-popover-row {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    min-width: 0;
+    color: #111827;
+    font-size: .86rem;
+}
+
+.task-call-popover-row i {
+    flex: 0 0 auto;
+    color: #475569;
+}
+
+.task-call-popover-row span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .task-checklist-progress {
     font-variant-numeric: tabular-nums;
 }
