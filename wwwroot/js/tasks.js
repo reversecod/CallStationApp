@@ -1157,7 +1157,6 @@ function renderizarAcessoCard(membrosVisiveis, compartilharGrupo = false) {
                     aria-label="Ver membros compartilhados">
                 ${preview}${excedente}
             </button>
-            <span>Compartilhado</span>
         </span>
     `;
 }
