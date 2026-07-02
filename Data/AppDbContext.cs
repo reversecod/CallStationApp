@@ -33,6 +33,7 @@ namespace CallStationApp.Data
         public DbSet<CartaoTarefaContadorGrupo> CartaoTarefaContadorGrupo { get; set; }
         public DbSet<TemplateCartaoTarefa> TemplatesCartoesTarefas { get; set; }
         public DbSet<CartaoTarefa> CartoesTarefas { get; set; }
+        public DbSet<CartaoTarefaPosicaoUsuario> CartoesTarefasPosicoesUsuarios { get; set; }
         public DbSet<CartaoTarefaPeriodoPendente> CartoesTarefasPeriodosPendentes { get; set; }
         public DbSet<CartaoTarefaUsuario> CartoesTarefasUsuarios { get; set; }
         public DbSet<ComentarioTarefa> ComentariosTarefas { get; set; }
@@ -840,11 +841,15 @@ namespace CallStationApp.Data
                 entity.Property(c => c.Ativa).HasColumnType("boolean").HasDefaultValue(true);
                 entity.Property(c => c.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                entity.HasIndex(c => new { c.QuadroId, c.Posicao }).IsUnique().HasDatabaseName("uq_colunas_quadro_posicao");
-                entity.HasIndex(c => new { c.QuadroId, c.Nome }).IsUnique().HasDatabaseName("uq_colunas_quadro_nome");
-                entity.HasIndex(c => new { c.QuadroId, c.Ativa, c.Posicao }).HasDatabaseName("idx_colunas_quadro_quadro_ativa_posicao");
+                entity.HasAlternateKey(c => new { c.Id, c.GrupoId, c.UsuarioId }).HasName("ak_colunas_quadro_id_grupo_usuario");
+                entity.HasIndex(c => new { c.GrupoId, c.UsuarioId, c.Posicao }).IsUnique().HasDatabaseName("uq_colunas_quadro_usuario_posicao");
+                entity.HasIndex(c => new { c.GrupoId, c.UsuarioId, c.Nome }).IsUnique().HasDatabaseName("uq_colunas_quadro_usuario_nome");
+                entity.HasIndex(c => new { c.GrupoId, c.UsuarioId, c.Ativa, c.Posicao }).HasDatabaseName("idx_colunas_quadro_usuario_ativa_posicao");
+                entity.HasIndex(c => new { c.QuadroId, c.Ativa }).HasDatabaseName("idx_colunas_quadro_quadro_ativa");
 
                 entity.HasOne(c => c.Quadro).WithMany().HasForeignKey(c => c.QuadroId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Grupo).WithMany().HasForeignKey(c => c.GrupoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(c => c.Usuario).WithMany().HasForeignKey(c => c.UsuarioId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<CartaoTarefaContadorGrupo>(entity =>
@@ -908,6 +913,28 @@ namespace CallStationApp.Data
                 entity.HasOne(c => c.PaiCartao).WithMany().HasForeignKey(c => c.PaiCartaoId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(c => c.Criador).WithMany().HasForeignKey(c => c.CriadorId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(c => c.ResponsavelUsuario).WithMany().HasForeignKey(c => c.ResponsavelUsuarioId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CartaoTarefaPosicaoUsuario>(entity =>
+            {
+                entity.ToTable("Cartoes_tarefas_posicoes_usuarios");
+                entity.HasKey(p => new { p.GrupoId, p.UsuarioId, p.CartaoTarefaId });
+
+                entity.Property(p => p.OrdemColuna).HasColumnName("ordem_coluna").HasPrecision(18, 6);
+                entity.Property(p => p.DataCriacao).HasColumnName("data_criacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(p => p.DataAtualizacao).HasColumnName("data_atualizacao").HasColumnType("datetime").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(p => new { p.GrupoId, p.UsuarioId, p.ColunaId, p.OrdemColuna }).HasDatabaseName("idx_cartoes_posicoes_usuario_coluna_ordem");
+                entity.HasIndex(p => new { p.CartaoTarefaId, p.UsuarioId }).HasDatabaseName("idx_cartoes_posicoes_usuario_cartao");
+
+                entity.HasOne(p => p.CartaoTarefa).WithMany().HasForeignKey(p => p.CartaoTarefaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.Grupo).WithMany().HasForeignKey(p => p.GrupoId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.Usuario).WithMany().HasForeignKey(p => p.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(p => p.Coluna)
+                    .WithMany()
+                    .HasForeignKey(p => new { p.ColunaId, p.GrupoId, p.UsuarioId })
+                    .HasPrincipalKey(c => new { c.Id, c.GrupoId, c.UsuarioId })
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<CartaoTarefaPeriodoPendente>(entity =>

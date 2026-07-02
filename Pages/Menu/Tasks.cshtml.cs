@@ -89,6 +89,7 @@ public class TasksModel : PageModel
         FotoUsuarioLogado = usuario?.FotoUsuario;
 
         Quadro = await GarantirQuadroPadraoAsync(GrupoId, usuarioId.Value);
+        await GarantirVisaoUsuarioQuadroAsync(Quadro.Id, GrupoId, usuarioId.Value);
         await CarregarDadosAsync(usuarioId.Value, contexto.Permissao);
 
         return Page();
@@ -128,18 +129,26 @@ public class TasksModel : PageModel
                         await RemoverColunasInativasComMesmoNomeAsync(quadro.Id, request.GrupoId, nome, usuarioId.Value);
 
                         var existe = await _context.ColunasQuadro
-                            .AnyAsync(c => c.QuadroId == quadro.Id && c.Nome == nome);
+                            .AnyAsync(c => c.QuadroId == quadro.Id &&
+                                           c.GrupoId == request.GrupoId &&
+                                           c.UsuarioId == usuarioId.Value &&
+                                           c.Ativa &&
+                                           c.Nome == nome);
 
                         if (existe)
                             return (IActionResult)BadRequest(new { success = false, message = "Ja existe uma lista com este nome." });
 
                         var ultimaPosicao = await _context.ColunasQuadro
-                            .Where(c => c.QuadroId == quadro.Id)
+                            .Where(c => c.QuadroId == quadro.Id &&
+                                        c.GrupoId == request.GrupoId &&
+                                        c.UsuarioId == usuarioId.Value)
                             .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
 
                         var coluna = new ColunaQuadro
                         {
                             QuadroId = quadro.Id,
+                            GrupoId = request.GrupoId,
+                            UsuarioId = usuarioId.Value,
                             Nome = nome,
                             Posicao = ultimaPosicao + OrdemBase,
                             Ativa = true,
@@ -167,7 +176,12 @@ public class TasksModel : PageModel
                     .AsNoTracking()
                     .FirstOrDefaultAsync(q => q.GrupoId == request.GrupoId && q.Ativo);
 
-                if (quadro != null && await _context.ColunasQuadro.AsNoTracking().AnyAsync(c => c.QuadroId == quadro.Id && c.Nome == nome))
+                if (quadro != null && await _context.ColunasQuadro.AsNoTracking().AnyAsync(c =>
+                        c.QuadroId == quadro.Id &&
+                        c.GrupoId == request.GrupoId &&
+                        c.UsuarioId == usuarioId.Value &&
+                        c.Ativa &&
+                        c.Nome == nome))
                     return BadRequest(new { success = false, message = "Ja existe uma lista com este nome." });
 
                 if (tentativa == maxTentativas)
@@ -211,13 +225,21 @@ public class TasksModel : PageModel
                 try
                 {
                     var coluna = await _context.ColunasQuadro
-                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId &&
+                                                  c.Ativa &&
+                                                  c.GrupoId == request.GrupoId &&
+                                                  c.UsuarioId == usuarioId.Value);
 
                     if (coluna == null)
                         return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
 
                     var existe = await _context.ColunasQuadro
-                        .AnyAsync(c => c.QuadroId == coluna.QuadroId && c.Id != coluna.Id && c.Nome == nome);
+                        .AnyAsync(c => c.QuadroId == coluna.QuadroId &&
+                                       c.GrupoId == request.GrupoId &&
+                                       c.UsuarioId == usuarioId.Value &&
+                                       c.Ativa &&
+                                       c.Id != coluna.Id &&
+                                       c.Nome == nome);
 
                     if (existe)
                         return (IActionResult)BadRequest(new { success = false, message = "Ja existe uma lista com este nome." });
@@ -268,13 +290,63 @@ public class TasksModel : PageModel
                 {
                     var coluna = await _context.ColunasQuadro
                         .AsNoTracking()
-                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId &&
+                                                  c.Ativa &&
+                                                  c.GrupoId == request.GrupoId &&
+                                                  c.UsuarioId == usuarioId.Value);
 
                     if (coluna == null)
                         return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
 
-                    var cartoes = await _context.CartoesTarefas
-                        .Where(c => c.ColunaId == request.ColunaId && c.GrupoId == request.GrupoId && c.Status != StatusCartaoTarefa.Arquivada)
+                    var cartaoIds = await _context.CartoesTarefasPosicoesUsuarios
+                        .AsNoTracking()
+                        .Where(p => p.GrupoId == request.GrupoId &&
+                                    p.UsuarioId == usuarioId.Value &&
+                                    p.ColunaId == request.ColunaId)
+                        .Select(p => p.CartaoTarefaId)
+                        .ToListAsync();
+
+                    var cartoes = cartaoIds.Count == 0
+                        ? new List<CartaoTarefa>()
+                        : await _context.CartoesTarefas
+                            .Where(c => cartaoIds.Contains(c.Id) &&
+                                        c.GrupoId == request.GrupoId &&
+                                        c.Status != StatusCartaoTarefa.Arquivada)
+                            .ToListAsync();
+
+                    var membrosCartoes = cartoes.Count == 0
+                        ? new List<BoardMembroCartaoViewModel>()
+                        : await _context.CartoesTarefasUsuarios
+                            .AsNoTracking()
+                            .Where(x => cartaoIds.Contains(x.CartaoTarefaId))
+                            .Select(x => new BoardMembroCartaoViewModel
+                            {
+                                CartaoTarefaId = x.CartaoTarefaId,
+                                UsuarioId = x.UsuarioId
+                            })
+                            .ToListAsync();
+
+                    var membrosPorCartao = membrosCartoes
+                        .GroupBy(x => x.CartaoTarefaId)
+                        .ToDictionary(
+                            x => x.Key,
+                            x => x.Select(m => m.UsuarioId).ToList());
+
+                    var semPermissao = cartoes.Any(cartao =>
+                    {
+                        membrosPorCartao.TryGetValue(cartao.Id, out var membrosAtuais);
+                        membrosAtuais ??= new List<int>();
+                        return !PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais);
+                    });
+
+                    if (semPermissao)
+                        return (IActionResult)Forbid();
+
+                    var posicoes = await _context.CartoesTarefasPosicoesUsuarios
+                        .Where(p => p.GrupoId == request.GrupoId &&
+                                    p.UsuarioId == usuarioId.Value &&
+                                    p.ColunaId == request.ColunaId &&
+                                    cartaoIds.Contains(p.CartaoTarefaId))
                         .ToListAsync();
 
                     var agora = DateTime.UtcNow;
@@ -285,6 +357,7 @@ public class TasksModel : PageModel
                         RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado pela lista");
                     }
 
+                    _context.CartoesTarefasPosicoesUsuarios.RemoveRange(posicoes);
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -329,40 +402,96 @@ public class TasksModel : PageModel
                 try
                 {
                     var coluna = await _context.ColunasQuadro
-                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+                        .FirstOrDefaultAsync(c => c.Id == request.ColunaId &&
+                                                  c.Ativa &&
+                                                  c.GrupoId == request.GrupoId &&
+                                                  c.UsuarioId == usuarioId.Value);
 
                     if (coluna == null)
                         return (IActionResult)NotFound(new { success = false, message = "Lista nao encontrada." });
 
-                    var cartoes = await _context.CartoesTarefas
-                        .Where(c => c.ColunaId == request.ColunaId && c.GrupoId == request.GrupoId)
+                    var posicoes = await _context.CartoesTarefasPosicoesUsuarios
+                        .Where(p => p.GrupoId == request.GrupoId &&
+                                    p.UsuarioId == usuarioId.Value &&
+                                    p.ColunaId == request.ColunaId)
                         .ToListAsync();
 
-                    var colunaArquivo = cartoes.Count > 0
-                        ? await ObterOuCriarColunaArquivoSistemaAsync(coluna.QuadroId)
-                        : null;
+                    var colunaDestino = await _context.ColunasQuadro
+                        .Where(c => c.QuadroId == coluna.QuadroId &&
+                                    c.GrupoId == request.GrupoId &&
+                                    c.UsuarioId == usuarioId.Value &&
+                                    c.Ativa &&
+                                    c.Id != coluna.Id)
+                        .OrderBy(c => c.Posicao)
+                        .ThenBy(c => c.Id)
+                        .FirstOrDefaultAsync();
 
                     var agora = DateTime.UtcNow;
-                    foreach (var cartao in cartoes)
+
+                    coluna.Ativa = false;
+                    coluna.Nome = $"{PrefixoColunaArquivoSistema}_{Guid.NewGuid():N}";
+
+                    var destinoCriado = false;
+                    if (colunaDestino == null)
                     {
-                        if (cartao.Status != StatusCartaoTarefa.Arquivada)
-                            cartao.Status = StatusCartaoTarefa.Arquivada;
+                        await RemoverColunasInativasComMesmoNomeAsync(coluna.QuadroId, request.GrupoId, "Nova lista", usuarioId.Value);
 
-                        if (colunaArquivo != null)
-                            cartao.Coluna = colunaArquivo;
+                        var ultimaPosicaoUsuario = await _context.ColunasQuadro
+                            .Where(c => c.QuadroId == coluna.QuadroId &&
+                                        c.GrupoId == request.GrupoId &&
+                                        c.UsuarioId == usuarioId.Value)
+                            .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
 
-                        cartao.DataAtualizacao = agora;
-                        RegistrarHistorico(cartao.Id, usuarioId.Value, "Cartao arquivado por exclusao da lista");
+                        colunaDestino = new ColunaQuadro
+                        {
+                            QuadroId = coluna.QuadroId,
+                            GrupoId = request.GrupoId,
+                            UsuarioId = usuarioId.Value,
+                            Nome = "Nova lista",
+                            Posicao = ultimaPosicaoUsuario + OrdemBase,
+                            Ativa = true,
+                            DataCriacao = agora
+                        };
+
+                        _context.ColunasQuadro.Add(colunaDestino);
+                        destinoCriado = true;
                     }
 
-                    _context.ColunasQuadro.Remove(coluna);
+                    await _context.SaveChangesAsync();
+
+                    var maiorOrdemDestino = posicoes.Count == 0
+                        ? 0m
+                        : await _context.CartoesTarefasPosicoesUsuarios
+                            .Where(p => p.GrupoId == request.GrupoId &&
+                                        p.UsuarioId == usuarioId.Value &&
+                                        p.ColunaId == colunaDestino.Id)
+                            .MaxAsync(p => (decimal?)p.OrdemColuna) ?? 0m;
+
+                    var posicoesOrdenadas = posicoes
+                        .OrderBy(p => p.OrdemColuna)
+                        .ThenBy(p => p.CartaoTarefaId)
+                        .ToList();
+
+                    for (var i = 0; i < posicoesOrdenadas.Count; i++)
+                    {
+                        posicoesOrdenadas[i].ColunaId = colunaDestino.Id;
+                        posicoesOrdenadas[i].OrdemColuna = maiorOrdemDestino + ((i + 1) * OrdemBase);
+                        posicoesOrdenadas[i].DataAtualizacao = agora;
+                    }
+
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
                     return (IActionResult)new JsonResult(new
                     {
                         success = true,
-                        cartoesIds = cartoes.Select(c => c.Id).ToList()
+                        colunaDestino = new
+                        {
+                            id = colunaDestino.Id,
+                            nome = colunaDestino.Nome,
+                            criada = destinoCriado
+                        },
+                        cartoesIds = posicoesOrdenadas.Select(p => p.CartaoTarefaId).ToList()
                     });
                 }
                 catch
@@ -459,12 +588,19 @@ public class TasksModel : PageModel
         var anexos = await ObterAnexosCartaoAsync(id);
         var podeEditar = PodeEditarCartao(cartao, usuarioId.Value, membros);
         var membrosVisiveis = await ObterMembrosVisiveisParaCardAsync(grupoId, cartao.Privado, membros.Append(cartao.CriadorId));
+        var colunaUsuarioId = await _context.CartoesTarefasPosicoesUsuarios
+            .AsNoTracking()
+            .Where(p => p.CartaoTarefaId == cartao.Id &&
+                        p.GrupoId == grupoId &&
+                        p.UsuarioId == usuarioId.Value)
+            .Select(p => (int?)p.ColunaId)
+            .FirstOrDefaultAsync() ?? cartao.ColunaId;
 
         return new JsonResult(new
         {
             success = true,
             id = cartao.Id,
-            colunaId = cartao.ColunaId,
+            colunaId = colunaUsuarioId,
             titulo = cartao.Titulo,
             descricao = cartao.Descricao,
             prioridade = cartao.Prioridade?.ToString(),
@@ -1563,6 +1699,15 @@ public class TasksModel : PageModel
                         });
                     }
 
+                    var usuariosComAcessoPosicao = request.GrupoTodo
+                        ? await _context.UsuariosGrupos
+                            .AsNoTracking()
+                            .Where(x => x.GrupoId == request.GrupoId && x.Ativo)
+                            .Select(x => x.UsuarioId)
+                            .ToListAsync()
+                        : idsDesejados.ToList();
+
+                    await GarantirPosicoesCartaoUsuariosAsync(cartao, usuariosComAcessoPosicao);
                     await DesvincularchamadosSemPermissaoAsync(cartao.Id, request.GrupoId, idsDesejados.ToList(), usuarioId.Value);
                     RegistrarHistorico(cartao.Id, usuarioId.Value, "Membros atualizados");
                     await _context.SaveChangesAsync();
@@ -1712,7 +1857,10 @@ public class TasksModel : PageModel
         var colunaIds = request.Colunas.Select(c => c.ColunaId).Distinct().ToList();
         var colunasValidas = await _context.ColunasQuadro
             .AsNoTracking()
-            .Where(c => colunaIds.Contains(c.Id) && c.Ativa && c.Quadro.GrupoId == request.GrupoId)
+            .Where(c => colunaIds.Contains(c.Id) &&
+                        c.Ativa &&
+                        c.GrupoId == request.GrupoId &&
+                        c.UsuarioId == usuarioId.Value)
             .Select(c => c.Id)
             .ToListAsync();
 
@@ -1740,35 +1888,70 @@ public class TasksModel : PageModel
                 x => x.Key,
                 x => x.Select(m => m.UsuarioId).ToList());
 
+        var colunasPorCartao = request.Colunas
+            .SelectMany(coluna => coluna.CartoesIds.Select((cartaoId, indice) => new
+            {
+                coluna.ColunaId,
+                CartaoId = cartaoId,
+                Ordem = (indice + 1) * OrdemBase
+            }))
+            .GroupBy(x => x.CartaoId)
+            .ToDictionary(x => x.Key, x => x.First());
+
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                foreach (var colunaRequest in request.Colunas)
+                foreach (var item in colunasPorCartao.Values)
                 {
-                    if (!colunasValidasSet.Contains(colunaRequest.ColunaId))
+                    if (!colunasValidasSet.Contains(item.ColunaId))
                         return (IActionResult)BadRequest(new { success = false, message = "Lista invalida." });
 
-                    for (var i = 0; i < colunaRequest.CartoesIds.Count; i++)
+                    if (!cartoes.TryGetValue(item.CartaoId, out var cartao))
+                        continue;
+
+                    membrosPorCartao.TryGetValue(cartao.Id, out var membrosAtuais);
+                    membrosAtuais ??= new List<int>();
+
+                    if (!PodeVerCartao(cartao, usuarioId.Value, membrosAtuais))
+                        return (IActionResult)Forbid();
+                    if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
+                        return (IActionResult)Forbid();
+                }
+
+                var posicoes = await _context.CartoesTarefasPosicoesUsuarios
+                    .Where(p => p.GrupoId == request.GrupoId &&
+                                p.UsuarioId == usuarioId.Value &&
+                                ids.Contains(p.CartaoTarefaId))
+                    .ToListAsync();
+
+                var posicoesPorCartao = posicoes.ToDictionary(p => p.CartaoTarefaId);
+                var agora = DateTime.UtcNow;
+                foreach (var item in colunasPorCartao.Values)
+                {
+                    if (!cartoes.ContainsKey(item.CartaoId))
+                        continue;
+
+                    if (posicoesPorCartao.TryGetValue(item.CartaoId, out var posicao))
                     {
-                        var cartaoId = colunaRequest.CartoesIds[i];
-                        if (!cartoes.TryGetValue(cartaoId, out var cartao))
-                            continue;
-
-                        membrosPorCartao.TryGetValue(cartao.Id, out var membrosAtuais);
-                        membrosAtuais ??= new List<int>();
-
-                        if (!PodeVerCartao(cartao, usuarioId.Value, membrosAtuais))
-                            return (IActionResult)Forbid();
-                        if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
-                            return (IActionResult)Forbid();
-
-                        cartao.ColunaId = colunaRequest.ColunaId;
-                        cartao.OrdemColuna = (i + 1) * OrdemBase;
-                        cartao.DataAtualizacao = DateTime.UtcNow;
+                        posicao.ColunaId = item.ColunaId;
+                        posicao.OrdemColuna = item.Ordem;
+                        posicao.DataAtualizacao = agora;
+                        continue;
                     }
+
+                    _context.CartoesTarefasPosicoesUsuarios.Add(new CartaoTarefaPosicaoUsuario
+                    {
+                        CartaoTarefaId = item.CartaoId,
+                        GrupoId = request.GrupoId,
+                        UsuarioId = usuarioId.Value,
+                        ColunaId = item.ColunaId,
+                        OrdemColuna = item.Ordem,
+                        DataCriacao = agora,
+                        DataAtualizacao = agora
+                    });
                 }
 
                 await _context.SaveChangesAsync();
@@ -1880,7 +2063,10 @@ public class TasksModel : PageModel
             return BadRequest(new { success = false, message = "Ordem das listas invalida." });
 
         var colunas = await _context.ColunasQuadro
-            .Where(c => colunasIds.Contains(c.Id) && c.Ativa && c.Quadro.GrupoId == request.GrupoId)
+            .Where(c => colunasIds.Contains(c.Id) &&
+                        c.Ativa &&
+                        c.GrupoId == request.GrupoId &&
+                        c.UsuarioId == usuarioId.Value)
             .ToListAsync();
 
         if (colunas.Count != colunasIds.Count)
@@ -1892,7 +2078,10 @@ public class TasksModel : PageModel
 
         var quadroId = quadroIds[0];
         var totalColunasAtivas = await _context.ColunasQuadro
-            .CountAsync(c => c.QuadroId == quadroId && c.Ativa);
+            .CountAsync(c => c.QuadroId == quadroId &&
+                             c.GrupoId == request.GrupoId &&
+                             c.UsuarioId == usuarioId.Value &&
+                             c.Ativa);
 
         if (totalColunasAtivas != colunasIds.Count)
             return BadRequest(new { success = false, message = "A lista de ordenacao esta desatualizada." });
@@ -1909,7 +2098,9 @@ public class TasksModel : PageModel
                 try
                 {
                     var maiorPosicao = await _context.ColunasQuadro
-                        .Where(c => c.QuadroId == quadroId)
+                        .Where(c => c.QuadroId == quadroId &&
+                                    c.GrupoId == request.GrupoId &&
+                                    c.UsuarioId == usuarioId.Value)
                         .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
 
                     for (var i = 0; i < colunasIds.Count; i++)
@@ -2176,27 +2367,15 @@ public class TasksModel : PageModel
                     if (!PodeEditarCartao(cartao, usuarioId.Value, membrosAtuais))
                         return (IActionResult)Forbid();
 
-                    var coluna = await _context.ColunasQuadro
-                        .FirstOrDefaultAsync(c => c.Id == cartao.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+                    var posicao = await GarantirPosicaoCartaoUsuarioAsync(
+                        cartao.Id,
+                        cartao.QuadroId,
+                        request.GrupoId,
+                        usuarioId.Value,
+                        null,
+                        preservarExistente: true);
 
-                    if (coluna == null)
-                    {
-                        coluna = await _context.ColunasQuadro
-                            .Where(c => c.QuadroId == cartao.QuadroId && c.Ativa && c.Quadro.GrupoId == request.GrupoId)
-                            .OrderBy(c => c.Posicao)
-                            .FirstOrDefaultAsync();
-
-                        if (coluna == null)
-                        {
-                            return (IActionResult)BadRequest(new
-                            {
-                                success = false,
-                                message = "Crie uma lista ativa antes de restaurar este cartão."
-                            });
-                        }
-                    }
-
-                    cartao.ColunaId = coluna.Id;
+                    cartao.ColunaId = posicao.ColunaId;
                     cartao.Status = StatusCartaoTarefa.Ativa;
                     cartao.DataAtualizacao = DateTime.UtcNow;
 
@@ -2213,8 +2392,8 @@ public class TasksModel : PageModel
                     return (IActionResult)new JsonResult(new
                     {
                         success = true,
-                        colunaId = coluna.Id,
-                        colunaNome = coluna.Nome,
+                        colunaId = posicao.ColunaId,
+                        colunaNome = posicao.Coluna.Nome,
                         membrosVisiveis,
                         chamadosVinculados
                     });
@@ -2245,8 +2424,16 @@ public class TasksModel : PageModel
 
         var cartoes = await (
             from cartao in _context.CartoesTarefas.AsNoTracking()
-            join coluna in _context.ColunasQuadro.AsNoTracking()
-                on cartao.ColunaId equals coluna.Id
+            join posicaoUsuario in _context.CartoesTarefasPosicoesUsuarios.AsNoTracking()
+                    .Where(p => p.GrupoId == grupoId && p.UsuarioId == usuarioId.Value)
+                on cartao.Id equals posicaoUsuario.CartaoTarefaId into posicoesUsuario
+            from posicaoUsuario in posicoesUsuario.DefaultIfEmpty()
+            join colunaUsuario in _context.ColunasQuadro.AsNoTracking()
+                on posicaoUsuario.ColunaId equals colunaUsuario.Id into colunasUsuario
+            from colunaUsuario in colunasUsuario.DefaultIfEmpty()
+            join colunaLegada in _context.ColunasQuadro.AsNoTracking()
+                on cartao.ColunaId equals colunaLegada.Id into colunasLegadas
+            from colunaLegada in colunasLegadas.DefaultIfEmpty()
             where cartao.GrupoId == grupoId &&
                   cartao.Status == StatusCartaoTarefa.Arquivada &&
                   (cartao.CriadorId == usuarioId.Value ||
@@ -2257,7 +2444,9 @@ public class TasksModel : PageModel
             {
                 id = cartao.Id,
                 titulo = cartao.Titulo,
-                nomeColuna = coluna.Ativa ? coluna.Nome : "Lista excluida",
+                nomeColuna = colunaUsuario != null
+                    ? (colunaUsuario.Ativa ? colunaUsuario.Nome : "Lista excluida")
+                    : (colunaLegada != null && colunaLegada.Ativa ? colunaLegada.Nome : "Lista excluida"),
                 corCapa = cartao.CorCapa,
                 dataArquivamento = cartao.DataAtualizacao
             })
@@ -2320,7 +2509,10 @@ public class TasksModel : PageModel
                     try
                     {
                         var coluna = await _context.ColunasQuadro
-                            .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa && c.Quadro.GrupoId == request.GrupoId);
+                            .FirstOrDefaultAsync(c => c.Id == request.ColunaId &&
+                                                      c.Ativa &&
+                                                      c.GrupoId == request.GrupoId &&
+                                                      c.UsuarioId == usuarioId.Value);
 
                         if (coluna == null)
                             return (IActionResult)BadRequest(new { success = false, message = "Lista invalida." });
@@ -2338,8 +2530,23 @@ public class TasksModel : PageModel
                         cartao.Criticidade = template.Criticidade;
                         cartao.Urgencia = template.Urgencia;
                         cartao.CorCapa = template.CorCapa;
+                        var ultimaOrdemUsuario = await _context.CartoesTarefasPosicoesUsuarios
+                            .Where(p => p.GrupoId == request.GrupoId &&
+                                        p.UsuarioId == usuarioId.Value &&
+                                        p.ColunaId == coluna.Id)
+                            .MaxAsync(p => (decimal?)p.OrdemColuna) ?? 0m;
 
                         _context.CartoesTarefas.Add(cartao);
+                        _context.CartoesTarefasPosicoesUsuarios.Add(new CartaoTarefaPosicaoUsuario
+                        {
+                            CartaoTarefa = cartao,
+                            GrupoId = request.GrupoId,
+                            UsuarioId = usuarioId.Value,
+                            ColunaId = coluna.Id,
+                            OrdemColuna = ultimaOrdemUsuario + OrdemBase,
+                            DataCriacao = DateTime.UtcNow,
+                            DataAtualizacao = DateTime.UtcNow
+                        });
                         _context.CartoesTarefasUsuarios.Add(new CartaoTarefaUsuario
                         {
                             CartaoTarefa = cartao,
@@ -2811,38 +3018,12 @@ public class TasksModel : PageModel
         return Path.Combine(new[] { _environment.ContentRootPath, "uploads_privados" }.Concat(partes).ToArray());
     }
 
-    private async Task<ColunaQuadro> ObterOuCriarColunaArquivoSistemaAsync(int quadroId)
-    {
-        var colunaArquivo = await _context.ColunasQuadro
-            .FirstOrDefaultAsync(c => c.QuadroId == quadroId &&
-                                      !c.Ativa &&
-                                      c.Nome.StartsWith(PrefixoColunaArquivoSistema));
-
-        if (colunaArquivo != null)
-            return colunaArquivo;
-
-        var ultimaPosicao = await _context.ColunasQuadro
-            .Where(c => c.QuadroId == quadroId)
-            .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
-
-        colunaArquivo = new ColunaQuadro
-        {
-            QuadroId = quadroId,
-            Nome = $"{PrefixoColunaArquivoSistema}_{Guid.NewGuid():N}",
-            Posicao = ultimaPosicao + OrdemBase,
-            Ativa = false,
-            DataCriacao = DateTime.UtcNow
-        };
-
-        _context.ColunasQuadro.Add(colunaArquivo);
-
-        return colunaArquivo;
-    }
-
     private async Task RemoverColunasInativasComMesmoNomeAsync(int quadroId, int grupoId, string nome, int usuarioId)
     {
         var colunasInativas = await _context.ColunasQuadro
             .Where(c => c.QuadroId == quadroId &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == usuarioId &&
                         !c.Ativa &&
                         c.Nome == nome &&
                         !c.Nome.StartsWith(PrefixoColunaArquivoSistema))
@@ -2851,37 +3032,9 @@ public class TasksModel : PageModel
         if (colunasInativas.Count == 0)
             return;
 
-        var colunaIds = colunasInativas.Select(c => c.Id).ToList();
-        var cartoesPorColuna = await _context.CartoesTarefas
-            .Where(c => colunaIds.Contains(c.ColunaId) && c.GrupoId == grupoId)
-            .GroupBy(c => c.ColunaId)
-            .ToDictionaryAsync(g => g.Key, g => g.ToList());
-
-        ColunaQuadro? colunaArquivo = null;
-        var agora = DateTime.UtcNow;
-
         foreach (var coluna in colunasInativas)
         {
-            var cartoes = cartoesPorColuna.TryGetValue(coluna.Id, out var cartoesColuna)
-                ? cartoesColuna
-                : new List<CartaoTarefa>();
-
-            if (cartoes.Count > 0)
-            {
-                colunaArquivo ??= await ObterOuCriarColunaArquivoSistemaAsync(quadroId);
-
-                foreach (var cartao in cartoes)
-                {
-                    if (cartao.Status != StatusCartaoTarefa.Arquivada)
-                        cartao.Status = StatusCartaoTarefa.Arquivada;
-
-                    cartao.Coluna = colunaArquivo;
-                    cartao.DataAtualizacao = agora;
-                    RegistrarHistorico(cartao.Id, usuarioId, "Cartao arquivado por limpeza de lista excluída");
-                }
-            }
-
-            _context.ColunasQuadro.Remove(coluna);
+            coluna.Nome = $"{PrefixoColunaArquivoSistema}_{Guid.NewGuid():N}";
         }
     }
 
@@ -2891,8 +3044,12 @@ public class TasksModel : PageModel
 
         var colunas = await _context.ColunasQuadro
             .AsNoTracking()
-            .Where(c => c.QuadroId == Quadro.Id && c.Ativa)
+            .Where(c => c.QuadroId == Quadro.Id &&
+                        c.GrupoId == GrupoId &&
+                        c.UsuarioId == usuarioId &&
+                        c.Ativa)
             .OrderBy(c => c.Posicao)
+            .ThenBy(c => c.Id)
             .Select(c => new ColunaBoardViewModel
             {
                 Id = c.Id,
@@ -2900,25 +3057,32 @@ public class TasksModel : PageModel
             })
             .ToListAsync();
 
-        var cartoes = await _context.CartoesTarefas
-            .AsNoTracking()
-            .Where(c =>
-                c.QuadroId == Quadro.Id &&
-                c.GrupoId == GrupoId &&
-                c.Status != StatusCartaoTarefa.Arquivada &&
-                (!c.Privado ||
-                 _context.CartoesTarefasUsuarios.Any(u => u.CartaoTarefaId == c.Id && u.UsuarioId == usuarioId)))
-            .OrderBy(c => c.OrdemColuna)
-            .Select(c => new CartaoBoardViewModel
+        var colunasIds = colunas.Select(c => c.Id).ToList();
+        var cartoes = colunasIds.Count == 0
+            ? new List<CartaoBoardViewModel>()
+            : await (
+                from posicao in _context.CartoesTarefasPosicoesUsuarios.AsNoTracking()
+                join cartao in _context.CartoesTarefas.AsNoTracking()
+                    on posicao.CartaoTarefaId equals cartao.Id
+                where posicao.GrupoId == GrupoId &&
+                      posicao.UsuarioId == usuarioId &&
+                      colunasIds.Contains(posicao.ColunaId) &&
+                      cartao.QuadroId == Quadro.Id &&
+                      cartao.GrupoId == GrupoId &&
+                      cartao.Status != StatusCartaoTarefa.Arquivada &&
+                      (!cartao.Privado ||
+                       _context.CartoesTarefasUsuarios.Any(u => u.CartaoTarefaId == cartao.Id && u.UsuarioId == usuarioId))
+                orderby posicao.OrdemColuna, cartao.Id
+                select new CartaoBoardViewModel
             {
-                Id = c.Id,
-                ColunaId = c.ColunaId,
-                CriadorId = c.CriadorId,
-                Titulo = c.Titulo,
-                CorCapa = c.CorCapa,
-                DataVencimento = c.DataVencimento,
-                Privado = c.Privado,
-                Concluido = c.Status == StatusCartaoTarefa.Concluida
+                Id = cartao.Id,
+                ColunaId = posicao.ColunaId,
+                CriadorId = cartao.CriadorId,
+                Titulo = cartao.Titulo,
+                CorCapa = cartao.CorCapa,
+                DataVencimento = cartao.DataVencimento,
+                Privado = cartao.Privado,
+                Concluido = cartao.Status == StatusCartaoTarefa.Concluida
             })
             .ToListAsync();
 
@@ -3171,6 +3335,331 @@ public class TasksModel : PageModel
         }
     }
 
+    private async Task GarantirVisaoUsuarioQuadroAsync(int quadroId, int grupoId, int usuarioId)
+    {
+        const int maxTentativas = 3;
+
+        for (var tentativa = 1; tentativa <= maxTentativas; tentativa++)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            try
+            {
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    try
+                    {
+                        await ObterOuCriarPrimeiraListaUsuarioAsync(quadroId, grupoId, usuarioId);
+
+                        var cartaoIds = await _context.CartoesTarefas
+                            .AsNoTracking()
+                            .Where(c => c.QuadroId == quadroId &&
+                                        c.GrupoId == grupoId &&
+                                        c.Status != StatusCartaoTarefa.Arquivada &&
+                                        (!c.Privado ||
+                                         _context.CartoesTarefasUsuarios.Any(u => u.CartaoTarefaId == c.Id && u.UsuarioId == usuarioId)))
+                            .OrderBy(c => c.ColunaId)
+                            .ThenBy(c => c.OrdemColuna)
+                            .ThenBy(c => c.Id)
+                            .Select(c => c.Id)
+                            .ToListAsync();
+
+                        await GarantirPosicoesCartoesUsuarioAsync(quadroId, grupoId, usuarioId, cartaoIds);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+
+                return;
+            }
+            catch (DbUpdateException ex) when (tentativa < maxTentativas && EhErroDuplicidade(ex))
+            {
+                _context.ChangeTracker.Clear();
+            }
+        }
+    }
+
+    private async Task<ColunaQuadro> ObterOuCriarPrimeiraListaUsuarioAsync(int quadroId, int grupoId, int usuarioId)
+    {
+        var coluna = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == usuarioId &&
+                        c.Ativa)
+            .OrderBy(c => c.Posicao)
+            .ThenBy(c => c.Id)
+            .FirstOrDefaultAsync();
+
+        if (coluna != null)
+            return coluna;
+
+        await RemoverColunasInativasComMesmoNomeAsync(quadroId, grupoId, "Nova lista", usuarioId);
+
+        var ultimaPosicao = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == usuarioId)
+            .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
+
+        coluna = new ColunaQuadro
+        {
+            QuadroId = quadroId,
+            GrupoId = grupoId,
+            UsuarioId = usuarioId,
+            Nome = "Nova lista",
+            Posicao = ultimaPosicao + OrdemBase,
+            Ativa = true,
+            DataCriacao = DateTime.UtcNow
+        };
+
+        _context.ColunasQuadro.Add(coluna);
+        return coluna;
+    }
+
+    private async Task GarantirPosicoesCartoesUsuarioAsync(int quadroId, int grupoId, int usuarioId, IEnumerable<int> cartaoIds)
+    {
+        var ids = cartaoIds.Where(id => id > 0).Distinct().ToList();
+        if (ids.Count == 0)
+            return;
+
+        var coluna = await ObterOuCriarPrimeiraListaUsuarioAsync(quadroId, grupoId, usuarioId);
+        if (coluna.Id <= 0)
+            await _context.SaveChangesAsync();
+
+        var posicoesExistentes = await _context.CartoesTarefasPosicoesUsuarios
+            .AsNoTracking()
+            .Where(p => p.GrupoId == grupoId &&
+                        p.UsuarioId == usuarioId &&
+                        ids.Contains(p.CartaoTarefaId))
+            .Select(p => p.CartaoTarefaId)
+            .ToListAsync();
+
+        var existentesSet = posicoesExistentes.ToHashSet();
+        var idsSemPosicao = ids.Where(id => !existentesSet.Contains(id)).ToList();
+        if (idsSemPosicao.Count == 0)
+            return;
+
+        var ultimaOrdem = await _context.CartoesTarefasPosicoesUsuarios
+            .Where(p => p.GrupoId == grupoId &&
+                        p.UsuarioId == usuarioId &&
+                        p.ColunaId == coluna.Id)
+            .MaxAsync(p => (decimal?)p.OrdemColuna) ?? 0m;
+
+        var agora = DateTime.UtcNow;
+        foreach (var cartaoId in idsSemPosicao)
+        {
+            ultimaOrdem += OrdemBase;
+            _context.CartoesTarefasPosicoesUsuarios.Add(new CartaoTarefaPosicaoUsuario
+            {
+                CartaoTarefaId = cartaoId,
+                GrupoId = grupoId,
+                UsuarioId = usuarioId,
+                ColunaId = coluna.Id,
+                OrdemColuna = ultimaOrdem,
+                DataCriacao = agora,
+                DataAtualizacao = agora
+            });
+        }
+    }
+
+    private async Task<CartaoTarefaPosicaoUsuario> GarantirPosicaoCartaoUsuarioAsync(
+        int cartaoId,
+        int quadroId,
+        int grupoId,
+        int usuarioId,
+        int? colunaPreferidaId,
+        bool preservarExistente)
+    {
+        var posicao = await _context.CartoesTarefasPosicoesUsuarios
+            .Include(p => p.Coluna)
+            .FirstOrDefaultAsync(p => p.CartaoTarefaId == cartaoId &&
+                                      p.GrupoId == grupoId &&
+                                      p.UsuarioId == usuarioId);
+
+        if (preservarExistente && posicao?.Coluna.Ativa == true)
+            return posicao;
+
+        ColunaQuadro? coluna = null;
+        if (colunaPreferidaId.HasValue)
+        {
+            coluna = await _context.ColunasQuadro
+                .FirstOrDefaultAsync(c => c.Id == colunaPreferidaId.Value &&
+                                          c.QuadroId == quadroId &&
+                                          c.GrupoId == grupoId &&
+                                          c.UsuarioId == usuarioId &&
+                                          c.Ativa);
+
+            if (coluna == null)
+                throw new InvalidOperationException("Lista invalida.");
+        }
+        else
+        {
+            coluna = await ObterOuCriarPrimeiraListaUsuarioAsync(quadroId, grupoId, usuarioId);
+        }
+
+        if (coluna.Id <= 0)
+            await _context.SaveChangesAsync();
+
+        var ultimaOrdem = await _context.CartoesTarefasPosicoesUsuarios
+            .Where(p => p.GrupoId == grupoId &&
+                        p.UsuarioId == usuarioId &&
+                        p.ColunaId == coluna.Id)
+            .MaxAsync(p => (decimal?)p.OrdemColuna) ?? 0m;
+
+        var agora = DateTime.UtcNow;
+        if (posicao == null)
+        {
+            posicao = new CartaoTarefaPosicaoUsuario
+            {
+                CartaoTarefaId = cartaoId,
+                GrupoId = grupoId,
+                UsuarioId = usuarioId,
+                ColunaId = coluna.Id,
+                Coluna = coluna,
+                OrdemColuna = ultimaOrdem + OrdemBase,
+                DataCriacao = agora,
+                DataAtualizacao = agora
+            };
+            _context.CartoesTarefasPosicoesUsuarios.Add(posicao);
+            return posicao;
+        }
+
+        if (posicao.ColunaId != coluna.Id)
+        {
+            posicao.ColunaId = coluna.Id;
+            posicao.Coluna = coluna;
+            posicao.OrdemColuna = ultimaOrdem + OrdemBase;
+        }
+
+        posicao.DataAtualizacao = agora;
+        return posicao;
+    }
+
+    private async Task GarantirPosicoesCartaoUsuariosAsync(CartaoTarefa cartao, IEnumerable<int> usuariosIds)
+    {
+        var usuarios = usuariosIds.Where(id => id > 0).Distinct().ToList();
+        if (usuarios.Count == 0)
+            return;
+
+        var colunas = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == cartao.QuadroId &&
+                        c.GrupoId == cartao.GrupoId &&
+                        usuarios.Contains(c.UsuarioId) &&
+                        c.Ativa)
+            .OrderBy(c => c.Posicao)
+            .ThenBy(c => c.Id)
+            .ToListAsync();
+
+        var primeiraColunaPorUsuario = colunas
+            .GroupBy(c => c.UsuarioId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var usuariosSemLista = usuarios
+            .Where(id => !primeiraColunaPorUsuario.ContainsKey(id))
+            .ToList();
+
+        if (usuariosSemLista.Count > 0)
+        {
+            var colunasInativasNovaLista = await _context.ColunasQuadro
+                .Where(c => c.QuadroId == cartao.QuadroId &&
+                            c.GrupoId == cartao.GrupoId &&
+                            usuariosSemLista.Contains(c.UsuarioId) &&
+                            !c.Ativa &&
+                            c.Nome == "Nova lista")
+                .ToListAsync();
+
+            foreach (var colunaInativa in colunasInativasNovaLista)
+            {
+                colunaInativa.Nome = $"{PrefixoColunaArquivoSistema}_{Guid.NewGuid():N}";
+            }
+
+            var ultimasPosicoes = await _context.ColunasQuadro
+                .Where(c => c.QuadroId == cartao.QuadroId &&
+                            c.GrupoId == cartao.GrupoId &&
+                            usuariosSemLista.Contains(c.UsuarioId))
+                .GroupBy(c => c.UsuarioId)
+                .Select(g => new { UsuarioId = g.Key, Posicao = g.Max(c => c.Posicao) })
+                .ToListAsync();
+
+            var ultimaPosicaoPorUsuario = ultimasPosicoes.ToDictionary(x => x.UsuarioId, x => x.Posicao);
+            var agoraLista = DateTime.UtcNow;
+            foreach (var usuarioId in usuariosSemLista)
+            {
+                var coluna = new ColunaQuadro
+                {
+                    QuadroId = cartao.QuadroId,
+                    GrupoId = cartao.GrupoId,
+                    UsuarioId = usuarioId,
+                    Nome = "Nova lista",
+                    Posicao = (ultimaPosicaoPorUsuario.TryGetValue(usuarioId, out var ultimaPosicao) ? ultimaPosicao : 0m) + OrdemBase,
+                    Ativa = true,
+                    DataCriacao = agoraLista
+                };
+
+                _context.ColunasQuadro.Add(coluna);
+                primeiraColunaPorUsuario[usuarioId] = coluna;
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        var usuariosComPosicao = await _context.CartoesTarefasPosicoesUsuarios
+            .AsNoTracking()
+            .Where(p => p.CartaoTarefaId == cartao.Id &&
+                        p.GrupoId == cartao.GrupoId &&
+                        usuarios.Contains(p.UsuarioId))
+            .Select(p => p.UsuarioId)
+            .ToListAsync();
+
+        var usuariosComPosicaoSet = usuariosComPosicao.ToHashSet();
+        var usuariosSemPosicao = usuarios
+            .Where(id => !usuariosComPosicaoSet.Contains(id))
+            .ToList();
+
+        if (usuariosSemPosicao.Count == 0)
+            return;
+
+        var colunaIds = usuariosSemPosicao
+            .Select(id => primeiraColunaPorUsuario[id].Id)
+            .Distinct()
+            .ToList();
+
+        var ultimasOrdens = await _context.CartoesTarefasPosicoesUsuarios
+            .Where(p => p.GrupoId == cartao.GrupoId &&
+                        colunaIds.Contains(p.ColunaId))
+            .GroupBy(p => p.ColunaId)
+            .Select(g => new { ColunaId = g.Key, Ordem = g.Max(p => p.OrdemColuna) })
+            .ToListAsync();
+
+        var ultimaOrdemPorColuna = ultimasOrdens.ToDictionary(x => x.ColunaId, x => x.Ordem);
+        var agora = DateTime.UtcNow;
+        foreach (var usuarioId in usuariosSemPosicao)
+        {
+            var coluna = primeiraColunaPorUsuario[usuarioId];
+            var ultimaOrdem = ultimaOrdemPorColuna.TryGetValue(coluna.Id, out var ordemAtual) ? ordemAtual : 0m;
+            ultimaOrdem += OrdemBase;
+            ultimaOrdemPorColuna[coluna.Id] = ultimaOrdem;
+
+            _context.CartoesTarefasPosicoesUsuarios.Add(new CartaoTarefaPosicaoUsuario
+            {
+                CartaoTarefaId = cartao.Id,
+                GrupoId = cartao.GrupoId,
+                UsuarioId = usuarioId,
+                ColunaId = coluna.Id,
+                OrdemColuna = ultimaOrdem,
+                DataCriacao = agora,
+                DataAtualizacao = agora
+            });
+        }
+    }
+
     private async Task<CartaoTarefa> CriarCartaoBaseAsync(int quadroId, int colunaId, int grupoId, int usuarioId, string titulo)
     {
         var contador = await _context.CartaoTarefaContadorGrupo.FirstOrDefaultAsync(c => c.GrupoId == grupoId);
@@ -3213,7 +3702,10 @@ public class TasksModel : PageModel
         StatusCartaoTarefa? statusSolicitado)
     {
         var coluna = await _context.ColunasQuadro
-            .FirstOrDefaultAsync(c => c.Id == request.ColunaId && c.Ativa);
+            .FirstOrDefaultAsync(c => c.Id == request.ColunaId &&
+                                      c.Ativa &&
+                                      c.GrupoId == request.GrupoId &&
+                                      c.UsuarioId == usuarioId);
 
         if (coluna == null)
             throw new InvalidOperationException("Lista invalida.");
@@ -3255,7 +3747,6 @@ public class TasksModel : PageModel
             statusAnterior = cartao.Status;
             dataVencimentoAnterior = cartao.DataVencimento;
             cartao.Titulo = titulo;
-            cartao.ColunaId = coluna.Id;
             cartao.QuadroId = quadro.Id;
         }
 
@@ -3282,6 +3773,14 @@ public class TasksModel : PageModel
         if (novo)
             await _context.SaveChangesAsync();
 
+        await GarantirPosicaoCartaoUsuarioAsync(
+            cartao.Id,
+            quadro.Id,
+            request.GrupoId,
+            usuarioId,
+            coluna.Id,
+            preservarExistente: false);
+
         if (statusAnterior != cartao.Status)
         {
             await _slaPausaService.RegistrarTransicaoCartaoAsync(
@@ -3295,7 +3794,11 @@ public class TasksModel : PageModel
             RegistrarHistorico(cartao.Id, usuarioId, $"Status alterado de {statusAnterior} para {cartao.Status}");
         }
 
-        var usuariosComAcesso = await SincronizarMembrosAsync(cartao.Id, request.GrupoId, request.MembrosIds, usuarioId, cartao.CriadorId);
+        var usuariosSincronizados = await SincronizarMembrosAsync(cartao.Id, request.GrupoId, request.MembrosIds, usuarioId, cartao.CriadorId);
+        var usuariosComAcesso = cartao.Privado
+            ? usuariosSincronizados
+            : await ObterUsuariosComAcessoCartaoAsync(cartao);
+        await GarantirPosicoesCartaoUsuariosAsync(cartao, usuariosComAcesso);
         await SincronizarChamadosAsync(cartao, request.ChamadosIds, request.GrupoId, usuarioId, usuariosComAcesso);
         await SincronizarEtiquetasUsuarioCartaoAsync(cartao.Id, request.GrupoId, usuarioId, request.EtiquetasIds);
         RegistrarHistorico(cartao.Id, usuarioId, novo ? "Cartao criado" : "Cartao atualizado");

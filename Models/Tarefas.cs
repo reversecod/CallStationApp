@@ -79,6 +79,12 @@ namespace CallStationApp.Models
         [Column("quadro_id")]
         public int QuadroId { get; set; }
 
+        [Column("grupo_id")]
+        public int GrupoId { get; set; }
+
+        [Column("usuario_id")]
+        public int UsuarioId { get; set; }
+
         [Required]
         [Column("nome", TypeName = "varchar(60)")]
         [StringLength(60)]
@@ -102,6 +108,47 @@ namespace CallStationApp.Models
 
         [ForeignKey(nameof(QuadroId))]
         public QuadroTarefa Quadro { get; set; } = null!;
+
+        [ForeignKey(nameof(GrupoId))]
+        public Grupo Grupo { get; set; } = null!;
+
+        [ForeignKey(nameof(UsuarioId))]
+        public Usuario Usuario { get; set; } = null!;
+    }
+
+    public class CartaoTarefaPosicaoUsuario
+    {
+        [Column("cartao_tarefa_id")]
+        public int CartaoTarefaId { get; set; }
+
+        [Column("grupo_id")]
+        public int GrupoId { get; set; }
+
+        [Column("usuario_id")]
+        public int UsuarioId { get; set; }
+
+        [Column("coluna_id")]
+        public int ColunaId { get; set; }
+
+        [Column("ordem_coluna", TypeName = "decimal(18,6)")]
+        public decimal OrdemColuna { get; set; }
+
+        [Column("data_criacao")]
+        public DateTime DataCriacao { get; set; }
+
+        [Column("data_atualizacao")]
+        public DateTime DataAtualizacao { get; set; }
+
+        [ForeignKey(nameof(CartaoTarefaId))]
+        public CartaoTarefa CartaoTarefa { get; set; } = null!;
+
+        [ForeignKey(nameof(GrupoId))]
+        public Grupo Grupo { get; set; } = null!;
+
+        [ForeignKey(nameof(UsuarioId))]
+        public Usuario Usuario { get; set; } = null!;
+
+        public ColunaQuadro Coluna { get; set; } = null!;
     }
 
     public class CartaoTarefaContadorGrupo

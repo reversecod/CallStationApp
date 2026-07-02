@@ -372,13 +372,16 @@ CREATE INDEX idx_quadros_tarefas_usuarios_usuario_permissao
     ON Quadros_tarefas_usuarios (usuario_id, permissao);
 
 -- =========================================================
--- 3) COLUNAS DO QUADRO
+-- 3) COLUNAS DO QUADRO POR VISAO DO USUARIO
 -- OBS:
 -- - limite_wip deve ser validado na aplicação
+-- - cada coluna pertence a um usuario dentro de um grupo
 -- =========================================================
 CREATE TABLE Colunas_quadro (
     id INT AUTO_INCREMENT PRIMARY KEY,
     quadro_id INT NOT NULL,
+    grupo_id INT NOT NULL,
+    usuario_id INT NOT NULL,
     nome VARCHAR(60) NOT NULL,
     posicao DECIMAL(18,6) NOT NULL,
     cor VARCHAR(20) NULL,
@@ -389,15 +392,27 @@ CREATE TABLE Colunas_quadro (
     CONSTRAINT fk_colunas_quadro_quadro
         FOREIGN KEY (quadro_id) REFERENCES Quadros_tarefas(id),
 
-    CONSTRAINT uq_colunas_quadro_posicao
-        UNIQUE (quadro_id, posicao),
+    CONSTRAINT fk_colunas_quadro_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
 
-    CONSTRAINT uq_colunas_quadro_nome
-        UNIQUE (quadro_id, nome)
+    CONSTRAINT fk_colunas_quadro_usuario
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id),
+
+    CONSTRAINT ak_colunas_quadro_id_grupo_usuario
+        UNIQUE (id, grupo_id, usuario_id),
+
+    CONSTRAINT uq_colunas_quadro_usuario_posicao
+        UNIQUE (grupo_id, usuario_id, posicao),
+
+    CONSTRAINT uq_colunas_quadro_usuario_nome
+        UNIQUE (grupo_id, usuario_id, nome)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE INDEX idx_colunas_quadro_quadro_ativa_posicao
-    ON Colunas_quadro (quadro_id, ativa, posicao);
+CREATE INDEX idx_colunas_quadro_usuario_ativa_posicao
+    ON Colunas_quadro (grupo_id, usuario_id, ativa, posicao);
+
+CREATE INDEX idx_colunas_quadro_quadro_ativa
+    ON Colunas_quadro (quadro_id, ativa);
 
 -- =========================================================
 -- 4) CONTADOR DE CARTÕES POR GRUPO
@@ -439,7 +454,7 @@ CREATE UNIQUE INDEX uq_templates_cartoes_tarefas_grupo_nome
     ON Templates_cartoes_tarefas (grupo_id, nome);
 
 -- =========================================================
--- 5) CARTÕES / TAREFAS
+-- 6) CARTÕES / TAREFAS
 -- OBS:
 -- - tarefa nasce privada para o criador
 -- - responsavel_usuario_id = responsável principal
@@ -527,6 +542,44 @@ CREATE INDEX idx_cartoes_tarefas_criador
 CREATE INDEX idx_cartoes_tarefas_pai
     ON Cartoes_tarefas (pai_cartao_id);
 
+-- =========================================================
+-- 7) POSICAO DA TAREFA POR VISAO DO USUARIO
+-- OBS:
+-- - dados da tarefa continuam compartilhados em Cartoes_tarefas
+-- - lista e ordem visual ficam isoladas por grupo + usuario
+-- =========================================================
+CREATE TABLE Cartoes_tarefas_posicoes_usuarios (
+    grupo_id INT NOT NULL,
+    usuario_id INT NOT NULL,
+    cartao_tarefa_id INT NOT NULL,
+    coluna_id INT NOT NULL,
+    ordem_coluna DECIMAL(18,6) NOT NULL,
+    data_criacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    data_atualizacao DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (grupo_id, usuario_id, cartao_tarefa_id),
+
+    CONSTRAINT fk_cartoes_posicoes_cartao
+        FOREIGN KEY (cartao_tarefa_id) REFERENCES Cartoes_tarefas(id),
+
+    CONSTRAINT fk_cartoes_posicoes_grupo
+        FOREIGN KEY (grupo_id) REFERENCES Grupos(id),
+
+    CONSTRAINT fk_cartoes_posicoes_usuario
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(id),
+
+    CONSTRAINT fk_cartoes_posicoes_coluna_usuario
+        FOREIGN KEY (coluna_id, grupo_id, usuario_id)
+        REFERENCES Colunas_quadro (id, grupo_id, usuario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX idx_cartoes_posicoes_usuario_coluna_ordem
+    ON Cartoes_tarefas_posicoes_usuarios (grupo_id, usuario_id, coluna_id, ordem_coluna);
+
+CREATE INDEX idx_cartoes_posicoes_usuario_cartao
+    ON Cartoes_tarefas_posicoes_usuarios (cartao_tarefa_id, usuario_id);
+
 CREATE TABLE Cartoes_tarefas_periodos_pendentes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cartao_tarefa_id INT NOT NULL,
@@ -558,7 +611,7 @@ CREATE INDEX idx_cartao_periodo_pendente_aberto
     ON Cartoes_tarefas_periodos_pendentes (cartao_tarefa_id, fim_pendente);
 
 -- =========================================================
--- 6) USUÁRIOS COM ACESSO DIRETO À TAREFA
+-- 8) USUÁRIOS COM ACESSO DIRETO À TAREFA
 -- OBS:
 -- - não existe mais tipo 'Responsavel'
 -- - responsável principal fica em Cartoes_tarefas.responsavel_usuario_id
@@ -590,7 +643,7 @@ CREATE INDEX idx_cartoes_tarefas_usuarios_usuario_permissao
     ON Cartoes_tarefas_usuarios (usuario_id, permissao);
 
 -- =========================================================
--- 7) COMENTÁRIOS DA TAREFA
+-- 9) COMENTÁRIOS DA TAREFA
 -- =========================================================
 CREATE TABLE Comentarios_tarefas (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -612,7 +665,7 @@ CREATE INDEX idx_comentarios_tarefas_cartao_data
     ON Comentarios_tarefas (cartao_tarefa_id, data_criacao);
 
 -- =========================================================
--- 8) ANEXOS DA TAREFA
+-- 10) ANEXOS DA TAREFA
 -- =========================================================
 CREATE TABLE Anexos_tarefas (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -639,7 +692,7 @@ CREATE INDEX idx_anexos_tarefas_cartao
     ON Anexos_tarefas (cartao_tarefa_id);
 
 -- =========================================================
--- 9) CHECKLISTS DA TAREFA
+-- 11) CHECKLISTS DA TAREFA
 -- =========================================================
 CREATE TABLE Checklists_tarefas (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -675,7 +728,7 @@ CREATE INDEX idx_checklist_itens_tarefas_checklist_posicao
     ON Checklist_itens_tarefas (checklist_id, posicao);
 
 -- =========================================================
--- 10) ETIQUETAS
+-- 12) ETIQUETAS
 -- OBS:
 -- - mantidas no nível do grupo para reúso
 -- =========================================================
@@ -714,7 +767,7 @@ CREATE TABLE Cartoes_tarefas_etiquetas (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =========================================================
--- 11) RELAÇÃO TAREFA ↔ CHAMADOS
+-- 13) RELAÇÃO TAREFA ↔ CHAMADOS
 -- OBS:
 -- - permite vários chamados por tarefa
 -- - permite desassociar depois
@@ -752,7 +805,7 @@ CREATE INDEX idx_cartoes_tarefas_chamados_cartao_ativo
     ON Cartoes_tarefas_chamados (cartao_tarefa_id, ativo);
 
 -- =========================================================
--- 12) HISTÓRICO DAS TAREFAS
+-- 14) HISTÓRICO DAS TAREFAS
 -- OBS:
 -- - valor_anterior e valor_novo em TEXT
 -- =========================================================
@@ -780,7 +833,7 @@ CREATE INDEX idx_historico_tarefas_usuario
     ON Historico_tarefas (usuario_id);
 
 -- =========================================================
--- 13) DEPENDÊNCIAS ENTRE TAREFAS
+-- 15) DEPENDÊNCIAS ENTRE TAREFAS
 -- OBS:
 -- - subtarefa saiu daqui
 -- - agora só dependência real

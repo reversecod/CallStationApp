@@ -469,7 +469,7 @@ async function arquivarCartoesListaAtual() {
 async function excluirListaAtual() {
     const colunaId = listaAcoesAtualId;
     if (!colunaId) return;
-    if (!confirm("Excluir esta lista? Todos os cartoes dentro dela serão arquivados.")) return;
+    if (!confirm("Excluir esta lista? Os cartoes serao movidos para outra lista da sua visao.")) return;
 
     try {
         const data = await fetchJson("?handler=ExcluirLista", {
@@ -482,8 +482,23 @@ async function excluirListaAtual() {
             return;
         }
 
-        document.querySelector(`.task-list[data-column-id="${colunaId}"]`)?.remove();
+        const lista = document.querySelector(`.task-list[data-column-id="${colunaId}"]`);
+        const colunaDestino = data.colunaDestino;
+        if (colunaDestino?.criada && !document.querySelector(`.task-list[data-column-id="${colunaDestino.id}"]`)) {
+            inserirListaNoBoard(colunaDestino.id, colunaDestino.nome || "Nova lista");
+        }
+
+        const destinoCards = colunaDestino
+            ? document.querySelector(`.task-cards[data-column-cards="${colunaDestino.id}"]`)
+            : null;
+        if (lista && destinoCards) {
+            [...lista.querySelectorAll(".task-card")].forEach(card => destinoCards.appendChild(card));
+            atualizarContadorLista(destinoCards.closest(".task-list"));
+        }
+
+        lista?.remove();
         document.querySelector(`#cartaoColunaSelect option[value="${colunaId}"]`)?.remove();
+        sincronizarSelectColunasComBoard();
         modalAcoesLista?.hide();
         mostrarToast("Lista excluida com sucesso.", "success");
     } catch (error) {

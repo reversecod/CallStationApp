@@ -21,6 +21,8 @@ public class HomeModel : PageModel
     private const int TamanhoMinimoPesquisaVinculo = 2;
     private const int LimiteCandidatosVinculo = 12;
     private const int LimiteOpcoesVinculo = 50;
+    private const decimal OrdemBaseTarefas = 1024m;
+    private const string PrefixoColunaArquivoSistemaTarefas = "__callstation_archive__";
     private static readonly TimeZoneInfo FusoHorarioRegional = ObterFusoHorarioRegional();
 
     private static readonly StatusChamado[] StatusFinais =
@@ -622,7 +624,11 @@ public class HomeModel : PageModel
                     try
                     {
                         var quadro = await GarantirQuadroTarefasPadraoAsync(request.GrupoId, idUsuario.Value);
-                        var coluna = await ObterColunaTarefasDestinoAsync(quadro.Id, request.ColunaId);
+                        var coluna = await ObterColunaTarefasDestinoAsync(
+                            quadro.Id,
+                            request.GrupoId,
+                            idUsuario.Value,
+                            request.ColunaId);
 
                         if (coluna == null)
                         {
@@ -652,6 +658,12 @@ public class HomeModel : PageModel
                             .Where(c => c.ColunaId == coluna.Id)
                             .MaxAsync(c => (decimal?)c.OrdemColuna) ?? 0m;
 
+                        var ultimaOrdemUsuario = await _context.CartoesTarefasPosicoesUsuarios
+                            .Where(p => p.GrupoId == request.GrupoId &&
+                                        p.UsuarioId == idUsuario.Value &&
+                                        p.ColunaId == coluna.Id)
+                            .MaxAsync(p => (decimal?)p.OrdemColuna) ?? 0m;
+
                         var tituloChamado = string.IsNullOrWhiteSpace(chamado.Titulo) ||
                                              string.Equals(chamado.Titulo, "Novo chamado", StringComparison.OrdinalIgnoreCase)
                             ? $"Chamado {chamado.NumeroChamadoGrupo}"
@@ -678,6 +690,16 @@ public class HomeModel : PageModel
                         };
 
                         _context.CartoesTarefas.Add(cartao);
+                        _context.CartoesTarefasPosicoesUsuarios.Add(new CartaoTarefaPosicaoUsuario
+                        {
+                            CartaoTarefa = cartao,
+                            GrupoId = request.GrupoId,
+                            UsuarioId = idUsuario.Value,
+                            ColunaId = coluna.Id,
+                            OrdemColuna = ultimaOrdemUsuario + OrdemBaseTarefas,
+                            DataCriacao = DateTime.UtcNow,
+                            DataAtualizacao = DateTime.UtcNow
+                        });
 
                         _context.CartoesTarefasUsuarios.Add(new CartaoTarefaUsuario
                         {
@@ -768,8 +790,12 @@ public class HomeModel : PageModel
 
         var listas = await _context.ColunasQuadro
             .AsNoTracking()
-            .Where(c => c.QuadroId == quadro.Id && c.Ativa)
+            .Where(c => c.QuadroId == quadro.Id &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == idUsuario.Value &&
+                        c.Ativa)
             .OrderBy(c => c.Posicao)
+            .ThenBy(c => c.Id)
             .Select(c => new
             {
                 id = c.Id,
@@ -3065,18 +3091,64 @@ public class HomeModel : PageModel
         }
     }
 
-    private async Task<ColunaQuadro?> ObterColunaTarefasDestinoAsync(int quadroId, int? colunaId)
+    private async Task<ColunaQuadro?> ObterColunaTarefasDestinoAsync(int quadroId, int grupoId, int usuarioId, int? colunaId)
     {
         if (colunaId.HasValue && colunaId.Value > 0)
         {
             return await _context.ColunasQuadro
-                .FirstOrDefaultAsync(c => c.Id == colunaId.Value && c.QuadroId == quadroId && c.Ativa);
+                .FirstOrDefaultAsync(c => c.Id == colunaId.Value &&
+                                          c.QuadroId == quadroId &&
+                                          c.GrupoId == grupoId &&
+                                          c.UsuarioId == usuarioId &&
+                                          c.Ativa);
         }
 
-        return await _context.ColunasQuadro
-            .Where(c => c.QuadroId == quadroId && c.Ativa)
+        var coluna = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == usuarioId &&
+                        c.Ativa)
             .OrderBy(c => c.Posicao)
+            .ThenBy(c => c.Id)
             .FirstOrDefaultAsync();
+
+        if (coluna != null)
+            return coluna;
+
+        var colunasInativasNovaLista = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == usuarioId &&
+                        !c.Ativa &&
+                        c.Nome == "Nova lista")
+            .ToListAsync();
+
+        foreach (var colunaInativa in colunasInativasNovaLista)
+        {
+            colunaInativa.Nome = $"{PrefixoColunaArquivoSistemaTarefas}_{Guid.NewGuid():N}";
+        }
+
+        var ultimaPosicao = await _context.ColunasQuadro
+            .Where(c => c.QuadroId == quadroId &&
+                        c.GrupoId == grupoId &&
+                        c.UsuarioId == usuarioId)
+            .MaxAsync(c => (decimal?)c.Posicao) ?? 0m;
+
+        coluna = new ColunaQuadro
+        {
+            QuadroId = quadroId,
+            GrupoId = grupoId,
+            UsuarioId = usuarioId,
+            Nome = "Nova lista",
+            Posicao = ultimaPosicao + OrdemBaseTarefas,
+            Ativa = true,
+            DataCriacao = DateTime.UtcNow
+        };
+
+        _context.ColunasQuadro.Add(coluna);
+        await _context.SaveChangesAsync();
+
+        return coluna;
     }
 
     public class ExcluirChamadoRequest
